@@ -1,4 +1,4 @@
 {
-    "name": "spend-zen",
-    "framework": "nextjs"
+    "cleanUrls": true,
+    "trailingSlash": false
 }
