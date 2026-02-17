@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
     View,
     Text,
@@ -10,10 +10,10 @@ import {
     Dimensions
 } from 'react-native';
 import { useAuth } from '../../src/context/AuthContext';
-import { getAllTransactionsAdmin } from '../../src/database/db';
+import { getAllTransactionsAdmin, getAllUsers } from '../../src/database/db';
 import { useThemeColors } from '../../src/theme/colors';
 import { format } from 'date-fns';
-import { ShieldCheck, Database, RefreshCw, User as UserIcon } from 'lucide-react-native';
+import { ShieldCheck, Database, RefreshCw, User as UserIcon, Filter, Users } from 'lucide-react-native';
 
 const screenWidth = Dimensions.get('window').width;
 
@@ -21,13 +21,32 @@ export default function AdminScreen() {
     const Colors = useThemeColors();
     const { isAdmin, loading: authLoading } = useAuth();
     const [allTransactions, setAllTransactions] = useState<any[]>([]);
+    const [users, setUsers] = useState<any[]>([]);
+    const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
+
+    const usersMap = useMemo(() => {
+        const map: Record<string, any> = {};
+        users.forEach(u => {
+            map[u.uid] = u;
+        });
+        return map;
+    }, [users]);
+
+    const filteredTransactions = useMemo(() => {
+        if (!selectedUserId) return allTransactions;
+        return allTransactions.filter(tx => tx.userId === selectedUserId);
+    }, [allTransactions, selectedUserId]);
 
     const loadData = async () => {
         setLoading(true);
         try {
-            const data = await getAllTransactionsAdmin();
+            const [data, usersData] = await Promise.all([
+                getAllTransactionsAdmin(),
+                getAllUsers()
+            ]);
             setAllTransactions(data);
+            setUsers(usersData);
         } catch (error) {
             console.error(error);
         } finally {
@@ -58,35 +77,40 @@ export default function AdminScreen() {
     const TableHeader = () => (
         <View style={[styles.row, styles.headerRow, { backgroundColor: Colors.surface, borderBottomColor: Colors.border }]}>
             <Text style={[styles.cell, styles.headerCell, { color: Colors.text, width: 80 }]}>Date</Text>
-            <Text style={[styles.cell, styles.headerCell, { color: Colors.text, width: 100 }]}>User ID</Text>
+            <Text style={[styles.cell, styles.headerCell, { color: Colors.text, width: 120 }]}>User Name</Text>
             <Text style={[styles.cell, styles.headerCell, { color: Colors.text, width: 100 }]}>Category</Text>
             <Text style={[styles.cell, styles.headerCell, { color: Colors.text, width: 80 }]}>Amount</Text>
             <Text style={[styles.cell, styles.headerCell, { color: Colors.text, flex: 1 }]}>Note</Text>
         </View>
     );
 
-    const renderRow = ({ item }: { item: any }) => (
-        <View style={[styles.row, { borderBottomColor: Colors.border }]}>
-            <Text style={[styles.cell, { color: Colors.text, width: 80 }]} numberOfLines={1}>
-                {format(new Date(item.date), 'MM/dd')}
-            </Text>
-            <Text style={[styles.cell, { color: Colors.textMuted, width: 100, fontSize: 10 }]} numberOfLines={1}>
-                {item.userId?.substring(0, 8)}...
-            </Text>
-            <Text style={[styles.cell, { color: Colors.text, width: 100 }]} numberOfLines={1}>
-                {item.category}
-            </Text>
-            <Text style={[
-                styles.cell,
-                { color: item.type === 'INCOME' ? Colors.income : Colors.expense, width: 80, fontWeight: 'bold' }
-            ]}>
-                ${item.amount}
-            </Text>
-            <Text style={[styles.cell, { color: Colors.textMuted, flex: 1, fontSize: 11 }]} numberOfLines={2}>
-                {item.note || '-'}
-            </Text>
-        </View>
-    );
+    const renderRow = ({ item }: { item: any }) => {
+        const user = usersMap[item.userId];
+        const userName = user?.displayName || user?.email || item.userId?.substring(0, 8);
+
+        return (
+            <View style={[styles.row, { borderBottomColor: Colors.border }]}>
+                <Text style={[styles.cell, { color: Colors.text, width: 80 }]} numberOfLines={1}>
+                    {format(new Date(item.date), 'MM/dd')}
+                </Text>
+                <Text style={[styles.cell, { color: Colors.text, width: 120, fontWeight: '500' }]} numberOfLines={1}>
+                    {userName}
+                </Text>
+                <Text style={[styles.cell, { color: Colors.text, width: 100 }]} numberOfLines={1}>
+                    {item.category}
+                </Text>
+                <Text style={[
+                    styles.cell,
+                    { color: item.type === 'INCOME' ? Colors.income : Colors.expense, width: 80, fontWeight: 'bold' }
+                ]}>
+                    ${item.amount}
+                </Text>
+                <Text style={[styles.cell, { color: Colors.textMuted, flex: 1, fontSize: 11 }]} numberOfLines={2}>
+                    {item.note || '-'}
+                </Text>
+            </View>
+        );
+    };
 
     return (
         <View style={[styles.container, { backgroundColor: Colors.background }]}>
@@ -94,7 +118,7 @@ export default function AdminScreen() {
                 <View>
                     <Text style={[styles.title, { color: Colors.text }]}>Master DB</Text>
                     <Text style={[styles.subtitle, { color: Colors.textMuted }]}>
-                        Viewing {allTransactions.length} total entries
+                        {filteredTransactions.length} entries shown
                     </Text>
                 </View>
                 <TouchableOpacity
@@ -106,10 +130,47 @@ export default function AdminScreen() {
                 </TouchableOpacity>
             </View>
 
+            {/* Filter Section */}
+            <View style={styles.filterSection}>
+                <View style={styles.filterHeader}>
+                    <Users size={16} color={Colors.textMuted} />
+                    <Text style={[styles.filterLabel, { color: Colors.textMuted }]}>Filter by User:</Text>
+                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
+                    <TouchableOpacity
+                        style={[
+                            styles.chip,
+                            !selectedUserId && { backgroundColor: Colors.primary, borderColor: Colors.primary }
+                        ]}
+                        onPress={() => setSelectedUserId(null)}
+                    >
+                        <Text style={[styles.chipText, !selectedUserId ? { color: Colors.white } : { color: Colors.text }]}>All Users</Text>
+                    </TouchableOpacity>
+                    {users.map(user => (
+                        <TouchableOpacity
+                            key={user.uid}
+                            style={[
+                                styles.chip,
+                                selectedUserId === user.uid && { backgroundColor: Colors.primary, borderColor: Colors.primary },
+                                { borderColor: Colors.border }
+                            ]}
+                            onPress={() => setSelectedUserId(user.uid)}
+                        >
+                            <Text style={[
+                                styles.chipText,
+                                selectedUserId === user.uid ? { color: Colors.white } : { color: Colors.text }
+                            ]}>
+                                {user.displayName || user.email?.split('@')[0] || 'Unknown'}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                </ScrollView>
+            </View>
+
             <ScrollView horizontal showsHorizontalScrollIndicator={true} style={styles.tableScroll}>
-                <View style={{ width: Math.max(screenWidth, 600) }}>
+                <View style={{ width: Math.max(screenWidth, 650) }}>
                     <FlatList
-                        data={allTransactions}
+                        data={filteredTransactions}
                         renderItem={renderRow}
                         keyExtractor={item => item.id}
                         ListHeaderComponent={TableHeader}
@@ -119,7 +180,7 @@ export default function AdminScreen() {
                         ListEmptyComponent={
                             <View style={styles.empty}>
                                 <Database size={48} color={Colors.textMuted} />
-                                <Text style={{ color: Colors.textMuted, marginTop: 12 }}>No data found in Firestore</Text>
+                                <Text style={{ color: Colors.textMuted, marginTop: 12 }}>No transactions found</Text>
                             </View>
                         }
                     />
@@ -154,6 +215,37 @@ const styles = StyleSheet.create({
     refreshBtn: {
         padding: 12,
         borderRadius: 12,
+    },
+    // Filter Styles
+    filterSection: {
+        marginBottom: 16,
+    },
+    filterHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 24,
+        gap: 8,
+        marginBottom: 12,
+    },
+    filterLabel: {
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    filterScroll: {
+        paddingHorizontal: 24,
+        gap: 10,
+    },
+    chip: {
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 20,
+        borderWidth: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    chipText: {
+        fontSize: 13,
+        fontWeight: '600',
     },
     tableScroll: {
         flex: 1,

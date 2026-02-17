@@ -4,12 +4,13 @@ import { getAuth } from 'firebase/auth';
 
 // Firebase configuration - USER: Replace with your actual project config from Firebase Console
 const firebaseConfig = {
-    apiKey: "AIzaSyDemoKeyForFinTrackExpenseManager2026",
-    authDomain: "fintrack-demo.firebaseapp.com",
-    projectId: "fintrack-expense-demo",
-    storageBucket: "fintrack-expense-demo.appspot.com",
-    messagingSenderId: "123456789012",
-    appId: "1:123456789012:web:abcdef123456"
+    apiKey: "AIzaSyCTNoVrufWA4bwV414qektw1ale-HMVsks",
+    authDomain: "spend-zen-350c5.firebaseapp.com",
+    projectId: "spend-zen-350c5",
+    storageBucket: "spend-zen-350c5.firebasestorage.app",
+    messagingSenderId: "100975576212",
+    appId: "1:100975576212:web:96ad5e1b658b6d79df6081",
+    measurementId: "G-3GWMWTT3ZQ"
 };
 
 // Initialize Firebase
@@ -18,3 +19,6 @@ const app = initializeApp(firebaseConfig);
 // Initialize Services
 export const db = getFirestore(app);
 export const auth = getAuth(app);
+
+
+

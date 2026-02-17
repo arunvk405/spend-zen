@@ -63,14 +63,16 @@ export async function getTransactions(userId: string): Promise<Transaction[]> {
     try {
         const q = query(
             collection(db, COLLECTION_NAME),
-            where("userId", "==", userId),
-            orderBy("date", "desc")
+            where("userId", "==", userId)
         );
         const querySnapshot = await getDocs(q);
-        return querySnapshot.docs.map(doc => ({
-            id: doc.id as any, // Firebase uses strings, we type cast for compatibility 
+        const txs = querySnapshot.docs.map(doc => ({
+            id: doc.id,
             ...doc.data()
         })) as Transaction[];
+
+        // Sort locally by date descending to avoid Firebase Index requirements
+        return txs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     } catch (e) {
         console.error("Error getting transactions: ", e);
         return [];
@@ -146,4 +148,17 @@ export async function deleteTransactionsByRange(userId: string, range: 'all' | '
     const promises = toDelete.map(id => deleteTransaction(id));
     await Promise.all(promises);
     return toDelete.length;
+}
+
+export async function getAllUsers(): Promise<any[]> {
+    try {
+        const querySnapshot = await getDocs(collection(db, USERS_COLLECTION));
+        return querySnapshot.docs.map(doc => ({
+            uid: doc.id,
+            ...doc.data()
+        }));
+    } catch (e) {
+        console.error("Error getting users: ", e);
+        return [];
+    }
 }

@@ -88,21 +88,29 @@ export default function Settings() {
     };
 
     const handleLogout = async () => {
-        Alert.alert(
-            "Logout",
-            "Are you sure you want to logout?",
-            [
-                { text: "Cancel", style: "cancel" },
-                {
-                    text: "Logout",
-                    style: "destructive",
-                    onPress: async () => {
-                        await logout();
-                        router.replace('/login');
+        const performLogout = async () => {
+            await logout();
+            router.replace('/login');
+        };
+
+        if (Platform.OS === 'web') {
+            if (window.confirm("Are you sure you want to logout?")) {
+                performLogout();
+            }
+        } else {
+            Alert.alert(
+                "Logout",
+                "Are you sure you want to logout?",
+                [
+                    { text: "Cancel", style: "cancel" },
+                    {
+                        text: "Logout",
+                        style: "destructive",
+                        onPress: performLogout
                     }
-                }
-            ]
-        );
+                ]
+            );
+        }
     };
 
     const handleShare = async () => {
@@ -252,10 +260,10 @@ export default function Settings() {
                     />
                     <SettingsItem
                         icon={theme === 'dark' ? Moon : Sun}
-                        label={`Dark Mode`}
+                        label="Dark Mode"
                         color="#fbbf24"
-                        toggle={false}
-                        value={theme === 'light'}
+                        toggle={true}
+                        value={theme === 'dark'}
                         onPress={toggleTheme}
                     />
                 </View>
