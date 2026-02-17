@@ -10,7 +10,7 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#6C63FF"
+      "backgroundColor": "#10b981"
     },
     "ios": {
       "supportsTablet": true
@@ -18,7 +18,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#6C63FF"
+        "backgroundColor": "#064e3b"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
@@ -28,8 +28,8 @@
       "bundler": "metro",
       "output": "static",
       "display": "standalone",
-      "backgroundColor": "#F8F9FA",
-      "themeColor": "#6C63FF",
+      "backgroundColor": "#064e3b",
+      "themeColor": "#10b981",
       "lang": "en"
     },
     "plugins": [

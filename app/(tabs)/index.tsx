@@ -5,6 +5,7 @@ import { useThemeColors, Typography } from '../../src/theme/colors';
 import { Wallet, Landmark, CreditCard, TrendingUp, TrendingDown, ArrowRight, Briefcase } from 'lucide-react-native';
 import { format, isSameMonth, isSameYear, parseISO } from 'date-fns';
 import { useRouter } from 'expo-router';
+import { Logo } from '../../src/components/Logo';
 
 export default function HomeDashboard() {
     const Colors = useThemeColors();
@@ -124,6 +125,10 @@ const styles = StyleSheet.create({
     content: {
         padding: 20,
         paddingBottom: 100, // Space for tab bar
+    },
+    headerRow: {
+        marginBottom: 24,
+        marginTop: 10,
     },
     summaryCard: {
         borderRadius: 24,

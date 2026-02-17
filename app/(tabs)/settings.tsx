@@ -1,7 +1,19 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Share, Switch } from 'react-native';
 import { useThemeColors, Typography } from '../../src/theme/colors';
-import { Trash2, Share2, Shield, Info, ChevronRight, Moon, Sun } from 'lucide-react-native';
+import { Logo } from '../../src/components/Logo';
+import {
+    Moon,
+    Sun,
+    Trash2,
+    Share2,
+    Shield,
+    Info,
+    ChevronRight,
+    Github,
+    LogOut,
+    ExternalLink
+} from 'lucide-react-native';
 import { useFinance } from '../../src/context/FinanceContext';
 const SettingsItem = ({ icon: Icon, label, onPress, color, value = undefined, toggle = false }: any) => {
     const Colors = useThemeColors();
@@ -118,7 +130,10 @@ export default function Settings() {
     };
 
     return (
-        <ScrollView style={[styles.container, { backgroundColor: Colors.background }]} contentContainerStyle={{ paddingBottom: 100 }}>
+        <ScrollView style={[styles.container, { backgroundColor: Colors.background }]} showsVerticalScrollIndicator={false}>
+            <View style={styles.logoSection}>
+                <Logo size={80} horizontal={false} />
+            </View>
 
             <View style={styles.section}>
                 <Text style={[styles.sectionTitle, { color: Colors.textMuted }]}>General</Text>
@@ -190,6 +205,10 @@ const styles = StyleSheet.create({
     },
     section: {
         marginBottom: 24,
+    },
+    logoSection: {
+        alignItems: 'center',
+        marginVertical: 40,
     },
     sectionTitle: {
         ...Typography.caption,
