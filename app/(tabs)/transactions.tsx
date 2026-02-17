@@ -1,24 +1,48 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, ScrollView } from 'react-native';
 import { useFinance } from '../../src/context/FinanceContext';
 import { useThemeColors, Typography } from '../../src/theme/colors';
-import { Search, Trash2 } from 'lucide-react-native';
-import { format } from 'date-fns';
+import { Search, Trash2, Calendar, ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { format, startOfMonth, endOfMonth, isWithinInterval, parseISO, isSameMonth, isSameYear } from 'date-fns';
+
+const MONTHS = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+];
 
 export default function TransactionsHistory() {
-    const Colors = useThemeColors(); // Hook for dynamic colors
+    const Colors = useThemeColors();
     const { transactions, deleteTransaction } = useFinance();
     const [searchQuery, setSearchQuery] = useState('');
     const [filterType, setFilterType] = useState<'ALL' | 'INCOME' | 'EXPENSE'>('ALL');
 
+    // Month/Year filter state
+    const [selectedDate, setSelectedDate] = useState(new Date());
+
     const filteredTransactions = useMemo(() => {
         return transactions.filter(tx => {
+            const txDate = parseISO(tx.date);
+            const matchesDate = isSameMonth(txDate, selectedDate) && isSameYear(txDate, selectedDate);
+
             const matchesSearch = tx.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 (tx.note && tx.note.toLowerCase().includes(searchQuery.toLowerCase()));
             const matchesType = filterType === 'ALL' || tx.type === filterType;
-            return matchesSearch && matchesType;
+
+            return matchesDate && matchesSearch && matchesType;
         });
-    }, [transactions, searchQuery, filterType]);
+    }, [transactions, searchQuery, filterType, selectedDate]);
+
+    const changeYear = (delta: number) => {
+        const newDate = new Date(selectedDate);
+        newDate.setFullYear(selectedDate.getFullYear() + delta);
+        setSelectedDate(newDate);
+    };
+
+    const selectMonth = (index: number) => {
+        const newDate = new Date(selectedDate);
+        newDate.setMonth(index);
+        setSelectedDate(newDate);
+    };
 
     const handleDelete = async (item: any) => {
         const confirmed = window.confirm(
@@ -64,10 +88,45 @@ export default function TransactionsHistory() {
 
     return (
         <View style={[styles.container, { backgroundColor: Colors.background }]}>
-            {/* Search and Filter */}
+            {/* Search and Date Filter */}
             <View style={[styles.header, { backgroundColor: Colors.background, borderBottomColor: Colors.border }]}>
+
+                {/* Year Selector */}
+                <View style={styles.yearRow}>
+                    <TouchableOpacity onPress={() => changeYear(-1)} style={styles.arrowBtn}>
+                        <ChevronLeft color={Colors.textMuted} size={20} />
+                    </TouchableOpacity>
+                    <Text style={[styles.yearText, { color: Colors.text }]}>{selectedDate.getFullYear()}</Text>
+                    <TouchableOpacity onPress={() => changeYear(1)} style={styles.arrowBtn}>
+                        <ChevronRight color={Colors.textMuted} size={20} />
+                    </TouchableOpacity>
+                </View>
+
+                {/* Month Selector */}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.monthScroll}>
+                    {MONTHS.map((month, index) => {
+                        const isSelected = selectedDate.getMonth() === index;
+                        return (
+                            <TouchableOpacity
+                                key={month}
+                                style={[
+                                    styles.monthChip,
+                                    isSelected && { backgroundColor: Colors.primary, borderColor: Colors.primary }
+                                ]}
+                                onPress={() => selectMonth(index)}
+                            >
+                                <Text style={[
+                                    styles.monthText,
+                                    { color: isSelected ? Colors.white : Colors.textMuted }
+                                ]}>{month}</Text>
+                            </TouchableOpacity>
+                        );
+                    })}
+                </ScrollView>
+
+                {/* Search Bar */}
                 <View style={[styles.searchBar, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
-                    <Search color={Colors.textMuted} size={20} />
+                    <Search color={Colors.textMuted} size={18} />
                     <TextInput
                         style={[styles.searchInput, { color: Colors.text }]}
                         placeholder="Search categories or notes..."
@@ -76,6 +135,8 @@ export default function TransactionsHistory() {
                         onChangeText={setSearchQuery}
                     />
                 </View>
+
+                {/* Type Filter */}
                 <View style={styles.filterRow}>
                     {['ALL', 'INCOME', 'EXPENSE'].map((t) => (
                         <TouchableOpacity
@@ -122,12 +183,43 @@ const styles = StyleSheet.create({
         padding: 20,
         borderBottomWidth: 1,
     },
+    yearRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 16,
+    },
+    yearText: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        marginHorizontal: 20,
+    },
+    arrowBtn: {
+        padding: 4,
+    },
+    monthScroll: {
+        marginBottom: 16,
+        marginHorizontal: -20,
+        paddingHorizontal: 20,
+    },
+    monthChip: {
+        paddingHorizontal: 14,
+        paddingVertical: 6,
+        borderRadius: 12,
+        marginRight: 8,
+        borderWidth: 1,
+        borderColor: 'transparent',
+    },
+    monthText: {
+        fontSize: 13,
+        fontWeight: '600',
+    },
     searchBar: {
         flexDirection: 'row',
         alignItems: 'center',
         borderRadius: 12,
         paddingHorizontal: 16,
-        height: 50,
+        height: 44,
         marginBottom: 16,
         borderWidth: 1,
     },

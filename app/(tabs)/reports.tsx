@@ -3,9 +3,15 @@ import { View, Text, StyleSheet, Dimensions, ScrollView, TouchableOpacity } from
 import { useThemeColors, Typography } from '../../src/theme/colors';
 import { PieChart } from 'react-native-chart-kit';
 import { useFinance } from '../../src/context/FinanceContext';
-import { startOfMonth, endOfMonth, isWithinInterval, parseISO } from 'date-fns';
+import { startOfMonth, endOfMonth, isWithinInterval, parseISO, isSameMonth, isSameYear } from 'date-fns';
+import { ChevronLeft, ChevronRight } from 'lucide-react-native';
 
 const screenWidth = Dimensions.get('window').width;
+
+const MONTHS = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+];
 
 const ACCOUNT_FILTERS = [
     { id: 'all', label: 'All' },
@@ -18,11 +24,31 @@ export default function Reports() {
     const Colors = useThemeColors();
     const { transactions } = useFinance();
     const [selectedAccount, setSelectedAccount] = useState('all');
+    const [selectedDate, setSelectedDate] = useState(new Date());
+
+    const filteredTransactionsByDate = useMemo(() => {
+        return transactions.filter(t => {
+            const txDate = parseISO(t.date);
+            return isSameMonth(txDate, selectedDate) && isSameYear(txDate, selectedDate);
+        });
+    }, [transactions, selectedDate]);
 
     const filteredTransactions = useMemo(() => {
-        if (selectedAccount === 'all') return transactions;
-        return transactions.filter(t => t.accountId === selectedAccount);
-    }, [transactions, selectedAccount]);
+        if (selectedAccount === 'all') return filteredTransactionsByDate;
+        return filteredTransactionsByDate.filter(t => t.accountId === selectedAccount);
+    }, [filteredTransactionsByDate, selectedAccount]);
+
+    const changeYear = (delta: number) => {
+        const newDate = new Date(selectedDate);
+        newDate.setFullYear(selectedDate.getFullYear() + delta);
+        setSelectedDate(newDate);
+    };
+
+    const selectMonth = (index: number) => {
+        const newDate = new Date(selectedDate);
+        newDate.setMonth(index);
+        setSelectedDate(newDate);
+    };
 
     const chartConfig = {
         backgroundGradientFrom: Colors.surface,
@@ -34,16 +60,9 @@ export default function Reports() {
         useShadowColorFromDataset: false
     };
 
-    // 1. Expense Breakdown by Category (Current Month)
+    // 1. Expense Breakdown by Category
     const categoryData = useMemo(() => {
-        const currentMonth = new Date();
-        const start = startOfMonth(currentMonth);
-        const end = endOfMonth(currentMonth);
-
-        const expenses = filteredTransactions.filter(t =>
-            t.type === 'EXPENSE' &&
-            isWithinInterval(parseISO(t.date), { start, end })
-        );
+        const expenses = filteredTransactions.filter(t => t.type === 'EXPENSE');
 
         const breakdown: Record<string, number> = {};
         expenses.forEach(t => {
@@ -88,6 +107,38 @@ export default function Reports() {
         >
             <View style={styles.header}>
                 <Text style={[styles.title, { color: Colors.text }]}>Reports</Text>
+
+                {/* Date Filter */}
+                <View style={styles.yearRow}>
+                    <TouchableOpacity onPress={() => changeYear(-1)} style={styles.arrowBtn}>
+                        <ChevronLeft color={Colors.textMuted} size={20} />
+                    </TouchableOpacity>
+                    <Text style={[styles.yearText, { color: Colors.text }]}>{selectedDate.getFullYear()}</Text>
+                    <TouchableOpacity onPress={() => changeYear(1)} style={styles.arrowBtn}>
+                        <ChevronRight color={Colors.textMuted} size={20} />
+                    </TouchableOpacity>
+                </View>
+
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.monthScroll}>
+                    {MONTHS.map((month, index) => {
+                        const isSelected = selectedDate.getMonth() === index;
+                        return (
+                            <TouchableOpacity
+                                key={month}
+                                style={[
+                                    styles.monthChip,
+                                    isSelected && { backgroundColor: Colors.primary, borderColor: Colors.primary }
+                                ]}
+                                onPress={() => selectMonth(index)}
+                            >
+                                <Text style={[
+                                    styles.monthText,
+                                    { color: isSelected ? Colors.white : Colors.textMuted }
+                                ]}>{month}</Text>
+                            </TouchableOpacity>
+                        );
+                    })}
+                </ScrollView>
 
                 <ScrollView
                     horizontal
@@ -176,6 +227,37 @@ const styles = StyleSheet.create({
         fontSize: 32,
         fontWeight: 'bold',
         marginBottom: 16,
+    },
+    yearRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 16,
+    },
+    yearText: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        marginHorizontal: 20,
+    },
+    arrowBtn: {
+        padding: 4,
+    },
+    monthScroll: {
+        marginBottom: 16,
+        marginHorizontal: -20,
+        paddingHorizontal: 20,
+    },
+    monthChip: {
+        paddingHorizontal: 14,
+        paddingVertical: 6,
+        borderRadius: 12,
+        marginRight: 8,
+        borderWidth: 1,
+        borderColor: 'transparent',
+    },
+    monthText: {
+        fontSize: 13,
+        fontWeight: '600',
     },
     filterContainer: {
         marginBottom: 10,

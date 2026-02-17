@@ -1,15 +1,23 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useFinance } from '../../src/context/FinanceContext';
 import { useThemeColors, Typography } from '../../src/theme/colors';
 import { Wallet, Landmark, CreditCard, TrendingUp, TrendingDown, ArrowRight, Briefcase } from 'lucide-react-native';
-import { format } from 'date-fns';
+import { format, isSameMonth, isSameYear, parseISO } from 'date-fns';
 import { useRouter } from 'expo-router';
 
 export default function HomeDashboard() {
     const Colors = useThemeColors();
     const { totalBalance, monthlyIncome, monthlyExpenses, accounts, transactions, loading } = useFinance();
     const router = useRouter();
+
+    const currentMonthTransactions = useMemo(() => {
+        const now = new Date();
+        return transactions.filter(tx => {
+            const txDate = parseISO(tx.date);
+            return isSameMonth(txDate, now) && isSameYear(txDate, now);
+        });
+    }, [transactions]);
 
     const getAccountIcon = (id: string, color: string) => {
         switch (id) {
@@ -80,7 +88,7 @@ export default function HomeDashboard() {
                 </TouchableOpacity>
             </View>
 
-            {transactions.slice(0, 5).map((tx) => (
+            {currentMonthTransactions.slice(0, 5).map((tx) => (
                 <View key={tx.id} style={[styles.transactionItem, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
                     <View style={[styles.txIcon, { backgroundColor: Colors.background }]}>
                         <Briefcase size={20} color={Colors.textMuted} />
@@ -100,7 +108,7 @@ export default function HomeDashboard() {
                 </View>
             ))}
 
-            {transactions.length === 0 && (
+            {currentMonthTransactions.length === 0 && (
                 <View style={[styles.emptyState, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
                     <Text style={[styles.emptyText, { color: Colors.textMuted }]}>No transactions yet. Tap '+' to start tracking!</Text>
                 </View>
