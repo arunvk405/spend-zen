@@ -36,9 +36,7 @@
       "preferRelatedApplications": false
     },
     "plugins": [
-      "expo-sqlite",
-      "expo-router",
-      "expo-font"
+      "expo-router"
     ]
   }
 }
