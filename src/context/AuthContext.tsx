@@ -11,8 +11,8 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Define Admin phone numbers here
-const ADMIN_PHONES = ['+911234567890']; // User: Add your admin phone number here
+// Define Admin emails here
+const ADMIN_EMAILS = ['arun@example.com']; // User: Add your admin email here
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
@@ -22,7 +22,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, (user) => {
             setUser(user);
-            setIsAdmin(user ? ADMIN_PHONES.includes(user.phoneNumber || '') : false);
+            setIsAdmin(user ? ADMIN_EMAILS.includes(user.email || '') : false);
             setLoading(false);
         });
 

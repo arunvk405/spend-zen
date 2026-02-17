@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Share, Switch } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Share, Switch, TextInput, ActivityIndicator } from 'react-native';
 import { useThemeColors, Typography } from '../../src/theme/colors';
 import { Logo } from '../../src/components/Logo';
 import {
@@ -12,8 +12,12 @@ import {
     ChevronRight,
     Github,
     LogOut,
-    ExternalLink
+    ExternalLink,
+    Edit3,
+    User
 } from 'lucide-react-native';
+import { updateProfile } from 'firebase/auth';
+import { auth } from '../../src/database/firebaseConfig';
 import { useFinance } from '../../src/context/FinanceContext';
 import { useAuth } from '../../src/context/AuthContext';
 import { useRouter } from 'expo-router';
@@ -56,7 +60,30 @@ export default function Settings() {
     const { theme, setTheme } = useTheme();
     const { clearData } = useFinance();
 
-    const { logout } = useAuth();
+    const { user, logout } = useAuth();
+    const [isEditing, setIsEditing] = useState(false);
+    const [name, setName] = useState(user?.displayName || '');
+    const [updateLoading, setUpdateLoading] = useState(false);
+
+    const handleUpdateProfile = async () => {
+        if (!user) return;
+        if (!name) {
+            Alert.alert("Error", "Name cannot be empty");
+            return;
+        }
+
+        setUpdateLoading(true);
+        try {
+            await updateProfile(user, { displayName: name });
+            setIsEditing(false);
+            Alert.alert("Success", "Profile updated successfully!");
+        } catch (error) {
+            console.error(error);
+            Alert.alert("Error", "Failed to update profile");
+        } finally {
+            setUpdateLoading(false);
+        }
+    };
 
     const handleLogout = async () => {
         Alert.alert(
@@ -160,7 +187,56 @@ export default function Settings() {
     return (
         <ScrollView style={[styles.container, { backgroundColor: Colors.background }]} showsVerticalScrollIndicator={false}>
             <View style={styles.logoSection}>
-                <Logo size={80} horizontal={false} />
+                <Logo size={60} horizontal={false} />
+            </View>
+
+            <View style={styles.section}>
+                <Text style={[styles.sectionTitle, { color: Colors.textMuted }]}>Profile</Text>
+                <View style={[styles.card, { backgroundColor: Colors.surface, padding: 20 }]}>
+                    <View style={styles.profileHeader}>
+                        <View style={[styles.profileIcon, { backgroundColor: Colors.primary + '20' }]}>
+                            <User color={Colors.primary} size={32} />
+                        </View>
+                        <View style={styles.profileInfo}>
+                            {isEditing ? (
+                                <TextInput
+                                    style={[styles.nameInput, { color: Colors.text, borderBottomColor: Colors.primary }]}
+                                    value={name}
+                                    onChangeText={setName}
+                                    autoFocus
+                                    placeholder="Your Name"
+                                    placeholderTextColor={Colors.textMuted}
+                                />
+                            ) : (
+                                <Text style={[styles.profileName, { color: Colors.text }]}>
+                                    {user?.displayName || 'Zen User'}
+                                </Text>
+                            )}
+                            <Text style={[styles.profileEmail, { color: Colors.textMuted }]}>
+                                {user?.email}
+                            </Text>
+                        </View>
+                        <TouchableOpacity
+                            onPress={() => isEditing ? handleUpdateProfile() : setIsEditing(true)}
+                            style={[styles.editBtn, { backgroundColor: Colors.background }]}
+                        >
+                            {updateLoading ? (
+                                <ActivityIndicator size="small" color={Colors.primary} />
+                            ) : (
+                                isEditing ? (
+                                    <Text style={{ color: Colors.primary, fontWeight: '700' }}>Save</Text>
+                                ) : (
+                                    <Edit3 size={18} color={Colors.primary} />
+                                )
+                            )}
+                        </TouchableOpacity>
+                    </View>
+                    {isEditing && (
+                        <TouchableOpacity style={{ marginTop: 10 }} onPress={() => setIsEditing(false)}>
+                            <Text style={{ color: Colors.expense, textAlign: 'center', fontSize: 12 }}>Cancel</Text>
+                        </TouchableOpacity>
+                    )}
+                </View>
             </View>
 
             <View style={styles.section}>
@@ -285,4 +361,39 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '500',
     },
+    // Profile Styles
+    profileHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    profileIcon: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 16,
+    },
+    profileInfo: {
+        flex: 1,
+    },
+    profileName: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        marginBottom: 2,
+    },
+    profileEmail: {
+        fontSize: 14,
+    },
+    editBtn: {
+        padding: 8,
+        borderRadius: 10,
+    },
+    nameInput: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        paddingVertical: 4,
+        borderBottomWidth: 1,
+        marginBottom: 4,
+    }
 });

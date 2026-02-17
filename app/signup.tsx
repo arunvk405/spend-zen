@@ -13,38 +13,50 @@ import {
 } from 'react-native';
 import { useRouter, Link } from 'expo-router';
 import {
-    signInWithEmailAndPassword
+    createUserWithEmailAndPassword,
+    updateProfile
 } from 'firebase/auth';
 import { auth } from '../src/database/firebaseConfig';
 import { useThemeColors } from '../src/theme/colors';
 import { Logo } from '../src/components/Logo';
-import { Mail, Lock, ArrowRight, UserPlus, HelpCircle } from 'lucide-react-native';
+import { Mail, Lock, User, ArrowRight, ArrowLeft } from 'lucide-react-native';
 
-export default function LoginScreen() {
+export default function SignupScreen() {
     const Colors = useThemeColors();
     const router = useRouter();
 
+    const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
 
-    const handleLogin = async () => {
-        if (!email || !password) {
-            Alert.alert("Error", "Please enter both email and password");
+    const handleSignup = async () => {
+        if (!name || !email || !password) {
+            Alert.alert("Error", "Please fill in all fields");
+            return;
+        }
+
+        if (password.length < 6) {
+            Alert.alert("Error", "Password should be at least 6 characters");
             return;
         }
 
         setLoading(true);
         try {
-            await signInWithEmailAndPassword(auth, email, password);
+            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+            await updateProfile(userCredential.user, {
+                displayName: name
+            });
             router.replace('/(tabs)');
         } catch (error: any) {
             console.error(error);
-            let message = "Failed to login. Please check your credentials.";
-            if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-                message = "Invalid email or password.";
+            let message = "Failed to create account.";
+            if (error.code === 'auth/email-already-in-use') {
+                message = "This email is already registered.";
+            } else if (error.code === 'auth/invalid-email') {
+                message = "Invalid email address.";
             }
-            Alert.alert("Login Failed", message);
+            Alert.alert("Sign Up Failed", message);
         } finally {
             setLoading(false);
         }
@@ -56,17 +68,36 @@ export default function LoginScreen() {
             style={[styles.container, { backgroundColor: Colors.background }]}
         >
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+                <View style={[styles.header, { backgroundColor: Colors.background }]}>
+                    <Link href="/login" asChild>
+                        <TouchableOpacity style={[styles.backButton, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+                            <ArrowLeft size={20} color={Colors.text} />
+                        </TouchableOpacity>
+                    </Link>
+                </View>
+
                 <View style={styles.logoSection}>
-                    <Logo size={80} horizontal={false} />
+                    <Logo size={60} horizontal={false} />
                 </View>
 
                 <View style={[styles.card, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
-                    <Text style={[styles.title, { color: Colors.text }]}>Welcome Back</Text>
+                    <Text style={[styles.title, { color: Colors.text }]}>Create Account</Text>
                     <Text style={[styles.subtitle, { color: Colors.textMuted }]}>
-                        Login to manage your financial zen
+                        Join Spend Zen and start tracking
                     </Text>
 
                     <View style={styles.inputGroup}>
+                        <View style={[styles.inputWrapper, { borderColor: Colors.border, backgroundColor: Colors.background }]}>
+                            <User size={20} color={Colors.textMuted} style={styles.inputIcon} />
+                            <TextInput
+                                style={[styles.input, { color: Colors.text }]}
+                                placeholder="Full Name"
+                                placeholderTextColor={Colors.textMuted}
+                                value={name}
+                                onChangeText={setName}
+                            />
+                        </View>
+
                         <View style={[styles.inputWrapper, { borderColor: Colors.border, backgroundColor: Colors.background }]}>
                             <Mail size={20} color={Colors.textMuted} style={styles.inputIcon} />
                             <TextInput
@@ -94,40 +125,25 @@ export default function LoginScreen() {
 
                         <TouchableOpacity
                             style={[styles.button, { backgroundColor: Colors.primary }]}
-                            onPress={handleLogin}
+                            onPress={handleSignup}
                             disabled={loading}
                         >
                             {loading ? (
                                 <ActivityIndicator color="#fff" />
                             ) : (
                                 <>
-                                    <Text style={styles.buttonText}>Login</Text>
+                                    <Text style={styles.buttonText}>Sign Up</Text>
                                     <ArrowRight size={20} color="#fff" />
                                 </>
                             )}
                         </TouchableOpacity>
-
-                        <View style={styles.linksContainer}>
-                            <Link href="/forgot-password" asChild>
-                                <TouchableOpacity style={styles.linkButton}>
-                                    <HelpCircle size={16} color={Colors.primary} />
-                                    <Text style={[styles.linkText, { color: Colors.primary }]}>Forgot Password?</Text>
-                                </TouchableOpacity>
-                            </Link>
-
-                            <Link href="/signup" asChild>
-                                <TouchableOpacity style={styles.linkButton}>
-                                    <UserPlus size={16} color={Colors.primary} />
-                                    <Text style={[styles.linkText, { color: Colors.primary }]}>Create Account</Text>
-                                </TouchableOpacity>
-                            </Link>
-                        </View>
                     </View>
                 </View>
 
                 <View style={styles.footer}>
                     <Text style={[styles.footerText, { color: Colors.textMuted }]}>
-                        Financial Mindfulness
+                        Already have an account?
+                        <Link href="/login" style={{ color: Colors.primary, fontWeight: 'bold' }}> Login</Link>
                     </Text>
                 </View>
             </ScrollView>
@@ -139,6 +155,18 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
     },
+    header: {
+        paddingTop: 10,
+        marginBottom: 10,
+    },
+    backButton: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
+    },
     scrollContent: {
         flexGrow: 1,
         padding: 24,
@@ -146,7 +174,7 @@ const styles = StyleSheet.create({
     },
     logoSection: {
         alignItems: 'center',
-        marginBottom: 30,
+        marginBottom: 20,
     },
     card: {
         padding: 24,
@@ -201,28 +229,11 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: 'bold',
     },
-    linksContainer: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginTop: 16,
-    },
-    linkButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-    },
-    linkText: {
-        fontSize: 14,
-        fontWeight: '600',
-    },
     footer: {
-        marginTop: 40,
+        marginTop: 30,
         alignItems: 'center',
     },
     footerText: {
-        fontSize: 10,
-        fontWeight: '700',
-        letterSpacing: 2,
-        textTransform: 'uppercase',
+        fontSize: 14,
     }
 });
