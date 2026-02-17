@@ -1,6 +1,14 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { Transaction, Account, ACCOUNTS } from '../models';
-import { initDatabase, getTransactions, addTransaction as addTxDb, getTotalBalance, getMonthlySummary, deleteTransaction as deleteTxDb } from '../database/db';
+import {
+    initDatabase,
+    getTransactions,
+    addTransaction as addTxDb,
+    getTotalBalance,
+    getMonthlySummary,
+    deleteTransaction as deleteTxDb,
+    deleteTransactionsByRange
+} from '../database/db';
 import { format } from 'date-fns';
 
 interface FinanceContextType {
@@ -12,6 +20,7 @@ interface FinanceContextType {
     loading: boolean;
     addTransaction: (tx: Omit<Transaction, 'id'>) => Promise<void>;
     deleteTransaction: (id: number) => Promise<void>;
+    clearData: (range: 'all' | 'year' | 'month') => Promise<void>;
     refreshData: () => Promise<void>;
 }
 
@@ -80,6 +89,12 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         await refreshData();
     };
 
+    const clearData = async (range: 'all' | 'year' | 'month') => {
+        if (!dbReady) return;
+        await deleteTransactionsByRange(range);
+        await refreshData();
+    };
+
     return (
         <FinanceContext.Provider value={{
             transactions,
@@ -90,6 +105,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
             loading,
             addTransaction,
             deleteTransaction,
+            clearData,
             refreshData
         }}>
             {children}

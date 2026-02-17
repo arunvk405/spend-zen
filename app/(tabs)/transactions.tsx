@@ -1,11 +1,12 @@
 import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput } from 'react-native';
 import { useFinance } from '../../src/context/FinanceContext';
-import { Colors, Typography } from '../../src/theme/colors';
+import { useThemeColors, Typography } from '../../src/theme/colors';
 import { Search, Trash2 } from 'lucide-react-native';
 import { format } from 'date-fns';
 
 export default function TransactionsHistory() {
+    const Colors = useThemeColors(); // Hook for dynamic colors
     const { transactions, deleteTransaction } = useFinance();
     const [searchQuery, setSearchQuery] = useState('');
     const [filterType, setFilterType] = useState<'ALL' | 'INCOME' | 'EXPENSE'>('ALL');
@@ -34,14 +35,14 @@ export default function TransactionsHistory() {
     };
 
     const renderItem = ({ item }: { item: any }) => (
-        <View style={styles.transactionItem}>
-            <View style={styles.dateBlock}>
-                <Text style={styles.dateDay}>{format(new Date(item.date), 'dd')}</Text>
-                <Text style={styles.dateMonth}>{format(new Date(item.date), 'MMM')}</Text>
+        <View style={[styles.transactionItem, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+            <View style={[styles.dateBlock, { borderRightColor: Colors.border }]}>
+                <Text style={[styles.dateDay, { color: Colors.text }]}>{format(new Date(item.date), 'dd')}</Text>
+                <Text style={[styles.dateMonth, { color: Colors.textMuted }]}>{format(new Date(item.date), 'MMM')}</Text>
             </View>
             <View style={styles.txDetails}>
-                <Text style={styles.txCategory}>{item.category}</Text>
-                <Text style={styles.txNote} numberOfLines={1}>{item.note || 'No note'}</Text>
+                <Text style={[styles.txCategory, { color: Colors.text }]}>{item.category}</Text>
+                <Text style={[styles.txNote, { color: Colors.textMuted }]} numberOfLines={1}>{item.note || 'No note'}</Text>
             </View>
             <View style={styles.amountBlock}>
                 <Text style={[
@@ -50,10 +51,10 @@ export default function TransactionsHistory() {
                 ]}>
                     {item.type === 'INCOME' ? '+' : '-'}${item.amount.toLocaleString()}
                 </Text>
-                <Text style={styles.accountId}>{item.accountId}</Text>
+                <Text style={[styles.accountId, { color: Colors.textMuted }]}>{item.accountId}</Text>
             </View>
             <TouchableOpacity
-                style={styles.deleteButton}
+                style={[styles.deleteButton, { borderColor: Colors.border, backgroundColor: Colors.surface }]}
                 onPress={() => handleDelete(item)}
             >
                 <Trash2 color={Colors.expense} size={20} />
@@ -62,13 +63,13 @@ export default function TransactionsHistory() {
     );
 
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, { backgroundColor: Colors.background }]}>
             {/* Search and Filter */}
-            <View style={styles.header}>
-                <View style={styles.searchBar}>
+            <View style={[styles.header, { backgroundColor: Colors.background, borderBottomColor: Colors.border }]}>
+                <View style={[styles.searchBar, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
                     <Search color={Colors.textMuted} size={20} />
                     <TextInput
-                        style={styles.searchInput}
+                        style={[styles.searchInput, { color: Colors.text }]}
                         placeholder="Search categories or notes..."
                         placeholderTextColor={Colors.textMuted}
                         value={searchQuery}
@@ -79,10 +80,18 @@ export default function TransactionsHistory() {
                     {['ALL', 'INCOME', 'EXPENSE'].map((t) => (
                         <TouchableOpacity
                             key={t}
-                            style={[styles.filterChip, filterType === t && styles.activeFilter]}
+                            style={[
+                                styles.filterChip,
+                                { backgroundColor: Colors.surface, borderColor: Colors.border },
+                                filterType === t && { backgroundColor: Colors.primary, borderColor: Colors.primary }
+                            ]}
                             onPress={() => setFilterType(t as any)}
                         >
-                            <Text style={[styles.filterText, filterType === t && styles.activeFilterText]}>
+                            <Text style={[
+                                styles.filterText,
+                                { color: Colors.textMuted },
+                                filterType === t && { color: Colors.white }
+                            ]}>
                                 {t.charAt(0) + t.slice(1).toLowerCase()}
                             </Text>
                         </TouchableOpacity>
@@ -97,7 +106,7 @@ export default function TransactionsHistory() {
                 contentContainerStyle={styles.listContent}
                 ListEmptyComponent={
                     <View style={styles.emptyState}>
-                        <Text style={styles.emptyText}>No matching transactions found.</Text>
+                        <Text style={[styles.emptyText, { color: Colors.textMuted }]}>No matching transactions found.</Text>
                     </View>
                 }
             />
@@ -108,29 +117,23 @@ export default function TransactionsHistory() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: Colors.background,
     },
     header: {
         padding: 20,
-        backgroundColor: Colors.background,
         borderBottomWidth: 1,
-        borderBottomColor: Colors.border,
     },
     searchBar: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: Colors.surface,
         borderRadius: 12,
         paddingHorizontal: 16,
         height: 50,
         marginBottom: 16,
         borderWidth: 1,
-        borderColor: Colors.border,
     },
     searchInput: {
         flex: 1,
         marginLeft: 10,
-        color: Colors.text,
         fontSize: 16,
     },
     filterRow: {
@@ -141,50 +144,38 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
         paddingVertical: 8,
         borderRadius: 20,
-        backgroundColor: Colors.surface,
         borderWidth: 1,
-        borderColor: Colors.border,
-    },
-    activeFilter: {
-        backgroundColor: Colors.primary,
-        borderColor: Colors.primary,
     },
     filterText: {
-        color: Colors.textMuted,
         fontWeight: '600',
-    },
-    activeFilterText: {
-        color: Colors.white,
     },
     listContent: {
         padding: 20,
+        paddingBottom: 100, // Space for tab bar
     },
     transactionItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: Colors.surface,
         padding: 16,
         borderRadius: 16,
         marginBottom: 12,
         borderWidth: 1,
-        borderColor: Colors.border,
     },
     dateBlock: {
         alignItems: 'center',
         justifyContent: 'center',
         paddingRight: 16,
         borderRightWidth: 1,
-        borderRightColor: Colors.border,
         width: 50,
     },
     dateDay: {
-        ...Typography.h3,
-        color: Colors.text,
+        fontSize: 20,
+        fontWeight: '600',
         lineHeight: 22,
     },
     dateMonth: {
-        ...Typography.caption,
-        color: Colors.textMuted,
+        fontSize: 12,
+        fontWeight: '400',
         textTransform: 'uppercase',
     },
     txDetails: {
@@ -192,25 +183,22 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
     },
     txCategory: {
-        ...Typography.body,
+        fontSize: 16,
         fontWeight: 'bold',
-        color: Colors.text,
     },
     txNote: {
-        ...Typography.caption,
-        color: Colors.textMuted,
+        fontSize: 12,
         marginTop: 2,
     },
     amountBlock: {
         alignItems: 'flex-end',
     },
     txAmount: {
-        ...Typography.body,
+        fontSize: 16,
         fontWeight: 'bold',
     },
     accountId: {
-        ...Typography.caption,
-        color: Colors.textMuted,
+        fontSize: 12,
         marginTop: 2,
         textTransform: 'capitalize',
     },
@@ -218,16 +206,13 @@ const styles = StyleSheet.create({
         marginLeft: 12,
         padding: 8,
         borderRadius: 8,
-        backgroundColor: Colors.surface,
         borderWidth: 1,
-        borderColor: Colors.border,
     },
     emptyState: {
         alignItems: 'center',
         padding: 40,
     },
     emptyText: {
-        color: Colors.textMuted,
-        ...Typography.body,
+        fontSize: 16,
     },
 });

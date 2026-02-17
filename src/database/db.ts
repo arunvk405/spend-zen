@@ -73,3 +73,23 @@ export async function deleteTransaction(db: any, transactionId: number): Promise
     const updated = transactions.filter(t => t.id !== transactionId);
     saveTransactions(updated);
 }
+
+export async function deleteTransactionsByRange(type: 'all' | 'year' | 'month'): Promise<void> {
+    const transactions = getStoredTransactions();
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = (now.getMonth() + 1).toString().padStart(2, '0');
+    const yearMonth = `${currentYear}-${currentMonth}`;
+
+    let updated: Transaction[] = [];
+
+    if (type === 'all') {
+        updated = [];
+    } else if (type === 'year') {
+        updated = transactions.filter(t => !t.date.startsWith(`${currentYear}`));
+    } else if (type === 'month') {
+        updated = transactions.filter(t => !t.date.startsWith(yearMonth));
+    }
+
+    saveTransactions(updated);
+}

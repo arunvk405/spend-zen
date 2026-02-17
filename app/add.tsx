@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Platform } from 'react-native';
 import { useFinance } from '../src/context/FinanceContext';
-import { Colors, Typography } from '../src/theme/colors';
+import { useThemeColors, Typography } from '../src/theme/colors';
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, ACCOUNTS, TransactionType } from '../src/models';
 import { useRouter } from 'expo-router';
-import { format } from 'date-fns';
 import {
     Check,
     ArrowLeft,
@@ -46,6 +45,7 @@ const IconRenderer = ({ name, color, size = 24 }: { name: string, color: string,
 };
 
 export default function AddTransaction() {
+    const Colors = useThemeColors();
     const { addTransaction } = useFinance();
     const router = useRouter();
 
@@ -82,12 +82,12 @@ export default function AddTransaction() {
     };
 
     return (
-        <View style={styles.mainContainer}>
-            <View style={styles.header}>
+        <View style={[styles.mainContainer, { backgroundColor: Colors.background }]}>
+            <View style={[styles.header, { backgroundColor: Colors.background, borderBottomColor: Colors.border }]}>
                 <TouchableOpacity onPress={handleBack} style={styles.backButton}>
                     <ArrowLeft color={Colors.text} size={24} />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Add Transaction</Text>
+                <Text style={[styles.headerTitle, { color: Colors.text }]}>Add Transaction</Text>
                 <View style={{ width: 24 }} />
             </View>
 
@@ -99,30 +99,43 @@ export default function AddTransaction() {
             >
                 {/* Type Selector */}
                 <View style={styles.section}>
-                    <View style={styles.typeSelector}>
-                        {/* ... rest of type selector ... */}
+                    <View style={[styles.typeSelector, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
                         <TouchableOpacity
-                            style={[styles.typeButton, type === 'EXPENSE' && styles.activeExpense]}
+                            style={[
+                                styles.typeButton,
+                                type === 'EXPENSE' && { backgroundColor: Colors.expense }
+                            ]}
                             onPress={() => { setType('EXPENSE'); setCategory(''); }}
                         >
-                            <Text style={[styles.typeText, type === 'EXPENSE' && styles.activeText]}>Expense</Text>
+                            <Text style={[
+                                styles.typeText,
+                                { color: Colors.textMuted },
+                                type === 'EXPENSE' && { color: Colors.white, fontWeight: 'bold' }
+                            ]}>Expense</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
-                            style={[styles.typeButton, type === 'INCOME' && styles.activeIncome]}
+                            style={[
+                                styles.typeButton,
+                                type === 'INCOME' && { backgroundColor: Colors.income }
+                            ]}
                             onPress={() => { setType('INCOME'); setCategory(''); }}
                         >
-                            <Text style={[styles.typeText, type === 'INCOME' && styles.activeText]}>Income</Text>
+                            <Text style={[
+                                styles.typeText,
+                                { color: Colors.textMuted },
+                                type === 'INCOME' && { color: Colors.white, fontWeight: 'bold' }
+                            ]}>Income</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
 
                 {/* Amount Input */}
                 <View style={styles.card}>
-                    <Text style={styles.label}>Amount</Text>
-                    <View style={styles.amountInputContainer}>
-                        <Text style={styles.currency}>$</Text>
+                    <Text style={[styles.label, { color: Colors.textMuted }]}>Amount</Text>
+                    <View style={[styles.amountInputContainer, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+                        <Text style={[styles.currency, { color: Colors.textMuted }]}>$</Text>
                         <TextInput
-                            style={styles.amountInput}
+                            style={[styles.amountInput, { color: Colors.text }]}
                             keyboardType="numeric"
                             value={amount}
                             onChangeText={setAmount}
@@ -135,15 +148,23 @@ export default function AddTransaction() {
 
                 {/* Account Selector */}
                 <View style={styles.card}>
-                    <Text style={styles.label}>Account</Text>
+                    <Text style={[styles.label, { color: Colors.textMuted }]}>Account</Text>
                     <View style={styles.chipScroll}>
                         {ACCOUNTS.map((acc) => (
                             <TouchableOpacity
                                 key={acc.id}
-                                style={[styles.chip, accountId === acc.id && { backgroundColor: acc.color, borderColor: acc.color }]}
+                                style={[
+                                    styles.chip,
+                                    { backgroundColor: Colors.surface, borderColor: Colors.border },
+                                    accountId === acc.id && { backgroundColor: acc.color, borderColor: acc.color }
+                                ]}
                                 onPress={() => setAccountId(acc.id)}
                             >
-                                <Text style={[styles.chipText, accountId === acc.id && styles.activeChipText]}>{acc.name}</Text>
+                                <Text style={[
+                                    styles.chipText,
+                                    { color: Colors.text },
+                                    accountId === acc.id && { color: Colors.white, fontWeight: 'bold' }
+                                ]}>{acc.name}</Text>
                             </TouchableOpacity>
                         ))}
                     </View>
@@ -151,13 +172,14 @@ export default function AddTransaction() {
 
                 {/* Category Grid */}
                 <View style={styles.card}>
-                    <Text style={styles.label}>Category</Text>
+                    <Text style={[styles.label, { color: Colors.textMuted }]}>Category</Text>
                     <View style={styles.categoryGrid}>
                         {categories.map((cat) => (
                             <TouchableOpacity
                                 key={cat.name}
                                 style={[
                                     styles.categoryItem,
+                                    { backgroundColor: Colors.surface, borderColor: Colors.border },
                                     category === cat.name && { borderColor: cat.color, backgroundColor: cat.color + '15' }
                                 ]}
                                 onPress={() => setCategory(cat.name)}
@@ -166,7 +188,11 @@ export default function AddTransaction() {
                                     <IconRenderer name={cat.icon} color={category === cat.name ? cat.color : Colors.textMuted} size={28} />
                                 </View>
                                 <Text
-                                    style={[styles.categoryName, category === cat.name && { color: cat.color, fontWeight: 'bold' }]}
+                                    style={[
+                                        styles.categoryName,
+                                        { color: Colors.textMuted },
+                                        category === cat.name && { color: cat.color, fontWeight: 'bold' }
+                                    ]}
                                     numberOfLines={1}
                                 >
                                     {cat.name}
@@ -183,9 +209,9 @@ export default function AddTransaction() {
 
                 {/* Note Input */}
                 <View style={styles.card}>
-                    <Text style={styles.label}>Note</Text>
+                    <Text style={[styles.label, { color: Colors.textMuted }]}>Note</Text>
                     <TextInput
-                        style={styles.noteInput}
+                        style={[styles.noteInput, { backgroundColor: Colors.surface, borderColor: Colors.border, color: Colors.text }]}
                         value={note}
                         onChangeText={setNote}
                         placeholder="What was this for?"
@@ -196,11 +222,15 @@ export default function AddTransaction() {
 
                 {/* Submit Button */}
                 <TouchableOpacity
-                    style={[styles.submitButton, (!amount || !category) && styles.disabledButton]}
+                    style={[
+                        styles.submitButton,
+                        { backgroundColor: Colors.primary, shadowColor: Colors.primary },
+                        (!amount || !category) && styles.disabledButton
+                    ]}
                     onPress={handleSubmit}
                     disabled={!amount || !category}
                 >
-                    <Text style={styles.submitText}>Save Transaction</Text>
+                    <Text style={[styles.submitText, { color: Colors.white }]}>Save Transaction</Text>
                 </TouchableOpacity>
             </ScrollView>
         </View>
@@ -210,8 +240,6 @@ export default function AddTransaction() {
 const styles = StyleSheet.create({
     mainContainer: {
         flex: 1,
-        backgroundColor: Colors.background,
-        // On web, ensuring this container takes height is crucial
         height: '100%',
     },
     container: {
@@ -226,11 +254,9 @@ const styles = StyleSheet.create({
     },
     typeSelector: {
         flexDirection: 'row',
-        backgroundColor: Colors.surface,
         borderRadius: 16,
         padding: 4,
         borderWidth: 1,
-        borderColor: Colors.border,
     },
     typeButton: {
         flex: 1,
@@ -238,81 +264,60 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         borderRadius: 12,
     },
-    activeExpense: { backgroundColor: Colors.expense },
-    activeIncome: { backgroundColor: Colors.income },
     typeText: {
-        color: Colors.textMuted,
         fontWeight: '600',
         fontSize: 15,
     },
-    activeText: { color: Colors.white, fontWeight: 'bold' },
-
     card: {
         marginBottom: 20,
     },
     label: {
-        ...Typography.caption,
-        color: Colors.textMuted,
         marginBottom: 10,
         textTransform: 'uppercase',
         letterSpacing: 1,
         fontWeight: '600',
         fontSize: 12,
     },
-
     amountInputContainer: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: Colors.surface,
         borderRadius: 16,
         paddingHorizontal: 20,
         paddingVertical: 12,
         borderWidth: 1,
-        borderColor: Colors.border,
     },
     currency: {
         fontSize: 28,
-        color: Colors.textMuted,
         marginRight: 8,
         fontWeight: '500',
     },
     amountInput: {
         fontSize: 32,
-        color: Colors.text,
         width: '100%',
         fontWeight: 'bold',
         padding: 0,
         height: 50,
         textAlignVertical: 'center',
     },
-
     chipScroll: {
         flexDirection: 'row',
         flexWrap: 'wrap',
         marginHorizontal: -4,
     },
     chip: {
-        backgroundColor: Colors.surface,
         paddingHorizontal: 16,
         paddingVertical: 12,
         borderRadius: 24,
         borderWidth: 1,
-        borderColor: Colors.border,
         minWidth: '45%', // Ensure 2 per row on small screens
         alignItems: 'center',
         margin: 4,
         flexGrow: 1,
     },
     chipText: {
-        color: Colors.text,
         fontWeight: '500',
         fontSize: 14,
     },
-    activeChipText: {
-        color: Colors.white,
-        fontWeight: 'bold',
-    },
-
     categoryGrid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
@@ -322,21 +327,14 @@ const styles = StyleSheet.create({
         width: '31%',
         marginBottom: 12,
         aspectRatio: 1,
-        backgroundColor: Colors.surface,
         borderRadius: 16,
         justifyContent: 'center',
         alignItems: 'center',
         borderWidth: 1,
-        borderColor: Colors.border,
-        padding: 4, // Reduce padding slightly
-    },
-    categoryIcon: {
-        fontSize: 28,
-        marginBottom: 8,
+        padding: 4,
     },
     categoryName: {
         fontSize: 12,
-        color: Colors.textMuted,
         fontWeight: '500',
         textAlign: 'center',
     },
@@ -350,26 +348,19 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
-
     noteInput: {
-        backgroundColor: Colors.surface,
         borderRadius: 16,
         padding: 16,
-        color: Colors.text,
         fontSize: 16,
         borderWidth: 1,
-        borderColor: Colors.border,
         minHeight: 100,
         textAlignVertical: 'top',
     },
-
     submitButton: {
-        backgroundColor: Colors.primary,
         paddingVertical: 16,
         borderRadius: 16,
         alignItems: 'center',
         marginTop: 10,
-        shadowColor: Colors.primary,
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.2,
         shadowRadius: 8,
@@ -381,7 +372,6 @@ const styles = StyleSheet.create({
         shadowOpacity: 0,
     },
     submitText: {
-        color: Colors.white,
         fontSize: 16,
         fontWeight: 'bold',
         letterSpacing: 0.5,
@@ -397,9 +387,7 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         paddingHorizontal: 16,
         paddingVertical: 12,
-        backgroundColor: Colors.background,
         borderBottomWidth: 1,
-        borderBottomColor: Colors.border,
     },
     backButton: {
         padding: 8,
@@ -408,7 +396,6 @@ const styles = StyleSheet.create({
     headerTitle: {
         fontSize: 18,
         fontWeight: 'bold',
-        color: Colors.text,
     },
     section: {
         marginBottom: 20,
