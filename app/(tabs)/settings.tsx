@@ -33,6 +33,9 @@ const SettingsItem = ({ icon: Icon, label, onPress, color, value = undefined, to
 
 import { useTheme } from '../../src/context/ThemeContext';
 
+import * as Haptics from 'expo-haptics';
+import { Platform } from 'react-native';
+
 export default function Settings() {
     const Colors = useThemeColors();
     const { theme, setTheme } = useTheme();
@@ -68,6 +71,9 @@ export default function Settings() {
     };
 
     const handleThemeChange = () => {
+        if (Platform.OS !== 'web') {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        }
         Alert.alert(
             "Select Theme",
             "Choose your preferred app appearance",
@@ -92,6 +98,9 @@ export default function Settings() {
                     text: "Delete Forever",
                     style: "destructive",
                     onPress: async () => {
+                        if (Platform.OS !== 'web') {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+                        }
                         const count = await clearData(range);
                         Alert.alert("Success", `Cleaned up! Removed ${count} transactions.`);
                     }
@@ -135,7 +144,6 @@ export default function Settings() {
                         color={Colors.expense}
                         onPress={() => handleClearData('month')}
                     />
-                    {/* ... other items ... */}
                     <SettingsItem
                         icon={Trash2}
                         label="Clear This Year"

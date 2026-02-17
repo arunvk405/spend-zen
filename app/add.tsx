@@ -44,6 +44,8 @@ const IconRenderer = ({ name, color, size = 24 }: { name: string, color: string,
     }
 };
 
+import * as Haptics from 'expo-haptics';
+
 export default function AddTransaction() {
     const Colors = useThemeColors();
     const { addTransaction } = useFinance();
@@ -60,6 +62,10 @@ export default function AddTransaction() {
 
     const handleSubmit = async () => {
         if (!amount || !category) return;
+
+        if (Platform.OS !== 'web') {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
 
         await addTransaction({
             amount: parseFloat(amount),
