@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth } from '../database/firebaseConfig';
 import { upsertUserProfile } from '../database/db';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface AuthContextType {
     user: User | null;
@@ -40,7 +41,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, []);
 
     const logout = async () => {
-        await signOut(auth);
+        try {
+            await signOut(auth);
+            // Clear theme and any other locally cached preferences
+            await AsyncStorage.clear();
+        } catch (e) {
+            console.error("Logout error:", e);
+        }
     };
 
     return (

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -17,6 +17,7 @@ import {
     updateProfile
 } from 'firebase/auth';
 import { auth } from '../src/database/firebaseConfig';
+import { useAuth } from '../src/context/AuthContext';
 import { useThemeColors } from '../src/theme/colors';
 import { Logo } from '../src/components/Logo';
 import { Mail, Lock, User, ArrowRight, ArrowLeft } from 'lucide-react-native';
@@ -29,6 +30,15 @@ export default function SignupScreen() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
+
+    const { user } = useAuth();
+
+    // Auto-redirect if already logged in
+    useEffect(() => {
+        if (user) {
+            router.replace('/(tabs)');
+        }
+    }, [user]);
 
     const handleSignup = async () => {
         if (!name || !email || !password) {

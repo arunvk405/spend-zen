@@ -9,11 +9,9 @@ import {
     orderBy,
     deleteDoc,
     doc,
-    limit,
     getDoc,
     setDoc
 } from 'firebase/firestore';
-import { auth } from './firebaseConfig';
 
 const COLLECTION_NAME = 'transactions';
 const USERS_COLLECTION = 'users';
