@@ -68,9 +68,9 @@ export default function SignupScreen() {
             style={[styles.container, { backgroundColor: Colors.background }]}
         >
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                <View style={[styles.header, { backgroundColor: Colors.background }]}>
+                <View style={StyleSheet.flatten([styles.header, { backgroundColor: Colors.background }])}>
                     <Link href="/login" asChild>
-                        <TouchableOpacity style={[styles.backButton, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+                        <TouchableOpacity style={StyleSheet.flatten([styles.backButton, { backgroundColor: Colors.surface, borderColor: Colors.border }])}>
                             <ArrowLeft size={20} color={Colors.text} />
                         </TouchableOpacity>
                     </Link>
@@ -143,7 +143,9 @@ export default function SignupScreen() {
                 <View style={styles.footer}>
                     <Text style={[styles.footerText, { color: Colors.textMuted }]}>
                         Already have an account?
-                        <Link href="/login" style={{ color: Colors.primary, fontWeight: 'bold' }}> Login</Link>
+                        <Link href="/login" asChild>
+                            <Text style={{ color: Colors.primary, fontWeight: 'bold' }}> Login</Text>
+                        </Link>
                     </Text>
                 </View>
             </ScrollView>

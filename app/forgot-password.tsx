@@ -56,9 +56,9 @@ export default function ForgotPasswordScreen() {
             style={[styles.container, { backgroundColor: Colors.background }]}
         >
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                <View style={[styles.header, { backgroundColor: Colors.background }]}>
+                <View style={StyleSheet.flatten([styles.header, { backgroundColor: Colors.background }])}>
                     <Link href="/login" asChild>
-                        <TouchableOpacity style={[styles.backButton, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+                        <TouchableOpacity style={StyleSheet.flatten([styles.backButton, { backgroundColor: Colors.surface, borderColor: Colors.border }])}>
                             <ArrowLeft size={20} color={Colors.text} />
                         </TouchableOpacity>
                     </Link>
@@ -79,7 +79,7 @@ export default function ForgotPasswordScreen() {
                                 We've sent a password reset link to {email}. Click the link in the email to reset your password.
                             </Text>
                             <Link href="/login" asChild>
-                                <TouchableOpacity style={[styles.button, { backgroundColor: Colors.primary, width: '100%' }]}>
+                                <TouchableOpacity style={StyleSheet.flatten([styles.button, { backgroundColor: Colors.primary, width: '100%' }])}>
                                     <Text style={styles.buttonText}>Back to Login</Text>
                                 </TouchableOpacity>
                             </Link>

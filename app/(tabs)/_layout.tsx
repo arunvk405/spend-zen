@@ -67,7 +67,7 @@ export default function TabLayout() {
                         <TouchableOpacity
                             {...props}
                             activeOpacity={0.7}
-                            style={[props.style, styles.centerButtonContainer]}
+                            style={StyleSheet.flatten([props.style, styles.centerButtonContainer])}
                         >
                             <View style={[styles.centerButton, { backgroundColor: Colors.primary, shadowColor: Colors.primary }]}>
                                 <Plus color="#fff" size={32} strokeWidth={3} />
