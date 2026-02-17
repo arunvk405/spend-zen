@@ -1,0 +1,21 @@
+<svg width="1024" height="1024" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+    <!-- Solid Background for App Icon -->
+    <rect width="100" height="100" fill="#064e3b" />
+    
+    <!-- Zen Circles -->
+    <circle cx="50" cy="50" r="48" fill="#10b98115" />
+    
+    <g transform="scale(0.8) translate(12.5, 12.5)">
+        <!-- Zen Stone Stack (Cairn) -->
+        <path d="M30 85 Q50 90 70 85 Q75 75 50 70 Q25 75 30 85 Z" fill="#ffffff" opacity="0.3"/>
+        <path d="M35 65 Q50 70 65 65 Q70 55 50 52 Q30 55 35 65 Z" fill="#ffffff" opacity="0.5"/>
+        <path d="M42 45 Q50 48 58 45 Q62 38 50 36 Q38 38 42 45 Z" fill="#10b981" />
+        
+        <!-- Dollar / Coin Orbit -->
+        <circle cx="50" cy="50" r="45" fill="none" stroke="#10b981" stroke-width="2" stroke-dasharray="8 4"/>
+        
+        <!-- Small Gold Coin -->
+        <circle cx="85" cy="30" r="8" fill="#fbbf24" />
+        <path d="M85 26 V34 M82 30 H88" stroke="#064e3b" stroke-width="2" />
+    </g>
+</svg>
