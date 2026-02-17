@@ -70,48 +70,51 @@ export default function Settings() {
         }
     };
 
-    const handleThemeChange = () => {
+    const toggleTheme = () => {
+        const newTheme = theme === 'light' ? 'dark' : 'light';
         if (Platform.OS !== 'web') {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         }
-        Alert.alert(
-            "Select Theme",
-            "Choose your preferred app appearance",
-            [
-                { text: "System Default", onPress: () => setTheme('system') },
-                { text: "Light Mode", onPress: () => setTheme('light') },
-                { text: "Dark Mode", onPress: () => setTheme('dark') },
-                { text: "Cancel", style: "cancel" }
-            ]
-        );
+        setTheme(newTheme);
     };
 
     const handleClearData = (range: 'all' | 'month' | 'year') => {
         const rangeText = range === 'all' ? 'ALL your' : `this ${range}'s`;
+        const title = "⚠️ Irreversible Action";
+        const message = `Are you sure you want to delete ${rangeText} data? This action cannot be undone.`;
 
-        Alert.alert(
-            "⚠️ Irreversible Action",
-            `Are you sure you want to delete ${rangeText} data? This action cannot be undone.`,
-            [
-                { text: "Cancel", style: "cancel" },
-                {
-                    text: "Delete Forever",
-                    style: "destructive",
-                    onPress: async () => {
-                        if (Platform.OS !== 'web') {
-                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-                        }
-                        const count = await clearData(range);
-                        Alert.alert("Success", `Cleaned up! Removed ${count} transactions.`);
+        if (Platform.OS === 'web') {
+            const confirmed = window.confirm(`${title}\n\n${message}`);
+            if (confirmed) {
+                performClear(range);
+            }
+        } else {
+            Alert.alert(
+                title,
+                message,
+                [
+                    { text: "Cancel", style: "cancel" },
+                    {
+                        text: "Delete Forever",
+                        style: "destructive",
+                        onPress: () => performClear(range)
                     }
-                }
-            ]
-        );
+                ]
+            );
+        }
     };
 
-    const getThemeLabel = () => {
-        if (theme === 'system') return 'System Default';
-        return theme.charAt(0).toUpperCase() + theme.slice(1) + ' Mode';
+    const performClear = async (range: 'all' | 'month' | 'year') => {
+        if (Platform.OS !== 'web') {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+        }
+        const count = await clearData(range);
+        const successMsg = `Cleaned up! Removed ${count} transactions.`;
+        if (Platform.OS === 'web') {
+            window.alert(successMsg);
+        } else {
+            Alert.alert("Success", successMsg);
+        }
     };
 
     return (
@@ -127,10 +130,12 @@ export default function Settings() {
                         onPress={handleShare}
                     />
                     <SettingsItem
-                        icon={Colors.isDark ? Moon : Sun}
-                        label={`Theme: ${getThemeLabel()}`}
+                        icon={theme === 'dark' ? Moon : Sun}
+                        label={`Dark Mode`}
                         color="#fbbf24"
-                        onPress={handleThemeChange}
+                        toggle={true}
+                        value={theme === 'dark'}
+                        onPress={toggleTheme}
                     />
                 </View>
             </View>

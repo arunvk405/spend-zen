@@ -35,11 +35,14 @@ export const INCOME_CATEGORIES: Category[] = [
 
 export const EXPENSE_CATEGORIES: Category[] = [
     { name: 'Food', icon: 'utensils', color: '#F44336', type: 'EXPENSE' },
-    { name: 'Transport', icon: 'car', color: '#FFEB3B', type: 'EXPENSE' },
-    { name: 'Rent', icon: 'home', color: '#795548', type: 'EXPENSE' },
-    { name: 'Shopping', icon: 'shopping-cart', color: '#E91E63', type: 'EXPENSE' },
-    { name: 'Entertainment', icon: 'film', color: '#673AB7', type: 'EXPENSE' },
-    { name: 'Bills', icon: 'file-text', color: '#FF5722', type: 'EXPENSE' },
+    { name: 'Gifts', icon: 'gift', color: '#FF9800', type: 'EXPENSE' },
+    { name: 'Health/medical', icon: 'cross', color: '#E91E63', type: 'EXPENSE' },
+    { name: 'Home', icon: 'home', color: '#795548', type: 'EXPENSE' },
+    { name: 'Transportation', icon: 'car', color: '#2196F3', type: 'EXPENSE' },
+    { name: 'Personal', icon: 'user', color: '#9C27B0', type: 'EXPENSE' },
+    { name: 'Pets', icon: 'paw-print', color: '#607D8B', type: 'EXPENSE' },
+    { name: 'Utilities', icon: 'file-text', color: '#FF5722', type: 'EXPENSE' },
+    { name: 'Debt', icon: 'credit-card', color: '#000000', type: 'EXPENSE' },
 ];
 
 export const ACCOUNTS: Account[] = [
