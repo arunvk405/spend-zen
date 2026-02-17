@@ -153,8 +153,8 @@ export default function Settings() {
                         icon={theme === 'dark' ? Moon : Sun}
                         label={`Dark Mode`}
                         color="#fbbf24"
-                        toggle={true}
-                        value={theme === 'dark'}
+                        toggle={false}
+                        value={theme === 'light'}
                         onPress={toggleTheme}
                     />
                 </View>
