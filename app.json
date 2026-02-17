@@ -30,7 +30,10 @@
       "display": "standalone",
       "backgroundColor": "#064e3b",
       "themeColor": "#10b981",
-      "lang": "en"
+      "lang": "en",
+      "shortName": "Spend Zen",
+      "description": "Financial mindfulness at your fingertips",
+      "preferRelatedApplications": false
     },
     "plugins": [
       "expo-sqlite",
