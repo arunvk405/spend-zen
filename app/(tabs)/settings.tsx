@@ -18,6 +18,7 @@ import {
 } from 'lucide-react-native';
 import { updateProfile } from 'firebase/auth';
 import { auth } from '../../src/database/firebaseConfig';
+import { upsertUserProfile } from '../../src/database/db';
 import { useFinance } from '../../src/context/FinanceContext';
 import { useAuth } from '../../src/context/AuthContext';
 import { useRouter } from 'expo-router';
@@ -75,6 +76,7 @@ export default function Settings() {
         setUpdateLoading(true);
         try {
             await updateProfile(user, { displayName: name });
+            await upsertUserProfile(user.uid, { displayName: name });
             setIsEditing(false);
             Alert.alert("Success", "Profile updated successfully!");
         } catch (error) {

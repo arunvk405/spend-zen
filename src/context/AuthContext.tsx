@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth } from '../database/firebaseConfig';
+import { upsertUserProfile } from '../database/db';
 
 interface AuthContextType {
     user: User | null;
@@ -20,9 +21,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [isAdmin, setIsAdmin] = useState(false);
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, (user) => {
-            setUser(user);
-            setIsAdmin(user ? ADMIN_EMAILS.includes(user.email || '') : false);
+        const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
+            if (authUser) {
+                // Sync basic auth info to Firestore
+                await upsertUserProfile(authUser.uid, {
+                    uid: authUser.uid,
+                    email: authUser.email,
+                    displayName: authUser.displayName,
+                    photoURL: authUser.photoURL,
+                });
+            }
+            setUser(authUser);
+            setIsAdmin(authUser ? ADMIN_EMAILS.includes(authUser.email || '') : false);
             setLoading(false);
         });
 

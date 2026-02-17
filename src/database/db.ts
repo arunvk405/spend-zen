@@ -10,14 +10,39 @@ import {
     deleteDoc,
     doc,
     limit,
-    getDoc
+    getDoc,
+    setDoc
 } from 'firebase/firestore';
 import { auth } from './firebaseConfig';
 
 const COLLECTION_NAME = 'transactions';
+const USERS_COLLECTION = 'users';
 
 export async function initDatabase() {
     return true;
+}
+
+export async function upsertUserProfile(userId: string, data: any) {
+    try {
+        const userRef = doc(db, USERS_COLLECTION, userId);
+        await setDoc(userRef, {
+            ...data,
+            lastUpdated: new Date().toISOString()
+        }, { merge: true });
+    } catch (e) {
+        console.error("Error updating user profile:", e);
+    }
+}
+
+export async function getUserProfile(userId: string) {
+    try {
+        const userRef = doc(db, USERS_COLLECTION, userId);
+        const userSnap = await getDoc(userRef);
+        return userSnap.exists() ? userSnap.data() : null;
+    } catch (e) {
+        console.error("Error getting user profile:", e);
+        return null;
+    }
 }
 
 export async function addTransaction(userId: string, tx: Omit<Transaction, 'id'>): Promise<string> {
