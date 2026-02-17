@@ -1,15 +1,28 @@
-import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, Dimensions, ScrollView } from 'react-native';
-import { useThemeColors } from '../../src/theme/colors';
-import { PieChart, BarChart, LineChart } from 'react-native-chart-kit';
+import React, { useMemo, useState } from 'react';
+import { View, Text, StyleSheet, Dimensions, ScrollView, TouchableOpacity } from 'react-native';
+import { useThemeColors, Typography } from '../../src/theme/colors';
+import { PieChart, BarChart } from 'react-native-chart-kit';
 import { useFinance } from '../../src/context/FinanceContext';
-import { format, subMonths, startOfMonth, endOfMonth, isWithinInterval, parseISO } from 'date-fns';
+import { startOfMonth, endOfMonth, isWithinInterval, parseISO } from 'date-fns';
 
 const screenWidth = Dimensions.get('window').width;
+
+const ACCOUNT_FILTERS = [
+    { id: 'all', label: 'All' },
+    { id: 'cash', label: 'Cash' },
+    { id: 'bank', label: 'Bank' },
+    { id: 'credit', label: 'Credit' }
+];
 
 export default function Reports() {
     const Colors = useThemeColors();
     const { transactions } = useFinance();
+    const [selectedAccount, setSelectedAccount] = useState('all');
+
+    const filteredTransactions = useMemo(() => {
+        if (selectedAccount === 'all') return transactions;
+        return transactions.filter(t => t.accountId === selectedAccount);
+    }, [transactions, selectedAccount]);
 
     const chartConfig = {
         backgroundGradientFrom: Colors.surface,
@@ -17,11 +30,9 @@ export default function Reports() {
         color: (opacity = 1) => `rgba(${parseInt(Colors.primary.slice(1, 3), 16)}, ${parseInt(Colors.primary.slice(3, 5), 16)}, ${parseInt(Colors.primary.slice(5, 7), 16)}, ${opacity})`,
         labelColor: (opacity = 1) => Colors.textMuted,
         strokeWidth: 2,
-        barPercentage: 0.5,
+        barPercentage: 0.7,
         useShadowColorFromDataset: false
     };
-
-    // --- Data Aggregation Logic ---
 
     // 1. Expense Breakdown by Category (Current Month)
     const categoryData = useMemo(() => {
@@ -29,7 +40,7 @@ export default function Reports() {
         const start = startOfMonth(currentMonth);
         const end = endOfMonth(currentMonth);
 
-        const expenses = transactions.filter(t =>
+        const expenses = filteredTransactions.filter(t =>
             t.type === 'EXPENSE' &&
             isWithinInterval(parseISO(t.date), { start, end })
         );
@@ -39,7 +50,6 @@ export default function Reports() {
             breakdown[t.category] = (breakdown[t.category] || 0) + t.amount;
         });
 
-        // Convert to chart format and take top 5
         return Object.keys(breakdown)
             .map((key, index) => ({
                 name: key,
@@ -50,49 +60,94 @@ export default function Reports() {
             }))
             .sort((a, b) => b.population - a.population)
             .slice(0, 5);
-    }, [transactions]);
+    }, [filteredTransactions]);
 
-    // 2. Spending Trend (Last 6 Months)
-    const trendData = useMemo(() => {
-        const data: number[] = [];
-        const labels: string[] = [];
+    // 2. Income by Account
+    const incomeByAccountData = useMemo(() => {
+        const incomes = filteredTransactions.filter(t => t.type === 'INCOME');
+        const breakdown: Record<string, number> = {};
+        incomes.forEach(t => {
+            const label = t.accountId.charAt(0).toUpperCase() + t.accountId.slice(1);
+            breakdown[label] = (breakdown[label] || 0) + t.amount;
+        });
 
-        for (let i = 5; i >= 0; i--) {
-            const date = subMonths(new Date(), i);
-            const start = startOfMonth(date);
-            const end = endOfMonth(date);
-            const monthLabel = format(date, 'MMM');
+        return Object.keys(breakdown).map((key, index) => ({
+            name: key,
+            population: breakdown[key],
+            color: index === 0 ? Colors.primary : index === 1 ? Colors.income : Colors.secondary,
+            legendFontColor: Colors.textMuted,
+            legendFontSize: 12
+        })).sort((a, b) => b.population - a.population);
+    }, [filteredTransactions]);
 
-            const monthlyExpense = transactions
-                .filter(t => t.type === 'EXPENSE' && isWithinInterval(parseISO(t.date), { start, end }))
-                .reduce((sum, t) => sum + t.amount, 0);
+    // 3. Amount Distribution Histogram (Frequency of transaction amounts)
+    const histogramData = useMemo(() => {
+        const ranges = [
+            { label: '0-100', min: 0, max: 100 },
+            { label: '100-500', min: 100, max: 500 },
+            { label: '500-1k', min: 500, max: 1000 },
+            { label: '1k-5k', min: 1000, max: 5000 },
+            { label: '5k+', min: 5000, max: Infinity }
+        ];
 
-            data.push(monthlyExpense);
-            labels.push(monthLabel);
-        }
+        const frequencies = ranges.map(range => {
+            return filteredTransactions.filter(t =>
+                t.amount > range.min && t.amount <= range.max
+            ).length;
+        });
 
         return {
-            labels,
-            datasets: [{ data }]
+            labels: ranges.map(r => r.label),
+            datasets: [{ data: frequencies }]
         };
-    }, [transactions]);
-
+    }, [filteredTransactions]);
 
     return (
-        <ScrollView style={[styles.container, { backgroundColor: Colors.background }]} contentContainerStyle={{ paddingBottom: 100 }}>
+        <ScrollView
+            style={[styles.container, { backgroundColor: Colors.background }]}
+            contentContainerStyle={{ paddingBottom: 100 }}
+            showsVerticalScrollIndicator={false}
+        >
             <View style={styles.header}>
-                <Text style={[styles.title, { color: Colors.text }]}>Financial Insights</Text>
-                <Text style={[styles.subtitle, { color: Colors.textMuted }]}>Overview of your spending habits</Text>
+                <Text style={[styles.title, { color: Colors.text }]}>Reports</Text>
+
+                <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.filterContainer}
+                    contentContainerStyle={styles.filterContent}
+                >
+                    {ACCOUNT_FILTERS.map(filter => (
+                        <TouchableOpacity
+                            key={filter.id}
+                            style={[
+                                styles.filterChip,
+                                { backgroundColor: selectedAccount === filter.id ? Colors.primary : Colors.surface }
+                            ]}
+                            onPress={() => setSelectedAccount(filter.id)}
+                        >
+                            <Text style={[
+                                styles.filterText,
+                                { color: selectedAccount === filter.id ? Colors.white : Colors.textMuted }
+                            ]}>
+                                {filter.label}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                </ScrollView>
             </View>
 
-            {/* Category Pie Chart */}
+            {/* Income by Account */}
             <View style={[styles.card, { backgroundColor: Colors.surface }]}>
-                <Text style={[styles.cardTitle, { color: Colors.text }]}>Expenses This Month</Text>
-                {categoryData.length > 0 ? (
+                <View style={styles.cardHeader}>
+                    <Text style={[styles.cardTitle, { color: Colors.text }]}>Income by Type</Text>
+                    <Text style={[styles.cardTag, { color: Colors.primary, backgroundColor: Colors.primary + '15' }]}>Source</Text>
+                </View>
+                {incomeByAccountData.length > 0 ? (
                     <PieChart
-                        data={categoryData}
+                        data={incomeByAccountData}
                         width={screenWidth - 32}
-                        height={220}
+                        height={200}
                         chartConfig={chartConfig}
                         accessor={"population"}
                         backgroundColor={"transparent"}
@@ -101,26 +156,59 @@ export default function Reports() {
                         absolute
                     />
                 ) : (
-                    <Text style={{ color: Colors.textMuted, textAlign: 'center', marginVertical: 20 }}>No expenses yet this month.</Text>
+                    <Text style={styles.emptyText}>No income data available.</Text>
                 )}
             </View>
 
-            {/* Monthly Trend Bar Chart */}
+            {/* Expense Breakdown */}
             <View style={[styles.card, { backgroundColor: Colors.surface }]}>
-                <Text style={[styles.cardTitle, { color: Colors.text }]}>6-Month Trend</Text>
+                <View style={styles.cardHeader}>
+                    <Text style={[styles.cardTitle, { color: Colors.text }]}>Monthly Expenses</Text>
+                    <Text style={[styles.cardTag, { color: Colors.expense, backgroundColor: Colors.expense + '15' }]}>Categories</Text>
+                </View>
+                {categoryData.length > 0 ? (
+                    <PieChart
+                        data={categoryData}
+                        width={screenWidth - 32}
+                        height={200}
+                        chartConfig={chartConfig}
+                        accessor={"population"}
+                        backgroundColor={"transparent"}
+                        paddingLeft={"15"}
+                        center={[10, 0]}
+                        absolute
+                    />
+                ) : (
+                    <Text style={styles.emptyText}>No expenses yet this month.</Text>
+                )}
+            </View>
+
+            {/* Histogram: Amount Distribution */}
+            <View style={[styles.card, { backgroundColor: Colors.surface }]}>
+                <View style={styles.cardHeader}>
+                    <Text style={[styles.cardTitle, { color: Colors.text }]}>Transaction Frequency</Text>
+                    <Text style={[styles.cardTag, { color: Colors.income, backgroundColor: Colors.income + '15' }]}>Histogram</Text>
+                </View>
                 <BarChart
-                    data={trendData}
-                    width={screenWidth - 64}
+                    data={histogramData}
+                    width={screenWidth - 32}
                     height={220}
-                    yAxisLabel="$"
-                    yAxisSuffix=""
+                    yAxisLabel=""
+                    yAxisSuffix=" tx"
                     chartConfig={{
                         ...chartConfig,
-                        backgroundColor: Colors.surface,
                         decimalPlaces: 0,
                     }}
-                    verticalLabelRotation={0}
+                    style={{
+                        marginVertical: 8,
+                        borderRadius: 16
+                    }}
+                    showValuesOnTopOfBars
+                    fromZero
                 />
+                <Text style={[styles.histogramLabel, { color: Colors.textMuted }]}>
+                    Distribution of transaction amounts across ranges
+                </Text>
             </View>
 
         </ScrollView>
@@ -130,35 +218,75 @@ export default function Reports() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        padding: 16,
     },
     header: {
-        marginBottom: 24,
+        padding: 20,
+        paddingBottom: 10,
     },
     title: {
-        fontSize: 28,
+        fontSize: 32,
         fontWeight: 'bold',
-        marginBottom: 4,
+        marginBottom: 16,
     },
-    subtitle: {
-        fontSize: 16,
+    filterContainer: {
+        marginBottom: 10,
+    },
+    filterContent: {
+        paddingRight: 20,
+    },
+    filterChip: {
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 20,
+        marginRight: 10,
+        elevation: 2,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+    },
+    filterText: {
+        fontSize: 14,
+        fontWeight: '600',
     },
     card: {
+        margin: 16,
+        marginTop: 8,
         borderRadius: 24,
         padding: 16,
-        marginBottom: 24,
         shadowColor: "#000",
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.1,
         shadowRadius: 12,
         elevation: 5,
-        alignItems: 'center' // Center charts
+    },
+    cardHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 16,
     },
     cardTitle: {
         fontSize: 18,
-        fontWeight: '600',
-        alignSelf: 'flex-start',
-        marginBottom: 16,
-        marginLeft: 8
+        fontWeight: 'bold',
+    },
+    cardTag: {
+        fontSize: 10,
+        fontWeight: '700',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 8,
+        textTransform: 'uppercase',
+    },
+    emptyText: {
+        textAlign: 'center',
+        marginVertical: 30,
+        color: '#6c757d',
+        fontSize: 14,
+    },
+    histogramLabel: {
+        textAlign: 'center',
+        fontSize: 12,
+        marginTop: 8,
     }
 });

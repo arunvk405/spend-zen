@@ -57,11 +57,12 @@ export default function TabsLayout() {
                 name="add-stub"
                 options={{
                     title: '',
-                    tabBarButton: () => (
+                    tabBarButton: (props: any) => (
                         <TouchableOpacity
+                            {...props}
                             activeOpacity={0.9}
                             onPress={() => router.push('/add')}
-                            style={styles.centerButtonContainer}
+                            style={[props.style, styles.centerButtonContainer]}
                         >
                             <View style={[styles.centerButton, { backgroundColor: Colors.primary, shadowColor: Colors.primary }]}>
                                 <Plus color="#fff" size={32} strokeWidth={3} />
@@ -92,20 +93,19 @@ export default function TabsLayout() {
 
 const styles = StyleSheet.create({
     centerButtonContainer: {
-        top: -24, // Matches the floating effect
         justifyContent: 'center',
         alignItems: 'center',
-        width: 70, // Ensure touch target is adequate
+        top: -18,
     },
     centerButton: {
-        width: 56,
-        height: 56,
-        borderRadius: 28,
+        width: 58,
+        height: 58,
+        borderRadius: 29,
         justifyContent: 'center',
         alignItems: 'center',
-        elevation: 8, // Android shadow
+        elevation: 8,
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.3,
-        shadowRadius: 8, // iOS shadow
+        shadowRadius: 8,
     },
 });
