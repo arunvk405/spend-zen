@@ -69,12 +69,15 @@ export default function Settings() {
 2. Tap the three dots menu (⋮).
 3. Tap 'Install App' or 'Add to Home Screen'.
 
-🔗 Link: https://spend-zen.netlify.app`;
+🔗 Link: https://spend-zen.netlify.app 
+🔗 Link: https://spend-zen-five.vercel.app/`;
+
 
         try {
             await Share.share({
                 message: message,
-                url: 'https://spend-zen.netlify.app',
+                // url: 'https://spend-zen.netlify.app',
+                url: 'https://spend-zen-five.vercel.app',
                 title: 'Join me on Spend Zen!'
             });
         } catch (error) {
