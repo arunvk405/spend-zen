@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "ExpenseTracker",
-    "slug": "ExpenseTracker",
+    "name": "Spend Zen",
+    "slug": "spend-zen",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -24,7 +24,18 @@
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "favicon": "./assets/favicon.png"
-    }
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "output": "static",
+      "display": "standalone",
+      "backgroundColor": "#121212",
+      "themeColor": "#121212",
+      "lang": "en"
+    },
+    "plugins": [
+      "expo-sqlite",
+      "expo-router",
+      "expo-font"
+    ]
   }
 }
