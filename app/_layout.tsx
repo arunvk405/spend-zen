@@ -1,12 +1,14 @@
 import { Stack } from 'expo-router';
 import { FinanceProvider } from '../src/context/FinanceContext';
 import { StatusBar } from 'expo-status-bar';
-import { Colors } from '../src/theme/colors';
+import { useThemeColors } from '../src/theme/colors';
 
 export default function RootLayout() {
+    const Colors = useThemeColors();
+
     return (
         <FinanceProvider>
-            <StatusBar style="light" />
+            <StatusBar style={Colors.isDark ? "light" : "dark"} />
             <Stack
                 screenOptions={{
                     headerStyle: {
