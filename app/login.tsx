@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -12,10 +12,9 @@ import {
     ScrollView
 } from 'react-native';
 import { useRouter, Link } from 'expo-router';
-import {
-    signInWithEmailAndPassword
-} from 'firebase/auth';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../src/database/firebaseConfig';
+import { useAuth } from '../src/context/AuthContext';
 import { useThemeColors } from '../src/theme/colors';
 import { Logo } from '../src/components/Logo';
 import { Mail, Lock, ArrowRight, UserPlus, HelpCircle } from 'lucide-react-native';
@@ -23,10 +22,18 @@ import { Mail, Lock, ArrowRight, UserPlus, HelpCircle } from 'lucide-react-nativ
 export default function LoginScreen() {
     const Colors = useThemeColors();
     const router = useRouter();
+    const { user } = useAuth();
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
+
+    // Auto-redirect if already logged in
+    useEffect(() => {
+        if (user) {
+            router.replace('/(tabs)');
+        }
+    }, [user]);
 
     const handleLogin = async () => {
         if (!email || !password) {
@@ -37,7 +44,7 @@ export default function LoginScreen() {
         setLoading(true);
         try {
             await signInWithEmailAndPassword(auth, email, password);
-            router.replace('/(tabs)');
+            // Router replace will be handled by useEffect above or the Tab redirect
         } catch (error: any) {
             console.error(error);
             let message = "Failed to login. Please check your credentials.";

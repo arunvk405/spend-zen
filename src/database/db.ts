@@ -94,27 +94,7 @@ export async function getAllTransactionsAdmin(): Promise<any[]> {
     }
 }
 
-export async function getTotalBalance(userId: string): Promise<number> {
-    const transactions = await getTransactions(userId);
-    return transactions.reduce((acc, curr) => {
-        return curr.type === 'INCOME' ? acc + curr.amount : acc - curr.amount;
-    }, 0);
-}
-
-export async function getMonthlySummary(userId: string, yearMonth: string) {
-    const transactions = await getTransactions(userId);
-    const monthly = transactions.filter(t => t.date.startsWith(yearMonth));
-
-    const income = monthly
-        .filter(t => t.type === 'INCOME')
-        .reduce((acc, curr) => acc + curr.amount, 0);
-
-    const expense = monthly
-        .filter(t => t.type === 'EXPENSE')
-        .reduce((acc, curr) => acc + curr.amount, 0);
-
-    return { income, expense };
-}
+// Analytics and summary logic moved to FinanceContext for performance
 
 export async function deleteTransaction(transactionId: string): Promise<void> {
     try {

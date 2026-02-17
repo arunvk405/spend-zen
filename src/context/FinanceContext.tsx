@@ -4,12 +4,10 @@ import {
     initDatabase,
     getTransactions,
     addTransaction as addTxDb,
-    getTotalBalance,
-    getMonthlySummary,
     deleteTransaction as deleteTxDb,
     deleteTransactionsByRange
 } from '../database/db';
-import { format } from 'date-fns';
+import { format, isSameMonth, parseISO } from 'date-fns';
 
 import { useAuth } from './AuthContext';
 
@@ -43,15 +41,37 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
         setLoading(true);
         try {
+            // Fetch ALL transactions once - minimize API calls
             const txs = await getTransactions(user.uid);
-            const balance = await getTotalBalance(user.uid);
-            const currentMonth = format(new Date(), 'yyyy-MM');
-            const summary = await getMonthlySummary(user.uid, currentMonth);
+
+            // Calculate everything locally to avoid extra latency
+            let balance = 0;
+            let income = 0;
+            let expense = 0;
+            const now = new Date();
+
+            txs.forEach(t => {
+                const amount = Number(t.amount);
+                if (t.type === 'INCOME') {
+                    balance += amount;
+                } else {
+                    balance -= amount;
+                }
+
+                // Current month calculations
+                if (isSameMonth(parseISO(t.date), now)) {
+                    if (t.type === 'INCOME') {
+                        income += amount;
+                    } else {
+                        expense += amount;
+                    }
+                }
+            });
 
             setTransactions(txs);
             setTotalBalance(balance);
-            setMonthlyIncome(summary.income);
-            setMonthlyExpenses(summary.expense);
+            setMonthlyIncome(income);
+            setMonthlyExpenses(expense);
 
             const updatedAccounts = ACCOUNTS.map(acc => {
                 const accBalance = txs
