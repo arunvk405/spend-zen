@@ -15,6 +15,8 @@ import {
     ExternalLink
 } from 'lucide-react-native';
 import { useFinance } from '../../src/context/FinanceContext';
+import { useAuth } from '../../src/context/AuthContext';
+import { useRouter } from 'expo-router';
 const SettingsItem = ({ icon: Icon, label, onPress, color, value = undefined, toggle = false }: any) => {
     const Colors = useThemeColors();
     return (
@@ -50,8 +52,29 @@ import { Platform } from 'react-native';
 
 export default function Settings() {
     const Colors = useThemeColors();
+    const router = useRouter();
     const { theme, setTheme } = useTheme();
     const { clearData } = useFinance();
+
+    const { logout } = useAuth();
+
+    const handleLogout = async () => {
+        Alert.alert(
+            "Logout",
+            "Are you sure you want to logout?",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Logout",
+                    style: "destructive",
+                    onPress: async () => {
+                        await logout();
+                        router.replace('/login');
+                    }
+                }
+            ]
+        );
+    };
 
     const handleShare = async () => {
         // ... (share logic remains same)
@@ -156,6 +179,18 @@ export default function Settings() {
                         toggle={false}
                         value={theme === 'light'}
                         onPress={toggleTheme}
+                    />
+                </View>
+            </View>
+
+            <View style={styles.section}>
+                <Text style={[styles.sectionTitle, { color: Colors.textMuted }]}>Account</Text>
+                <View style={[styles.card, { backgroundColor: Colors.surface }]}>
+                    <SettingsItem
+                        icon={LogOut}
+                        label="Logout"
+                        color={Colors.expense}
+                        onPress={handleLogout}
                     />
                 </View>
             </View>

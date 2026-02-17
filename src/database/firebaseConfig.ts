@@ -1,8 +1,8 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
 
-// Firebase configuration - This is a demo project with public access
-// For production, you should create your own Firebase project
+// Firebase configuration - USER: Replace with your actual project config from Firebase Console
 const firebaseConfig = {
     apiKey: "AIzaSyDemoKeyForFinTrackExpenseManager2026",
     authDomain: "fintrack-demo.firebaseapp.com",
@@ -15,5 +15,6 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// Initialize Firestore
+// Initialize Services
 export const db = getFirestore(app);
+export const auth = getAuth(app);

@@ -11,6 +11,8 @@ import {
 } from '../database/db';
 import { format } from 'date-fns';
 
+import { useAuth } from './AuthContext';
+
 interface FinanceContextType {
     transactions: Transaction[];
     accounts: Account[];
@@ -19,7 +21,7 @@ interface FinanceContextType {
     monthlyExpenses: number;
     loading: boolean;
     addTransaction: (tx: Omit<Transaction, 'id'>) => Promise<void>;
-    deleteTransaction: (id: number) => Promise<void>;
+    deleteTransaction: (id: string) => Promise<void>;
     clearData: (range: 'all' | 'year' | 'month') => Promise<number>;
     refreshData: () => Promise<void>;
 }
@@ -27,30 +29,30 @@ interface FinanceContextType {
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
 
 export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    const { user } = useAuth();
     const [dbReady, setDbReady] = useState(false);
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [accounts, setAccounts] = useState<Account[]>(ACCOUNTS);
     const [totalBalance, setTotalBalance] = useState(0);
     const [monthlyIncome, setMonthlyIncome] = useState(0);
     const [monthlyExpenses, setMonthlyExpenses] = useState(0);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false);
 
     const refreshData = useCallback(async () => {
-        if (!dbReady) return;
+        if (!dbReady || !user) return;
 
         setLoading(true);
         try {
-            const txs = await getTransactions(null);
-            const balance = await getTotalBalance(null);
+            const txs = await getTransactions(user.uid);
+            const balance = await getTotalBalance(user.uid);
             const currentMonth = format(new Date(), 'yyyy-MM');
-            const summary = await getMonthlySummary(null, currentMonth);
+            const summary = await getMonthlySummary(user.uid, currentMonth);
 
             setTransactions(txs);
             setTotalBalance(balance);
             setMonthlyIncome(summary.income);
             setMonthlyExpenses(summary.expense);
 
-            // Update individual account balances locally from the fetched transactions
             const updatedAccounts = ACCOUNTS.map(acc => {
                 const accBalance = txs
                     .filter((t: Transaction) => t.accountId === acc.id)
@@ -63,7 +65,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         } finally {
             setLoading(false);
         }
-    }, [dbReady]);
+    }, [dbReady, user]);
 
     useEffect(() => {
         initDatabase().then(() => {
@@ -72,26 +74,33 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }, []);
 
     useEffect(() => {
-        if (dbReady) {
+        if (dbReady && user) {
             refreshData();
+        } else if (!user) {
+            // Reset data if logged out
+            setTransactions([]);
+            setTotalBalance(0);
+            setMonthlyIncome(0);
+            setMonthlyExpenses(0);
+            setAccounts(ACCOUNTS);
         }
-    }, [dbReady, refreshData]);
+    }, [dbReady, user, refreshData]);
 
     const addTransaction = async (tx: Omit<Transaction, 'id'>) => {
-        if (!dbReady) return;
-        await addTxDb(null, tx);
+        if (!dbReady || !user) return;
+        await addTxDb(user.uid, tx);
         await refreshData();
     };
 
-    const deleteTransaction = async (id: number) => {
-        if (!dbReady) return;
-        await deleteTxDb(null, id);
+    const deleteTransaction = async (id: string) => {
+        if (!dbReady || !user) return;
+        await deleteTxDb(id);
         await refreshData();
     };
 
     const clearData = async (range: 'all' | 'year' | 'month'): Promise<number> => {
-        if (!dbReady) return 0;
-        const count = await deleteTransactionsByRange(range);
+        if (!dbReady || !user) return 0;
+        const count = await deleteTransactionsByRange(user.uid, range);
         await refreshData();
         return count;
     };

@@ -1,70 +1,72 @@
-import { Tabs, useRouter } from 'expo-router';
+import { Tabs, useRouter, Redirect } from 'expo-router';
 import { useThemeColors } from '../../src/theme/colors';
-import { Home, List, PieChart, Plus, Settings } from 'lucide-react-native';
-import { View, TouchableOpacity, StyleSheet } from 'react-native';
+import { Home, PieChart, Landmark, Settings, Plus, LayoutGrid, ShieldAlert } from 'lucide-react-native';
+import { TouchableOpacity, View, StyleSheet, ActivityIndicator } from 'react-native';
+import { useAuth } from '../../src/context/AuthContext';
 
-export default function TabsLayout() {
+export default function TabLayout() {
     const Colors = useThemeColors();
     const router = useRouter();
+    const { user, loading, isAdmin } = useAuth();
+
+    if (loading) {
+        return (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.background }}>
+                <ActivityIndicator size="large" color={Colors.primary} />
+            </View>
+        );
+    }
+
+    if (!user) {
+        return <Redirect href="/login" />;
+    }
 
     return (
         <Tabs
             screenOptions={{
+                tabBarActiveTintColor: Colors.primary,
+                tabBarInactiveTintColor: Colors.textMuted,
                 tabBarStyle: {
                     backgroundColor: Colors.surface,
                     borderTopColor: Colors.border,
-                    height: 64, // Slightly reduced for cleaner look
+                    height: 65,
+                    paddingBottom: 10,
                     paddingTop: 8,
-                    paddingBottom: 8, // Balanced padding
-                    position: 'absolute', // Floating effect if desired, or standard
-                    elevation: 0,
+                    position: 'absolute',
                     borderTopWidth: 1,
+                    elevation: 0,
+                    shadowOpacity: 0,
                 },
-                tabBarActiveTintColor: Colors.primary,
-                tabBarInactiveTintColor: Colors.textMuted,
                 headerStyle: {
                     backgroundColor: Colors.background,
-                    elevation: 0, // Android shadow removal
-                    borderBottomWidth: 0, // iOS border removal
-                },
-                headerTitleStyle: {
-                    fontWeight: 'bold',
-                    fontSize: 20,
                 },
                 headerTintColor: Colors.text,
                 headerShadowVisible: false,
-                tabBarShowLabel: false, // Cleaner icon-only look (or minimalist text)
             }}
         >
             <Tabs.Screen
                 name="index"
                 options={{
-                    title: 'Home',
-                    tabBarIcon: ({ color, size }) => <Home color={color} size={24} strokeWidth={2.5} />,
+                    title: 'Dashboard',
+                    tabBarIcon: ({ color }) => <Home color={color} size={24} />,
+                    headerShown: false,
                 }}
             />
-
             <Tabs.Screen
                 name="transactions"
                 options={{
                     title: 'History',
-                    tabBarIcon: ({ color, size }) => <List color={color} size={24} strokeWidth={2.5} />,
+                    tabBarIcon: ({ color }) => <Landmark color={color} size={24} />,
                 }}
             />
-
-            {/* Centered Add Button */}
             <Tabs.Screen
                 name="add-stub"
                 options={{
                     title: '',
                     tabBarButton: (props: any) => (
                         <TouchableOpacity
+                            {...props}
                             activeOpacity={0.7}
-                            onPress={(e) => {
-                                // @ts-ignore - prevent the browser from following the link
-                                if (e && e.preventDefault) e.preventDefault();
-                                router.push('/add');
-                            }}
                             style={[props.style, styles.centerButtonContainer]}
                         >
                             <View style={[styles.centerButton, { backgroundColor: Colors.primary, shadowColor: Colors.primary }]}>
@@ -73,21 +75,34 @@ export default function TabsLayout() {
                         </TouchableOpacity>
                     ),
                 }}
+                listeners={{
+                    tabPress: (e) => {
+                        e.preventDefault();
+                        router.push('/add');
+                    },
+                }}
             />
-
             <Tabs.Screen
                 name="reports"
                 options={{
                     title: 'Reports',
-                    tabBarIcon: ({ color, size }) => <PieChart color={color} size={24} strokeWidth={2.5} />,
+                    tabBarIcon: ({ color }) => <PieChart color={color} size={24} />,
                 }}
             />
-
+            {isAdmin && (
+                <Tabs.Screen
+                    name="admin"
+                    options={{
+                        title: 'Admin',
+                        tabBarIcon: ({ color }) => <ShieldAlert color={color} size={24} />,
+                    }}
+                />
+            )}
             <Tabs.Screen
                 name="settings"
                 options={{
                     title: 'Settings',
-                    tabBarIcon: ({ color, size }) => <Settings color={color} size={24} strokeWidth={2.5} />,
+                    tabBarIcon: ({ color }) => <Settings color={color} size={24} />,
                 }}
             />
         </Tabs>

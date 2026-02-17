@@ -1,60 +1,81 @@
 import { Transaction } from '../models';
+import { db } from './firebaseConfig';
+import {
+    collection,
+    addDoc,
+    getDocs,
+    query,
+    where,
+    orderBy,
+    deleteDoc,
+    doc,
+    limit,
+    getDoc
+} from 'firebase/firestore';
+import { auth } from './firebaseConfig';
 
-// Using localStorage as the primary storage
-const STORAGE_KEY = 'fintrack_transactions_db';
-
-const getStoredTransactions = (): Transaction[] => {
-    if (typeof window === 'undefined') return [];
-    try {
-        const data = localStorage.getItem(STORAGE_KEY);
-        return data ? JSON.parse(data) : [];
-    } catch (e) {
-        console.error('Error reading transactions:', e);
-        return [];
-    }
-};
-
-const saveTransactions = (transactions: Transaction[]) => {
-    if (typeof window === 'undefined') return;
-    try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(transactions));
-    } catch (e) {
-        console.error('Error saving transactions:', e);
-    }
-};
+const COLLECTION_NAME = 'transactions';
 
 export async function initDatabase() {
-    console.log("Initializing Local Storage Database...");
     return true;
 }
 
-export async function addTransaction(db: any, tx: Omit<Transaction, 'id'>): Promise<number> {
-    const transactions = getStoredTransactions();
-    const newTransaction: Transaction = {
-        ...tx,
-        id: Date.now()
-    };
-
-    transactions.push(newTransaction);
-    saveTransactions(transactions);
-
-    return newTransaction.id;
+export async function addTransaction(userId: string, tx: Omit<Transaction, 'id'>): Promise<string> {
+    try {
+        const docRef = await addDoc(collection(db, COLLECTION_NAME), {
+            ...tx,
+            userId,
+            createdAt: new Date().toISOString()
+        });
+        return docRef.id;
+    } catch (e) {
+        console.error("Error adding transaction: ", e);
+        throw e;
+    }
 }
 
-export async function getTransactions(db: any): Promise<Transaction[]> {
-    const transactions = getStoredTransactions();
-    return transactions.sort((a, b) => b.date.localeCompare(a.date));
+export async function getTransactions(userId: string): Promise<Transaction[]> {
+    try {
+        const q = query(
+            collection(db, COLLECTION_NAME),
+            where("userId", "==", userId),
+            orderBy("date", "desc")
+        );
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map(doc => ({
+            id: doc.id as any, // Firebase uses strings, we type cast for compatibility 
+            ...doc.data()
+        })) as Transaction[];
+    } catch (e) {
+        console.error("Error getting transactions: ", e);
+        return [];
+    }
 }
 
-export async function getTotalBalance(db: any): Promise<number> {
-    const transactions = await getTransactions(null);
+// Special function for Admin to see EVERYTHING
+export async function getAllTransactionsAdmin(): Promise<any[]> {
+    try {
+        const q = query(collection(db, COLLECTION_NAME), orderBy("createdAt", "desc"));
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+    } catch (e) {
+        console.error("Error getting all transactions: ", e);
+        return [];
+    }
+}
+
+export async function getTotalBalance(userId: string): Promise<number> {
+    const transactions = await getTransactions(userId);
     return transactions.reduce((acc, curr) => {
         return curr.type === 'INCOME' ? acc + curr.amount : acc - curr.amount;
     }, 0);
 }
 
-export async function getMonthlySummary(db: any, yearMonth: string) {
-    const transactions = await getTransactions(null);
+export async function getMonthlySummary(userId: string, yearMonth: string) {
+    const transactions = await getTransactions(userId);
     const monthly = transactions.filter(t => t.date.startsWith(yearMonth));
 
     const income = monthly
@@ -68,29 +89,36 @@ export async function getMonthlySummary(db: any, yearMonth: string) {
     return { income, expense };
 }
 
-export async function deleteTransaction(db: any, transactionId: number): Promise<void> {
-    const transactions = getStoredTransactions();
-    const updated = transactions.filter(t => t.id !== transactionId);
-    saveTransactions(updated);
+export async function deleteTransaction(transactionId: string): Promise<void> {
+    try {
+        await deleteDoc(doc(db, COLLECTION_NAME, transactionId));
+    } catch (e) {
+        console.error("Error deleting transaction: ", e);
+        throw e;
+    }
 }
 
 import { isSameMonth, isSameYear, parseISO } from 'date-fns';
 
-export async function deleteTransactionsByRange(type: 'all' | 'year' | 'month'): Promise<number> {
-    const transactions = getStoredTransactions();
+export async function deleteTransactionsByRange(userId: string, range: 'all' | 'year' | 'month'): Promise<number> {
+    const transactions = await getTransactions(userId);
     const now = new Date();
 
-    let retained: Transaction[] = [];
-    let initialCount = transactions.length;
+    let toDelete: string[] = [];
 
-    if (type === 'all') {
-        retained = [];
-    } else if (type === 'year') {
-        retained = transactions.filter(t => !isSameYear(parseISO(t.date), now));
-    } else if (type === 'month') {
-        retained = transactions.filter(t => !isSameMonth(parseISO(t.date), now));
+    if (range === 'all') {
+        toDelete = transactions.map(t => t.id as any);
+    } else if (range === 'year') {
+        toDelete = transactions
+            .filter(t => isSameYear(parseISO(t.date), now))
+            .map(t => t.id as any);
+    } else if (range === 'month') {
+        toDelete = transactions
+            .filter(t => isSameMonth(parseISO(t.date), now))
+            .map(t => t.id as any);
     }
 
-    saveTransactions(retained);
-    return initialCount - retained.length;
+    const promises = toDelete.map(id => deleteTransaction(id));
+    await Promise.all(promises);
+    return toDelete.length;
 }
