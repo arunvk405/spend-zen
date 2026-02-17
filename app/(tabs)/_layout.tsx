@@ -60,8 +60,7 @@ export default function TabsLayout() {
                     tabBarButton: (props: any) => (
                         <TouchableOpacity
                             {...props}
-                            activeOpacity={0.9}
-                            onPress={() => router.push('/add')}
+                            activeOpacity={0.7}
                             style={[props.style, styles.centerButtonContainer]}
                         >
                             <View style={[styles.centerButton, { backgroundColor: Colors.primary, shadowColor: Colors.primary }]}>
@@ -69,6 +68,13 @@ export default function TabsLayout() {
                             </View>
                         </TouchableOpacity>
                     ),
+                }}
+                listeners={{
+                    tabPress: (e) => {
+                        // Prevent default navigation to the stub tab
+                        e.preventDefault();
+                        router.push('/add');
+                    },
                 }}
             />
 
