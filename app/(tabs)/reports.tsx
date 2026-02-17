@@ -106,7 +106,6 @@ export default function Reports() {
             showsVerticalScrollIndicator={false}
         >
             <View style={styles.header}>
-                <Text style={[styles.title, { color: Colors.text }]}>Reports</Text>
 
                 {/* Date Filter */}
                 <View style={styles.yearRow}>
