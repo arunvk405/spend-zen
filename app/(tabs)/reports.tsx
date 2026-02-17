@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Dimensions, ScrollView, TouchableOpacity } from 'react-native';
 import { useThemeColors, Typography } from '../../src/theme/colors';
-import { PieChart, BarChart } from 'react-native-chart-kit';
+import { PieChart } from 'react-native-chart-kit';
 import { useFinance } from '../../src/context/FinanceContext';
 import { startOfMonth, endOfMonth, isWithinInterval, parseISO } from 'date-fns';
 
@@ -78,28 +78,6 @@ export default function Reports() {
             legendFontColor: Colors.textMuted,
             legendFontSize: 12
         })).sort((a, b) => b.population - a.population);
-    }, [filteredTransactions]);
-
-    // 3. Amount Distribution Histogram (Frequency of transaction amounts)
-    const histogramData = useMemo(() => {
-        const ranges = [
-            { label: '0-100', min: 0, max: 100 },
-            { label: '100-500', min: 100, max: 500 },
-            { label: '500-1k', min: 500, max: 1000 },
-            { label: '1k-5k', min: 1000, max: 5000 },
-            { label: '5k+', min: 5000, max: Infinity }
-        ];
-
-        const frequencies = ranges.map(range => {
-            return filteredTransactions.filter(t =>
-                t.amount > range.min && t.amount <= range.max
-            ).length;
-        });
-
-        return {
-            labels: ranges.map(r => r.label),
-            datasets: [{ data: frequencies }]
-        };
     }, [filteredTransactions]);
 
     return (
@@ -182,35 +160,6 @@ export default function Reports() {
                     <Text style={styles.emptyText}>No expenses yet this month.</Text>
                 )}
             </View>
-
-            {/* Histogram: Amount Distribution */}
-            <View style={[styles.card, { backgroundColor: Colors.surface }]}>
-                <View style={styles.cardHeader}>
-                    <Text style={[styles.cardTitle, { color: Colors.text }]}>Transaction Frequency</Text>
-                    <Text style={[styles.cardTag, { color: Colors.income, backgroundColor: Colors.income + '15' }]}>Histogram</Text>
-                </View>
-                <BarChart
-                    data={histogramData}
-                    width={screenWidth - 32}
-                    height={220}
-                    yAxisLabel=""
-                    yAxisSuffix=" tx"
-                    chartConfig={{
-                        ...chartConfig,
-                        decimalPlaces: 0,
-                    }}
-                    style={{
-                        marginVertical: 8,
-                        borderRadius: 16
-                    }}
-                    showValuesOnTopOfBars
-                    fromZero
-                />
-                <Text style={[styles.histogramLabel, { color: Colors.textMuted }]}>
-                    Distribution of transaction amounts across ranges
-                </Text>
-            </View>
-
         </ScrollView>
     );
 }
@@ -283,10 +232,5 @@ const styles = StyleSheet.create({
         marginVertical: 30,
         color: '#6c757d',
         fontSize: 14,
-    },
-    histogramLabel: {
-        textAlign: 'center',
-        fontSize: 12,
-        marginTop: 8,
     }
 });
