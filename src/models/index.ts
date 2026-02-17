@@ -31,6 +31,7 @@ export const INCOME_CATEGORIES: Category[] = [
     { name: 'Gifts', icon: 'gift', color: '#9C27B0', type: 'INCOME' },
     { name: 'Dividends', icon: 'trending-up', color: '#FF9800', type: 'INCOME' },
     { name: 'Freelance', icon: 'laptop', color: '#607D8B', type: 'INCOME' },
+    { name: 'Others', icon: 'package', color: '#9E9E9E', type: 'INCOME' },
 ];
 
 export const EXPENSE_CATEGORIES: Category[] = [
@@ -43,6 +44,7 @@ export const EXPENSE_CATEGORIES: Category[] = [
     { name: 'Pets', icon: 'paw-print', color: '#607D8B', type: 'EXPENSE' },
     { name: 'Utilities', icon: 'file-text', color: '#FF5722', type: 'EXPENSE' },
     { name: 'Debt', icon: 'credit-card', color: '#000000', type: 'EXPENSE' },
+    { name: 'Others', icon: 'package', color: '#9E9E9E', type: 'EXPENSE' },
 ];
 
 export const ACCOUNTS: Account[] = [

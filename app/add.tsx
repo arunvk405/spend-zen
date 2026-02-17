@@ -21,7 +21,11 @@ import {
     Wallet,
     Landmark,
     CreditCard,
-    Package
+    Package,
+    Activity,
+    User,
+    PawPrint,
+    HelpCircle
 } from 'lucide-react-native';
 
 const IconRenderer = ({ name, color, size = 24 }: { name: string, color: string, size?: number }) => {
@@ -40,7 +44,11 @@ const IconRenderer = ({ name, color, size = 24 }: { name: string, color: string,
         case 'wallet': return <Wallet color={color} size={size} />;
         case 'landmark': return <Landmark color={color} size={size} />;
         case 'credit-card': return <CreditCard color={color} size={size} />;
-        default: return <Package color={color} size={size} />;
+        case 'cross': return <Activity color={color} size={size} />;
+        case 'user': return <User color={color} size={size} />;
+        case 'paw-print': return <PawPrint color={color} size={size} />;
+        case 'package': return <Package color={color} size={size} />;
+        default: return <HelpCircle color={color} size={size} />;
     }
 };
 
