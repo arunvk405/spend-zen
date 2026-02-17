@@ -2,8 +2,9 @@ import { Stack } from 'expo-router';
 import { FinanceProvider } from '../src/context/FinanceContext';
 import { StatusBar } from 'expo-status-bar';
 import { useThemeColors } from '../src/theme/colors';
+import { ThemeProvider } from '../src/context/ThemeContext';
 
-export default function RootLayout() {
+function RootLayoutNav() {
     const Colors = useThemeColors();
 
     return (
@@ -32,5 +33,13 @@ export default function RootLayout() {
                 />
             </Stack>
         </FinanceProvider>
+    );
+}
+
+export default function RootLayout() {
+    return (
+        <ThemeProvider>
+            <RootLayoutNav />
+        </ThemeProvider>
     );
 }

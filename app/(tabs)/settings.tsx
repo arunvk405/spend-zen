@@ -3,7 +3,6 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Share, Swi
 import { useThemeColors, Typography } from '../../src/theme/colors';
 import { Trash2, Share2, Shield, Info, ChevronRight, Moon, Sun } from 'lucide-react-native';
 import { useFinance } from '../../src/context/FinanceContext';
-
 const SettingsItem = ({ icon: Icon, label, onPress, color, value = undefined, toggle = false }: any) => {
     const Colors = useThemeColors();
     return (
@@ -32,11 +31,15 @@ const SettingsItem = ({ icon: Icon, label, onPress, color, value = undefined, to
     );
 };
 
+import { useTheme } from '../../src/context/ThemeContext';
+
 export default function Settings() {
     const Colors = useThemeColors();
+    const { theme, setTheme } = useTheme();
     const { clearData } = useFinance();
 
     const handleShare = async () => {
+        // ... (share logic remains same)
         const message = `👋 Hey! Check out Spend Zen, a clean and simple expense tracker I'm using.
 
 🚀 **How to Install (It's Free!):**
@@ -64,6 +67,19 @@ export default function Settings() {
         }
     };
 
+    const handleThemeChange = () => {
+        Alert.alert(
+            "Select Theme",
+            "Choose your preferred app appearance",
+            [
+                { text: "System Default", onPress: () => setTheme('system') },
+                { text: "Light Mode", onPress: () => setTheme('light') },
+                { text: "Dark Mode", onPress: () => setTheme('dark') },
+                { text: "Cancel", style: "cancel" }
+            ]
+        );
+    };
+
     const handleClearData = (range: 'all' | 'month' | 'year') => {
         const rangeText = range === 'all' ? 'ALL your' : `this ${range}'s`;
 
@@ -76,12 +92,17 @@ export default function Settings() {
                     text: "Delete Forever",
                     style: "destructive",
                     onPress: async () => {
-                        await clearData(range);
-                        Alert.alert("Success", "Data has been successfully cleared.");
+                        const count = await clearData(range);
+                        Alert.alert("Success", `Cleaned up! Removed ${count} transactions.`);
                     }
                 }
             ]
         );
+    };
+
+    const getThemeLabel = () => {
+        if (theme === 'system') return 'System Default';
+        return theme.charAt(0).toUpperCase() + theme.slice(1) + ' Mode';
     };
 
     return (
@@ -96,12 +117,11 @@ export default function Settings() {
                         color={Colors.primary}
                         onPress={handleShare}
                     />
-                    {/* Placeholder for future specific theme toggle if not system-based */}
                     <SettingsItem
                         icon={Colors.isDark ? Moon : Sun}
-                        label={`Theme: ${Colors.isDark ? 'Dark' : 'Light'}`}
-                        color="#fbbf24" // Amber
-                        onPress={() => Alert.alert("System Theme", "Spend Zen automatically follows your device's theme settings.")}
+                        label={`Theme: ${getThemeLabel()}`}
+                        color="#fbbf24"
+                        onPress={handleThemeChange}
                     />
                 </View>
             </View>
@@ -115,6 +135,7 @@ export default function Settings() {
                         color={Colors.expense}
                         onPress={() => handleClearData('month')}
                     />
+                    {/* ... other items ... */}
                     <SettingsItem
                         icon={Trash2}
                         label="Clear This Year"

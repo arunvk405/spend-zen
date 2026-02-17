@@ -20,7 +20,7 @@ interface FinanceContextType {
     loading: boolean;
     addTransaction: (tx: Omit<Transaction, 'id'>) => Promise<void>;
     deleteTransaction: (id: number) => Promise<void>;
-    clearData: (range: 'all' | 'year' | 'month') => Promise<void>;
+    clearData: (range: 'all' | 'year' | 'month') => Promise<number>;
     refreshData: () => Promise<void>;
 }
 
@@ -89,10 +89,11 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         await refreshData();
     };
 
-    const clearData = async (range: 'all' | 'year' | 'month') => {
-        if (!dbReady) return;
-        await deleteTransactionsByRange(range);
+    const clearData = async (range: 'all' | 'year' | 'month'): Promise<number> => {
+        if (!dbReady) return 0;
+        const count = await deleteTransactionsByRange(range);
         await refreshData();
+        return count;
     };
 
     return (

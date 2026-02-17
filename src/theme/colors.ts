@@ -1,4 +1,5 @@
 import { useColorScheme } from 'react-native';
+import { useTheme } from '../context/ThemeContext';
 
 const Palette = {
     // Light Defaults
@@ -34,8 +35,18 @@ const Shared = {
 };
 
 export const useThemeColors = () => {
-    const scheme = useColorScheme();
-    const isDark = scheme === 'dark';
+    // Check if ThemeContext is available
+    let isDark = useColorScheme() === 'dark'; // Default fallback
+
+    try {
+        const context = useTheme();
+        if (context) {
+            isDark = context.isDark;
+        }
+    } catch (e) {
+        // Fallback if used outside provider (rare but safe)
+    }
+
     const mode = isDark ? Palette.dark : Palette.light;
 
     return {

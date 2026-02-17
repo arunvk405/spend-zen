@@ -74,22 +74,23 @@ export async function deleteTransaction(db: any, transactionId: number): Promise
     saveTransactions(updated);
 }
 
-export async function deleteTransactionsByRange(type: 'all' | 'year' | 'month'): Promise<void> {
+import { isSameMonth, isSameYear, parseISO } from 'date-fns';
+
+export async function deleteTransactionsByRange(type: 'all' | 'year' | 'month'): Promise<number> {
     const transactions = getStoredTransactions();
     const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = (now.getMonth() + 1).toString().padStart(2, '0');
-    const yearMonth = `${currentYear}-${currentMonth}`;
 
-    let updated: Transaction[] = [];
+    let retained: Transaction[] = [];
+    let initialCount = transactions.length;
 
     if (type === 'all') {
-        updated = [];
+        retained = [];
     } else if (type === 'year') {
-        updated = transactions.filter(t => !t.date.startsWith(`${currentYear}`));
+        retained = transactions.filter(t => !isSameYear(parseISO(t.date), now));
     } else if (type === 'month') {
-        updated = transactions.filter(t => !t.date.startsWith(yearMonth));
+        retained = transactions.filter(t => !isSameMonth(parseISO(t.date), now));
     }
 
-    saveTransactions(updated);
+    saveTransactions(retained);
+    return initialCount - retained.length;
 }
