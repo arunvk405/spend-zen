@@ -87,7 +87,9 @@ export default function HomeDashboard() {
                     </View>
                     <View style={styles.txDetails}>
                         <Text style={[styles.txCategory, { color: Colors.text }]}>{tx.category}</Text>
-                        <Text style={[styles.txDate, { color: Colors.textMuted }]}>{format(new Date(tx.date), 'MMM d, h:mm a')}</Text>
+                        <Text style={[styles.txNote, { color: Colors.textMuted }]} numberOfLines={1}>
+                            {tx.note || format(new Date(tx.date), 'MMM d, h:mm a')}
+                        </Text>
                     </View>
                     <Text style={[
                         styles.txAmount,
@@ -228,7 +230,7 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
     },
-    txDate: {
+    txNote: {
         fontSize: 12,
         fontWeight: '400',
         marginTop: 2,

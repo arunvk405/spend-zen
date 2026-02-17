@@ -57,26 +57,41 @@ export default function AddTransaction() {
     const [accountId, setAccountId] = useState('cash');
     const [note, setNote] = useState('');
     const [date] = useState(new Date().toISOString());
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const categories = type === 'INCOME' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
 
     const handleSubmit = async () => {
-        if (!amount || !category) return;
+        if (!amount || !category || isSubmitting) return;
+
+        setIsSubmitting(true);
 
         if (Platform.OS !== 'web') {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         }
 
-        await addTransaction({
-            amount: parseFloat(amount),
-            type,
-            category,
-            date,
-            accountId,
-            note,
-        });
+        try {
+            await addTransaction({
+                amount: parseFloat(amount),
+                type,
+                category,
+                date,
+                accountId,
+                note,
+            });
 
-        router.back();
+            if (router.canGoBack()) {
+                router.back();
+            } else {
+                router.replace('/(tabs)');
+            }
+        } catch (error) {
+            console.error("Save error:", error);
+            setIsSubmitting(false);
+            if (Platform.OS === 'web') {
+                window.alert("Failed to save transaction. Please try again.");
+            }
+        }
     };
 
     const handleBack = () => {
@@ -231,12 +246,14 @@ export default function AddTransaction() {
                     style={[
                         styles.submitButton,
                         { backgroundColor: Colors.primary, shadowColor: Colors.primary },
-                        (!amount || !category) && styles.disabledButton
+                        (!amount || !category || isSubmitting) && styles.disabledButton
                     ]}
                     onPress={handleSubmit}
-                    disabled={!amount || !category}
+                    disabled={!amount || !category || isSubmitting}
                 >
-                    <Text style={[styles.submitText, { color: Colors.white }]}>Save Transaction</Text>
+                    <Text style={[styles.submitText, { color: Colors.white }]}>
+                        {isSubmitting ? 'Saving...' : 'Save Transaction'}
+                    </Text>
                 </TouchableOpacity>
             </ScrollView>
         </View>
