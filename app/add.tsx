@@ -206,7 +206,7 @@ export default function AddTransaction() {
                                 onPress={() => setCategory(cat.name)}
                             >
                                 <View style={styles.iconContainer}>
-                                    <IconRenderer name={cat.icon} color={category === cat.name ? cat.color : Colors.textMuted} size={28} />
+                                    <IconRenderer name={cat.icon} color={category === cat.name ? cat.color : Colors.textMuted} size={22} />
                                 </View>
                                 <Text
                                     style={[
@@ -220,7 +220,7 @@ export default function AddTransaction() {
                                 </Text>
                                 {category === cat.name && (
                                     <View style={[styles.checkBadge, { backgroundColor: cat.color }]}>
-                                        <Check color={Colors.white} size={12} />
+                                        <Check color={Colors.white} size={10} />
                                     </View>
                                 )}
                             </TouchableOpacity>
@@ -347,27 +347,28 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
     },
     categoryItem: {
-        width: '31%',
-        marginBottom: 12,
+        width: '23.5%',
+        marginBottom: 10,
         aspectRatio: 1,
-        borderRadius: 16,
+        borderRadius: 14,
         justifyContent: 'center',
         alignItems: 'center',
         borderWidth: 1,
         padding: 4,
     },
     categoryName: {
-        fontSize: 12,
+        fontSize: 10,
         fontWeight: '500',
         textAlign: 'center',
+        marginTop: 4,
     },
     checkBadge: {
         position: 'absolute',
-        top: 6,
-        right: 6,
-        width: 20,
-        height: 20,
-        borderRadius: 10,
+        top: 4,
+        right: 4,
+        width: 16,
+        height: 16,
+        borderRadius: 8,
         justifyContent: 'center',
         alignItems: 'center',
     },
