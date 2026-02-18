@@ -103,7 +103,7 @@ export default function AdminScreen() {
                     styles.cell,
                     { color: item.type === 'INCOME' ? Colors.income : Colors.expense, width: 80, fontWeight: 'bold' }
                 ]}>
-                    ${item.amount}
+                    ₹{item.amount}
                 </Text>
                 <Text style={[styles.cell, { color: Colors.textMuted, flex: 1, fontSize: 11 }]} numberOfLines={2}>
                     {item.note || '-'}

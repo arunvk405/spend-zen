@@ -46,7 +46,7 @@ export default function TransactionsHistory() {
 
     const handleDelete = async (item: any) => {
         const confirmed = window.confirm(
-            `Are you sure you want to delete this ${item.type.toLowerCase()} transaction of $${item.amount}?`
+            `Are you sure you want to delete this ${item.type.toLowerCase()} transaction of ₹${item.amount}?`
         );
 
         if (confirmed) {
@@ -73,7 +73,7 @@ export default function TransactionsHistory() {
                     styles.txAmount,
                     { color: item.type === 'INCOME' ? Colors.income : Colors.expense }
                 ]}>
-                    {item.type === 'INCOME' ? '+' : '-'}${item.amount.toLocaleString()}
+                    {item.type === 'INCOME' ? '+' : '-'}₹{item.amount.toLocaleString()}
                 </Text>
                 <Text style={[styles.accountId, { color: Colors.textMuted }]}>{item.accountId}</Text>
             </View>

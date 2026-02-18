@@ -36,7 +36,7 @@ export default function HomeDashboard() {
             </View>
             <View style={styles.accountDetails}>
                 <Text style={[styles.accountName, { color: Colors.textMuted }]}>{acc.name}</Text>
-                <Text style={[styles.accountBalance, { color: Colors.text }]}>${acc.balance.toLocaleString()}</Text>
+                <Text style={[styles.accountBalance, { color: Colors.text }]}>₹{acc.balance.toLocaleString()}</Text>
             </View>
         </View>
     );
@@ -46,7 +46,7 @@ export default function HomeDashboard() {
             {/* Net Worth Summary */}
             <View style={[styles.summaryCard, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
                 <Text style={[styles.summaryLabel, { color: Colors.textMuted }]}>Total Net Worth</Text>
-                <Text style={[styles.totalBalance, { color: Colors.text }]}>${totalBalance.toLocaleString()}</Text>
+                <Text style={[styles.totalBalance, { color: Colors.text }]}>₹{totalBalance.toLocaleString()}</Text>
 
                 <View style={[styles.statsRow, { borderTopColor: Colors.border }]}>
                     <View style={styles.statItem}>
@@ -55,7 +55,7 @@ export default function HomeDashboard() {
                         </View>
                         <View>
                             <Text style={[styles.statLabel, { color: Colors.textMuted }]}>Monthly Income</Text>
-                            <Text style={[styles.statValue, { color: Colors.text }]}>+${monthlyIncome.toLocaleString()}</Text>
+                            <Text style={[styles.statValue, { color: Colors.text }]}>+₹{monthlyIncome.toLocaleString()}</Text>
                         </View>
                     </View>
                     <View style={styles.statItem}>
@@ -64,7 +64,7 @@ export default function HomeDashboard() {
                         </View>
                         <View>
                             <Text style={[styles.statLabel, { color: Colors.textMuted }]}>Monthly Expenses</Text>
-                            <Text style={[styles.statValue, { color: Colors.text }]}>-${monthlyExpenses.toLocaleString()}</Text>
+                            <Text style={[styles.statValue, { color: Colors.text }]}>-₹{monthlyExpenses.toLocaleString()}</Text>
                         </View>
                     </View>
                 </View>
@@ -104,7 +104,7 @@ export default function HomeDashboard() {
                         styles.txAmount,
                         { color: tx.type === 'INCOME' ? Colors.income : Colors.expense }
                     ]}>
-                        {tx.type === 'INCOME' ? '+' : '-'}${tx.amount.toLocaleString()}
+                        {tx.type === 'INCOME' ? '+' : '-'}₹{tx.amount.toLocaleString()}
                     </Text>
                 </View>
             ))}

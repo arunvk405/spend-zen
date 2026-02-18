@@ -162,7 +162,7 @@ export default function AddTransaction() {
                 <View style={styles.card}>
                     <Text style={[styles.label, { color: Colors.textMuted }]}>Amount</Text>
                     <View style={[styles.amountInputContainer, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
-                        <Text style={[styles.currency, { color: Colors.textMuted }]}>$</Text>
+                        <Text style={[styles.currency, { color: Colors.textMuted }]}>₹</Text>
                         <TextInput
                             style={[styles.amountInput, { color: Colors.text }]}
                             keyboardType="numeric"
