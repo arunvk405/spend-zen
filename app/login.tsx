@@ -22,7 +22,7 @@ import { Mail, Lock, ArrowRight, UserPlus, HelpCircle } from 'lucide-react-nativ
 export default function LoginScreen() {
     const Colors = useThemeColors();
     const router = useRouter();
-    const { user } = useAuth();
+    const { user, loginWithGoogle } = useAuth();
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -112,6 +112,23 @@ export default function LoginScreen() {
                                     <ArrowRight size={20} color="#fff" />
                                 </>
                             )}
+                        </TouchableOpacity>
+
+                        <View style={styles.divider}>
+                            <View style={[styles.dividerLine, { backgroundColor: Colors.border }]} />
+                            <Text style={[styles.dividerText, { color: Colors.textMuted }]}>OR</Text>
+                            <View style={[styles.dividerLine, { backgroundColor: Colors.border }]} />
+                        </View>
+
+                        <TouchableOpacity
+                            style={[styles.socialButton, { borderColor: Colors.border, backgroundColor: Colors.background }]}
+                            onPress={loginWithGoogle}
+                            disabled={loading}
+                        >
+                            <View style={styles.googleIconPlaceholder}>
+                                <Text style={styles.googleIconText}>G</Text>
+                            </View>
+                            <Text style={[styles.socialButtonText, { color: Colors.text }]}>Sign in with Google</Text>
                         </TouchableOpacity>
 
                         <View style={styles.linksContainer}>
@@ -231,5 +248,46 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         letterSpacing: 2,
         textTransform: 'uppercase',
+    },
+    divider: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginVertical: 20,
+    },
+    dividerLine: {
+        flex: 1,
+        height: 1,
+    },
+    dividerText: {
+        marginHorizontal: 16,
+        fontSize: 12,
+        fontWeight: 'bold',
+    },
+    socialButton: {
+        flexDirection: 'row',
+        height: 54,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1.5,
+        gap: 12,
+        marginBottom: 8,
+    },
+    socialButtonText: {
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    googleIconPlaceholder: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        backgroundColor: '#4285F4',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    googleIconText: {
+        color: '#fff',
+        fontWeight: 'bold',
+        fontSize: 14,
     }
 });

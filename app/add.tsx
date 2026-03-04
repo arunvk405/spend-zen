@@ -167,7 +167,7 @@ export default function AddTransaction() {
                             style={[styles.amountInput, { color: Colors.text }]}
                             keyboardType="numeric"
                             value={amount}
-                            onChangeText={setAmount}
+                            onChangeText={(text) => setAmount(text.replace(/[^0-9.]/g, ''))}
                             placeholder="0.00"
                             placeholderTextColor={Colors.textMuted}
                             autoFocus

@@ -1,11 +1,14 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { Transaction, Account, ACCOUNTS } from '../models';
+import { Transaction, Account, ACCOUNTS, ProjectedExpense } from '../models';
 import {
     initDatabase,
     getTransactions,
     addTransaction as addTxDb,
     deleteTransaction as deleteTxDb,
-    deleteTransactionsByRange
+    deleteTransactionsByRange,
+    getProjectedExpenses,
+    addProjectedExpense,
+    deleteProjectedExpense
 } from '../database/db';
 import { format, isSameMonth, parseISO } from 'date-fns';
 
@@ -17,11 +20,16 @@ interface FinanceContextType {
     totalBalance: number;
     monthlyIncome: number;
     monthlyExpenses: number;
+    projectedExpenses: number;
+    projectedNotes: ProjectedExpense[];
+    totalProjectedAmount: number;
     loading: boolean;
     addTransaction: (tx: Omit<Transaction, 'id'>) => Promise<void>;
     deleteTransaction: (id: string) => Promise<void>;
     clearData: (range: 'all' | 'year' | 'month') => Promise<number>;
     refreshData: () => Promise<void>;
+    addProjectedNote: (amount: number, description: string) => Promise<void>;
+    deleteProjectedNote: (id: string) => Promise<void>;
 }
 
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
@@ -34,6 +42,9 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const [totalBalance, setTotalBalance] = useState(0);
     const [monthlyIncome, setMonthlyIncome] = useState(0);
     const [monthlyExpenses, setMonthlyExpenses] = useState(0);
+    const [projectedExpenses, setProjectedExpenses] = useState(0);
+    const [projectedNotes, setProjectedNotes] = useState<ProjectedExpense[]>([]);
+    const [totalProjectedAmount, setTotalProjectedAmount] = useState(0);
     const [loading, setLoading] = useState(false);
 
     const refreshData = useCallback(async () => {
@@ -73,6 +84,21 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
             setMonthlyIncome(income);
             setMonthlyExpenses(expense);
 
+            // Calculate Projected Expenses for next month 
+            // Based on current month's daily average
+            const dayOfMonth = now.getDate();
+            const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+            const dailyAverage = expense / dayOfMonth;
+            const projection = dailyAverage * daysInMonth;
+            setProjectedExpenses(projection);
+
+            // Fetch Projected Notes
+            const notes = await getProjectedExpenses(user.uid);
+            setProjectedNotes(notes);
+
+            const notesTotal = notes.reduce((sum, n) => sum + Number(n.amount), 0);
+            setTotalProjectedAmount(projection + notesTotal);
+
             const updatedAccounts = ACCOUNTS.map(acc => {
                 const accBalance = txs
                     .filter((t: Transaction) => t.accountId === acc.id)
@@ -102,6 +128,9 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
             setTotalBalance(0);
             setMonthlyIncome(0);
             setMonthlyExpenses(0);
+            setProjectedExpenses(0);
+            setProjectedNotes([]);
+            setTotalProjectedAmount(0);
             setAccounts(ACCOUNTS);
         }
     }, [dbReady, user, refreshData]);
@@ -125,6 +154,18 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return count;
     };
 
+    const addProjectedNote = async (amount: number, description: string) => {
+        if (!dbReady || !user) return;
+        await addProjectedExpense(user.uid, amount, description);
+        await refreshData();
+    };
+
+    const deleteProjectedNote = async (id: string) => {
+        if (!dbReady || !user) return;
+        await deleteProjectedExpense(id);
+        await refreshData();
+    };
+
     return (
         <FinanceContext.Provider value={{
             transactions,
@@ -132,11 +173,16 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
             totalBalance,
             monthlyIncome,
             monthlyExpenses,
+            projectedExpenses,
+            projectedNotes,
+            totalProjectedAmount,
             loading,
             addTransaction,
             deleteTransaction,
             clearData,
-            refreshData
+            refreshData,
+            addProjectedNote,
+            deleteProjectedNote
         }}>
             {children}
         </FinanceContext.Provider>

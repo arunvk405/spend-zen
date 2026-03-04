@@ -15,6 +15,7 @@ import {
 
 const COLLECTION_NAME = 'transactions';
 const USERS_COLLECTION = 'users';
+const PROJECTED_COLLECTION = 'projected_expenses';
 
 export async function initDatabase() {
     return true;
@@ -138,5 +139,47 @@ export async function getAllUsers(): Promise<any[]> {
     } catch (e) {
         console.error("Error getting users: ", e);
         return [];
+    }
+}
+
+// Projected Expenses (Next Month Planning)
+export async function getProjectedExpenses(userId: string): Promise<any[]> {
+    try {
+        const q = query(
+            collection(db, PROJECTED_COLLECTION),
+            where("userId", "==", userId)
+        );
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+    } catch (e) {
+        console.error("Error getting projected expenses: ", e);
+        return [];
+    }
+}
+
+export async function addProjectedExpense(userId: string, amount: number, description: string): Promise<string> {
+    try {
+        const docRef = await addDoc(collection(db, PROJECTED_COLLECTION), {
+            userId,
+            amount,
+            description,
+            createdAt: new Date().toISOString()
+        });
+        return docRef.id;
+    } catch (e) {
+        console.error("Error adding projected expense: ", e);
+        throw e;
+    }
+}
+
+export async function deleteProjectedExpense(id: string): Promise<void> {
+    try {
+        await deleteDoc(doc(db, PROJECTED_COLLECTION, id));
+    } catch (e) {
+        console.error("Error deleting projected expense: ", e);
+        throw e;
     }
 }

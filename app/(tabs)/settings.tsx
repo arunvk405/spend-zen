@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Share, Switch, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Share, Switch, TextInput, ActivityIndicator, Modal, FlatList, KeyboardAvoidingView } from 'react-native';
 import { useThemeColors, Typography } from '../../src/theme/colors';
 import { Logo } from '../../src/components/Logo';
 import {
@@ -14,7 +14,12 @@ import {
     LogOut,
     ExternalLink,
     Edit3,
-    User
+    User,
+    TrendingUp,
+    Plus,
+    X,
+    Save,
+    Calculator
 } from 'lucide-react-native';
 import { updateProfile } from 'firebase/auth';
 import { auth } from '../../src/database/firebaseConfig';
@@ -59,12 +64,18 @@ export default function Settings() {
     const Colors = useThemeColors();
     const router = useRouter();
     const { theme, setTheme } = useTheme();
-    const { clearData } = useFinance();
+    const { clearData, projectedExpenses, projectedNotes, totalProjectedAmount, addProjectedNote, deleteProjectedNote } = useFinance();
 
     const { user, logout } = useAuth();
     const [isEditing, setIsEditing] = useState(false);
     const [name, setName] = useState(user?.displayName || '');
     const [updateLoading, setUpdateLoading] = useState(false);
+
+    // Projected Expenses Modal States
+    const [showProjectedModal, setShowProjectedModal] = useState(false);
+    const [projectedAmount, setProjectedAmount] = useState('');
+    const [projectedDesc, setProjectedDesc] = useState('');
+    const [isAddingProjected, setIsAddingProjected] = useState(false);
 
     const handleUpdateProfile = async () => {
         if (!user) return;
@@ -194,6 +205,39 @@ export default function Settings() {
         }
     };
 
+    const handleSaveProjected = async () => {
+        if (!projectedAmount || !projectedDesc) {
+            Alert.alert("Error", "Please fill in both amount and description");
+            return;
+        }
+
+        setIsAddingProjected(true);
+        try {
+            await addProjectedNote(Number(projectedAmount), projectedDesc);
+            setProjectedAmount('');
+            setProjectedDesc('');
+            if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        } catch (error) {
+            console.error(error);
+            Alert.alert("Error", "Failed to save projection");
+        } finally {
+            setIsAddingProjected(false);
+        }
+    };
+
+    const handleDeleteProjected = (id: string) => {
+        if (Platform.OS === 'web') {
+            if (window.confirm("Delete this projected item?")) {
+                deleteProjectedNote(id);
+            }
+        } else {
+            Alert.alert("Delete", "Delete this projected item?", [
+                { text: "Cancel", style: "cancel" },
+                { text: "Delete", style: "destructive", onPress: () => deleteProjectedNote(id) }
+            ]);
+        }
+    };
+
     return (
         <ScrollView style={[styles.container, { backgroundColor: Colors.background }]} showsVerticalScrollIndicator={false}>
             <View style={styles.logoSection}>
@@ -273,6 +317,12 @@ export default function Settings() {
                 <Text style={[styles.sectionTitle, { color: Colors.textMuted }]}>Account</Text>
                 <View style={[styles.card, { backgroundColor: Colors.surface }]}>
                     <SettingsItem
+                        icon={TrendingUp}
+                        label={`Next Month Prediction: ₹${Math.round(totalProjectedAmount).toLocaleString()}`}
+                        color={Colors.primary}
+                        onPress={() => setShowProjectedModal(true)}
+                    />
+                    <SettingsItem
                         icon={LogOut}
                         label="Logout"
                         color={Colors.expense}
@@ -320,6 +370,111 @@ export default function Settings() {
             <View style={{ alignItems: 'center', marginTop: 20 }}>
                 <Text style={{ color: Colors.textMuted, fontSize: 12 }}>Made with ❤️ by Arun</Text>
             </View>
+
+            {/* Projected Expenses Modal */}
+            <Modal
+                visible={showProjectedModal}
+                animationType="slide"
+                transparent={true}
+                onRequestClose={() => setShowProjectedModal(false)}
+            >
+                <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
+                    <KeyboardAvoidingView
+                        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                        style={[styles.modalContent, { backgroundColor: Colors.background }]}
+                    >
+                        <View style={[styles.modalHeader, { borderBottomColor: Colors.border }]}>
+                            <View>
+                                <Text style={[styles.modalTitle, { color: Colors.text }]}>Next Month Planning</Text>
+                                <Text style={[styles.modalSubtitle, { color: Colors.textMuted }]}>Projected & Planned Expenses</Text>
+                            </View>
+                            <TouchableOpacity onPress={() => setShowProjectedModal(false)} style={styles.closeBtn}>
+                                <X size={24} color={Colors.text} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
+                            <View style={[styles.summaryBox, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+                                <View style={styles.summaryRow}>
+                                    <Text style={[styles.summaryLabel, { color: Colors.textMuted }]}>AI Trend Projection</Text>
+                                    <Text style={[styles.summaryValue, { color: Colors.text }]}>₹{Math.round(projectedExpenses).toLocaleString()}</Text>
+                                </View>
+                                <View style={styles.summaryRow}>
+                                    <Text style={[styles.summaryLabel, { color: Colors.textMuted }]}>User Planned Notes</Text>
+                                    <Text style={[styles.summaryValue, { color: Colors.primary }]}>+ ₹{projectedNotes.reduce((s, n) => s + Number(n.amount), 0).toLocaleString()}</Text>
+                                </View>
+                                <View style={[styles.summaryDivider, { backgroundColor: Colors.border }]} />
+                                <View style={styles.summaryRow}>
+                                    <Text style={[styles.totalLabel, { color: Colors.text }]}>Total Prediction</Text>
+                                    <Text style={[styles.totalValue, { color: Colors.primary }]}>₹{Math.round(totalProjectedAmount).toLocaleString()}</Text>
+                                </View>
+                            </View>
+
+                            <Text style={[styles.formLabel, { color: Colors.text, marginTop: 20 }]}>Add Planned Expense</Text>
+                            <View style={[styles.form, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+                                <View style={styles.inputRow}>
+                                    <Calculator size={18} color={Colors.textMuted} />
+                                    <TextInput
+                                        style={[styles.modalInput, { color: Colors.text }]}
+                                        placeholder="Amount (₹)"
+                                        placeholderTextColor={Colors.textMuted}
+                                        keyboardType="numeric"
+                                        value={projectedAmount}
+                                        onChangeText={(text) => setProjectedAmount(text.replace(/[^0-9.]/g, ''))}
+                                    />
+                                </View>
+                                <View style={[styles.modalInputDivider, { backgroundColor: Colors.border }]} />
+                                <View style={styles.inputRow}>
+                                    <Edit3 size={18} color={Colors.textMuted} />
+                                    <TextInput
+                                        style={[styles.modalInput, { color: Colors.text }]}
+                                        placeholder="Description (e.g. Rent, Insurance)"
+                                        placeholderTextColor={Colors.textMuted}
+                                        value={projectedDesc}
+                                        onChangeText={setProjectedDesc}
+                                    />
+                                </View>
+                                <TouchableOpacity
+                                    style={[styles.addBtn, { backgroundColor: Colors.primary }]}
+                                    onPress={handleSaveProjected}
+                                    disabled={isAddingProjected}
+                                >
+                                    {isAddingProjected ? (
+                                        <ActivityIndicator color="#fff" size="small" />
+                                    ) : (
+                                        <>
+                                            <Plus size={20} color="#fff" />
+                                            <Text style={styles.addBtnText}>Include in Prediction</Text>
+                                        </>
+                                    )}
+                                </TouchableOpacity>
+                            </View>
+
+                            <Text style={[styles.formLabel, { color: Colors.text, marginTop: 24 }]}>Planned Items</Text>
+                            {projectedNotes.length === 0 ? (
+                                <View style={[styles.emptyBox, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+                                    <Text style={{ color: Colors.textMuted, fontSize: 13, textAlign: 'center' }}>No custom notes added yet.</Text>
+                                </View>
+                            ) : (
+                                projectedNotes.map((note) => (
+                                    <View key={note.id} style={[styles.noteItem, { backgroundColor: Colors.surface, borderBottomColor: Colors.border }]}>
+                                        <View style={styles.noteLeft}>
+                                            <Text style={[styles.noteDesc, { color: Colors.text }]}>{note.description}</Text>
+                                            <Text style={[styles.noteDate, { color: Colors.textMuted }]}>{new Date(note.createdAt).toLocaleDateString()}</Text>
+                                        </View>
+                                        <View style={styles.noteRight}>
+                                            <Text style={[styles.noteAmount, { color: Colors.primary }]}>₹{note.amount.toLocaleString()}</Text>
+                                            <TouchableOpacity onPress={() => handleDeleteProjected(note.id)}>
+                                                <Trash2 size={16} color={Colors.expense} />
+                                            </TouchableOpacity>
+                                        </View>
+                                    </View>
+                                ))
+                            )}
+                        </ScrollView>
+                    </KeyboardAvoidingView>
+                </View>
+            </Modal>
         </ScrollView>
     );
 }
@@ -405,5 +560,145 @@ const styles = StyleSheet.create({
         paddingVertical: 4,
         borderBottomWidth: 1,
         marginBottom: 4,
-    }
+    },
+    // Modal Styles
+    modalOverlay: {
+        flex: 1,
+        justifyContent: 'flex-end',
+    },
+    modalContent: {
+        borderTopLeftRadius: 32,
+        borderTopRightRadius: 32,
+        height: '85%',
+        padding: 24,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: -10 },
+        shadowOpacity: 0.1,
+        shadowRadius: 20,
+        elevation: 20,
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingBottom: 20,
+        borderBottomWidth: 1,
+        marginBottom: 20,
+    },
+    modalTitle: {
+        fontSize: 22,
+        fontWeight: 'bold',
+    },
+    modalSubtitle: {
+        fontSize: 13,
+    },
+    closeBtn: {
+        padding: 8,
+    },
+    modalScroll: {
+        flex: 1,
+    },
+    summaryBox: {
+        padding: 20,
+        borderRadius: 20,
+        borderWidth: 1,
+        gap: 12,
+    },
+    summaryRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    summaryLabel: {
+        fontSize: 14,
+        fontWeight: '500',
+    },
+    summaryValue: {
+        fontSize: 14,
+        fontWeight: '700',
+    },
+    summaryDivider: {
+        height: 1,
+        width: '100%',
+    },
+    totalLabel: {
+        fontSize: 18,
+        fontWeight: 'bold',
+    },
+    totalValue: {
+        fontSize: 22,
+        fontWeight: '800',
+    },
+    formLabel: {
+        fontSize: 15,
+        fontWeight: '700',
+        marginBottom: 12,
+        marginLeft: 4,
+    },
+    form: {
+        padding: 16,
+        borderRadius: 20,
+        borderWidth: 1,
+    },
+    inputRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        height: 50,
+        gap: 12,
+    },
+    modalInput: {
+        flex: 1,
+        fontSize: 16,
+        fontWeight: '500',
+    },
+    modalInputDivider: {
+        height: 1,
+        marginVertical: 4,
+    },
+    addBtn: {
+        flexDirection: 'row',
+        height: 54,
+        borderRadius: 12,
+        marginTop: 16,
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+    },
+    addBtnText: {
+        color: '#fff',
+        fontWeight: 'bold',
+        fontSize: 16,
+    },
+    emptyBox: {
+        padding: 30,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderStyle: 'dashed',
+    },
+    noteItem: {
+        padding: 16,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        borderBottomWidth: 1,
+    },
+    noteLeft: {
+        flex: 1,
+    },
+    noteDesc: {
+        fontSize: 16,
+        fontWeight: '600',
+        marginBottom: 4,
+    },
+    noteDate: {
+        fontSize: 12,
+    },
+    noteRight: {
+        alignItems: 'flex-end',
+        gap: 8,
+    },
+    noteAmount: {
+        fontSize: 16,
+        fontWeight: 'bold',
+    },
 });

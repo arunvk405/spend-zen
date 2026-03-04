@@ -10,6 +10,14 @@ export interface Transaction {
     note?: string;
 }
 
+export interface ProjectedExpense {
+    id: string;
+    userId: string;
+    amount: number;
+    description: string;
+    createdAt: string;
+}
+
 export interface Account {
     id: string; // 'cash' | 'bank' | 'credit'
     name: string;
