@@ -8,20 +8,15 @@ import { Platform, Alert } from 'react-native';
 interface AuthContextType {
     user: User | null;
     loading: boolean;
-    isAdmin: boolean;
     logout: () => Promise<void>;
     loginWithGoogle: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Define Admin emails here
-const ADMIN_EMAILS = ['arunvk405@gmail.com']; // User: Your email is now set as admin
-
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
-    const [isAdmin, setIsAdmin] = useState(false);
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
@@ -35,7 +30,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 });
             }
             setUser(authUser);
-            setIsAdmin(authUser ? ADMIN_EMAILS.includes(authUser.email || '') : false);
             setLoading(false);
         });
 
@@ -66,7 +60,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     return (
-        <AuthContext.Provider value={{ user, loading, isAdmin, logout, loginWithGoogle }}>
+        <AuthContext.Provider value={{ user, loading, logout, loginWithGoogle }}>
             {children}
         </AuthContext.Provider>
     );

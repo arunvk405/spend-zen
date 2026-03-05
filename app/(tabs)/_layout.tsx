@@ -1,13 +1,13 @@
 import { Tabs, useRouter, Redirect } from 'expo-router';
 import { useThemeColors } from '../../src/theme/colors';
-import { Home, PieChart, Landmark, Settings, Plus, LayoutGrid, ShieldAlert } from 'lucide-react-native';
+import { Home, PieChart, Landmark, Settings, Plus } from 'lucide-react-native';
 import { TouchableOpacity, View, StyleSheet, ActivityIndicator } from 'react-native';
 import { useAuth } from '../../src/context/AuthContext';
 
 export default function TabLayout() {
     const Colors = useThemeColors();
     const router = useRouter();
-    const { user, loading, isAdmin } = useAuth();
+    const { user, loading } = useAuth();
 
     if (loading) {
         return (
@@ -89,15 +89,6 @@ export default function TabLayout() {
                     tabBarIcon: ({ color }) => <PieChart color={color} size={24} />,
                 }}
             />
-            {isAdmin && (
-                <Tabs.Screen
-                    name="admin"
-                    options={{
-                        title: 'Admin',
-                        tabBarIcon: ({ color }) => <ShieldAlert color={color} size={24} />,
-                    }}
-                />
-            )}
             <Tabs.Screen
                 name="settings"
                 options={{

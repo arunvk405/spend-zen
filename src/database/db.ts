@@ -78,20 +78,6 @@ export async function getTransactions(userId: string): Promise<Transaction[]> {
     }
 }
 
-// Special function for Admin to see EVERYTHING
-export async function getAllTransactionsAdmin(): Promise<any[]> {
-    try {
-        const q = query(collection(db, COLLECTION_NAME), orderBy("createdAt", "desc"));
-        const querySnapshot = await getDocs(q);
-        return querySnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        }));
-    } catch (e) {
-        console.error("Error getting all transactions: ", e);
-        return [];
-    }
-}
 
 // Analytics and summary logic moved to FinanceContext for performance
 
@@ -129,18 +115,6 @@ export async function deleteTransactionsByRange(userId: string, range: 'all' | '
     return toDelete.length;
 }
 
-export async function getAllUsers(): Promise<any[]> {
-    try {
-        const querySnapshot = await getDocs(collection(db, USERS_COLLECTION));
-        return querySnapshot.docs.map(doc => ({
-            uid: doc.id,
-            ...doc.data()
-        }));
-    } catch (e) {
-        console.error("Error getting users: ", e);
-        return [];
-    }
-}
 
 // Projected Expenses (Next Month Planning)
 export async function getProjectedExpenses(userId: string): Promise<any[]> {
