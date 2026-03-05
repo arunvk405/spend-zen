@@ -51,6 +51,7 @@ export const EXPENSE_CATEGORIES: Category[] = [
     { name: 'Personal', icon: 'user', color: '#9C27B0', type: 'EXPENSE' },
     { name: 'Pets', icon: 'paw-print', color: '#607D8B', type: 'EXPENSE' },
     { name: 'Utilities', icon: 'file-text', color: '#FF5722', type: 'EXPENSE' },
+    { name: 'Investment/SIP', icon: 'trending-up', color: '#4CAF50', type: 'EXPENSE' },
     { name: 'Debt', icon: 'credit-card', color: '#000000', type: 'EXPENSE' },
     { name: 'Others', icon: 'package', color: '#9E9E9E', type: 'EXPENSE' },
 ];

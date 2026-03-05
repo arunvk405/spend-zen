@@ -4,11 +4,14 @@ import {
     initDatabase,
     getTransactions,
     addTransaction as addTxDb,
+    updateTransaction as updateTxDb,
     deleteTransaction as deleteTxDb,
     deleteTransactionsByRange,
     getProjectedExpenses,
     addProjectedExpense,
-    deleteProjectedExpense
+    deleteProjectedExpense,
+    updateCustomCategories,
+    getUserProfile
 } from '../database/db';
 import { format, isSameMonth, parseISO } from 'date-fns';
 
@@ -25,11 +28,14 @@ interface FinanceContextType {
     totalProjectedAmount: number;
     loading: boolean;
     addTransaction: (tx: Omit<Transaction, 'id'>) => Promise<void>;
+    updateTransaction: (id: string, tx: Partial<Transaction>) => Promise<void>;
     deleteTransaction: (id: string) => Promise<void>;
     clearData: (range: 'all' | 'year' | 'month') => Promise<number>;
     refreshData: () => Promise<void>;
     addProjectedNote: (amount: number, description: string) => Promise<void>;
     deleteProjectedNote: (id: string) => Promise<void>;
+    customCategories: any[];
+    addCustomCategory: (name: string, type: 'INCOME' | 'EXPENSE') => Promise<void>;
 }
 
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
@@ -46,6 +52,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const [projectedNotes, setProjectedNotes] = useState<ProjectedExpense[]>([]);
     const [totalProjectedAmount, setTotalProjectedAmount] = useState(0);
     const [loading, setLoading] = useState(false);
+    const [customCategories, setCustomCategories] = useState<any[]>([]);
 
     const refreshData = useCallback(async () => {
         if (!dbReady || !user) return;
@@ -106,6 +113,14 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 return { ...acc, balance: accBalance };
             });
             setAccounts(updatedAccounts);
+
+            // Fetch Custom Categories
+            const profile = await getUserProfile(user.uid);
+            if (profile && profile.customCategories) {
+                setCustomCategories(profile.customCategories);
+            } else {
+                setCustomCategories([]);
+            }
         } catch (err) {
             console.error("Error refreshing data:", err);
         } finally {
@@ -141,6 +156,12 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         await refreshData();
     };
 
+    const updateTransaction = async (id: string, tx: Partial<Transaction>) => {
+        if (!dbReady || !user) return;
+        await updateTxDb(id, tx);
+        await refreshData();
+    };
+
     const deleteTransaction = async (id: string) => {
         if (!dbReady || !user) return;
         await deleteTxDb(id);
@@ -166,6 +187,20 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         await refreshData();
     };
 
+    const addCustomCategory = async (name: string, type: 'INCOME' | 'EXPENSE') => {
+        if (!dbReady || !user) return;
+        const newCategory = {
+            name,
+            icon: 'package', // Default icon for custom
+            color: type === 'INCOME' ? '#4CAF50' : '#FF5252',
+            type,
+            isCustom: true
+        };
+        const updated = [...customCategories, newCategory];
+        await updateCustomCategories(user.uid, updated);
+        setCustomCategories(updated);
+    };
+
     return (
         <FinanceContext.Provider value={{
             transactions,
@@ -178,11 +213,14 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
             totalProjectedAmount,
             loading,
             addTransaction,
+            updateTransaction,
             deleteTransaction,
             clearData,
             refreshData,
             addProjectedNote,
-            deleteProjectedNote
+            deleteProjectedNote,
+            customCategories,
+            addCustomCategory
         }}>
             {children}
         </FinanceContext.Provider>

@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, ScrollView } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useFinance } from '../../src/context/FinanceContext';
 import { useThemeColors, Typography } from '../../src/theme/colors';
-import { Search, Trash2, Calendar, ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { Search, Trash2, Calendar, ChevronLeft, ChevronRight, Pencil } from 'lucide-react-native';
 import { format, startOfMonth, endOfMonth, isWithinInterval, parseISO, isSameMonth, isSameYear } from 'date-fns';
 
 const MONTHS = [
@@ -12,6 +13,7 @@ const MONTHS = [
 
 export default function TransactionsHistory() {
     const Colors = useThemeColors();
+    const router = useRouter();
     const { transactions, deleteTransaction } = useFinance();
     const [searchQuery, setSearchQuery] = useState('');
     const [filterType, setFilterType] = useState<'ALL' | 'INCOME' | 'EXPENSE'>('ALL');
@@ -77,6 +79,12 @@ export default function TransactionsHistory() {
                 </Text>
                 <Text style={[styles.accountId, { color: Colors.textMuted }]}>{item.accountId}</Text>
             </View>
+            <TouchableOpacity
+                style={[styles.editButton, { borderColor: Colors.border, backgroundColor: Colors.surface }]}
+                onPress={() => router.push({ pathname: '/add', params: { id: item.id } })}
+            >
+                <Pencil color={Colors.primary} size={20} />
+            </TouchableOpacity>
             <TouchableOpacity
                 style={[styles.deleteButton, { borderColor: Colors.border, backgroundColor: Colors.surface }]}
                 onPress={() => handleDelete(item)}
@@ -295,6 +303,12 @@ const styles = StyleSheet.create({
         textTransform: 'capitalize',
     },
     deleteButton: {
+        marginLeft: 8,
+        padding: 8,
+        borderRadius: 8,
+        borderWidth: 1,
+    },
+    editButton: {
         marginLeft: 12,
         padding: 8,
         borderRadius: 8,

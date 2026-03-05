@@ -65,21 +65,15 @@ export default function TabLayout() {
                     title: '',
                     tabBarButton: (props: any) => (
                         <TouchableOpacity
-                            {...props}
                             activeOpacity={0.7}
-                            style={StyleSheet.flatten([props.style, styles.centerButtonContainer])}
+                            style={[props.style, styles.centerButtonContainer]}
+                            onPress={() => router.push('/add')}
                         >
                             <View style={[styles.centerButton, { backgroundColor: Colors.primary, shadowColor: Colors.primary }]}>
                                 <Plus color="#fff" size={32} strokeWidth={3} />
                             </View>
                         </TouchableOpacity>
                     ),
-                }}
-                listeners={{
-                    tabPress: (e) => {
-                        e.preventDefault();
-                        router.push('/add');
-                    },
                 }}
             />
             <Tabs.Screen

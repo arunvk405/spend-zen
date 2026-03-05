@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Platform } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Platform, ActivityIndicator } from 'react-native';
 import { useFinance } from '../src/context/FinanceContext';
 import { useThemeColors, Typography } from '../src/theme/colors';
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, ACCOUNTS, TransactionType } from '../src/models';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { getTransaction } from '../src/database/db';
 import {
     Check,
     ArrowLeft,
@@ -25,7 +26,9 @@ import {
     Activity,
     User,
     PawPrint,
-    HelpCircle
+    TrendingUp as TrendingUpIcon,
+    HelpCircle,
+    Plus as PlusIcon
 } from 'lucide-react-native';
 
 const IconRenderer = ({ name, color, size = 24 }: { name: string, color: string, size?: number }) => {
@@ -48,6 +51,7 @@ const IconRenderer = ({ name, color, size = 24 }: { name: string, color: string,
         case 'user': return <User color={color} size={size} />;
         case 'paw-print': return <PawPrint color={color} size={size} />;
         case 'package': return <Package color={color} size={size} />;
+        case 'trending-up-icon': return <TrendingUpIcon color={color} size={size} />;
         default: return <HelpCircle color={color} size={size} />;
     }
 };
@@ -56,18 +60,66 @@ import * as Haptics from 'expo-haptics';
 
 export default function AddTransaction() {
     const Colors = useThemeColors();
-    const { addTransaction } = useFinance();
+    const { addTransaction, updateTransaction, transactions, customCategories, addCustomCategory } = useFinance();
     const router = useRouter();
+    const params = useLocalSearchParams();
+    const editId = params.id as string;
 
     const [type, setType] = useState<TransactionType>('EXPENSE');
     const [amount, setAmount] = useState('');
     const [category, setCategory] = useState('');
     const [accountId, setAccountId] = useState('cash');
     const [note, setNote] = useState('');
-    const [date] = useState(new Date().toISOString());
+    const [date, setDate] = useState(new Date().toISOString());
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isInitialLoading, setIsInitialLoading] = useState(!!editId);
 
-    const categories = type === 'INCOME' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+    useEffect(() => {
+        if (editId) {
+            const loadTransaction = async () => {
+                try {
+                    // Try finding in filtered transactions first
+                    const existing = transactions.find(t => t.id === editId);
+                    if (existing) {
+                        setType(existing.type);
+                        setAmount(existing.amount.toString());
+                        setCategory(existing.category);
+                        setAccountId(existing.accountId);
+                        setNote(existing.note || '');
+                        setDate(existing.date);
+                    } else {
+                        // Fallback to direct DB fetch
+                        const tx = await getTransaction(editId);
+                        if (tx) {
+                            setType(tx.type);
+                            setAmount(tx.amount.toString());
+                            setCategory(tx.category);
+                            setAccountId(tx.accountId);
+                            setNote(tx.note || '');
+                            setDate(tx.date);
+                        }
+                    }
+                } catch (error) {
+                    console.error("Error loading transaction for edit:", error);
+                } finally {
+                    setIsInitialLoading(false);
+                }
+            };
+            loadTransaction();
+        }
+    }, [editId, transactions]);
+
+    const categories = [
+        ...(type === 'INCOME' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES),
+        ...customCategories.filter(c => c.type === type)
+    ];
+
+    const handleAddCategory = () => {
+        const name = window.prompt("Enter category name:");
+        if (name && name.trim()) {
+            addCustomCategory(name.trim(), type);
+        }
+    };
 
     const handleSubmit = async () => {
         if (!amount || !category || isSubmitting) return;
@@ -79,14 +131,20 @@ export default function AddTransaction() {
         }
 
         try {
-            await addTransaction({
+            const txData = {
                 amount: parseFloat(amount),
                 type,
                 category,
                 date,
                 accountId,
                 note,
-            });
+            };
+
+            if (editId) {
+                await updateTransaction(editId, txData);
+            } else {
+                await addTransaction(txData);
+            }
 
             if (router.canGoBack()) {
                 router.back();
@@ -106,9 +164,17 @@ export default function AddTransaction() {
         if (router.canGoBack()) {
             router.back();
         } else {
-            router.replace('/');
+            router.replace('/(tabs)');
         }
     };
+
+    if (isInitialLoading) {
+        return (
+            <View style={[styles.mainContainer, { backgroundColor: Colors.background, justifyContent: 'center', alignItems: 'center' }]}>
+                <ActivityIndicator size="large" color={Colors.primary} />
+            </View>
+        );
+    }
 
     return (
         <View style={[styles.mainContainer, { backgroundColor: Colors.background }]}>
@@ -116,7 +182,9 @@ export default function AddTransaction() {
                 <TouchableOpacity onPress={handleBack} style={styles.backButton}>
                     <ArrowLeft color={Colors.text} size={24} />
                 </TouchableOpacity>
-                <Text style={[styles.headerTitle, { color: Colors.text }]}>Add Transaction</Text>
+                <Text style={[styles.headerTitle, { color: Colors.text }]}>
+                    {editId ? 'Edit Transaction' : 'Add Transaction'}
+                </Text>
                 <View style={{ width: 24 }} />
             </View>
 
@@ -233,6 +301,22 @@ export default function AddTransaction() {
                                 )}
                             </TouchableOpacity>
                         ))}
+                        <TouchableOpacity
+                            style={[
+                                styles.categoryItem,
+                                {
+                                    backgroundColor: Colors.surface,
+                                    borderColor: Colors.border,
+                                    borderStyle: 'dashed'
+                                }
+                            ]}
+                            onPress={handleAddCategory}
+                        >
+                            <View style={styles.iconContainer}>
+                                <PlusIcon color={Colors.textMuted} size={22} />
+                            </View>
+                            <Text style={[styles.categoryName, { color: Colors.textMuted }]}>New</Text>
+                        </TouchableOpacity>
                     </View>
                 </View>
 

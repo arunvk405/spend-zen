@@ -157,3 +157,41 @@ export async function deleteProjectedExpense(id: string): Promise<void> {
         throw e;
     }
 }
+export async function getTransaction(transactionId: string): Promise<Transaction | null> {
+    try {
+        const docRef = doc(db, COLLECTION_NAME, transactionId);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+            return { id: docSnap.id, ...docSnap.data() } as Transaction;
+        }
+        return null;
+    } catch (e) {
+        console.error("Error getting transaction: ", e);
+        return null;
+    }
+}
+
+export async function updateTransaction(transactionId: string, updates: Partial<Transaction>): Promise<void> {
+    try {
+        const docRef = doc(db, COLLECTION_NAME, transactionId);
+        await setDoc(docRef, {
+            ...updates,
+            updatedAt: new Date().toISOString()
+        }, { merge: true });
+    } catch (e) {
+        console.error("Error updating transaction: ", e);
+        throw e;
+    }
+}
+
+export async function updateCustomCategories(userId: string, categories: any[]) {
+    try {
+        const userRef = doc(db, USERS_COLLECTION, userId);
+        await setDoc(userRef, {
+            customCategories: categories,
+            lastUpdated: new Date().toISOString()
+        }, { merge: true });
+    } catch (e) {
+        console.error("Error updating custom categories:", e);
+    }
+}
