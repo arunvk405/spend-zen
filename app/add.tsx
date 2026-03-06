@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Platform, ActivityIndicator, Alert } from 'react-native';
 import { useFinance } from '../src/context/FinanceContext';
 import { useThemeColors, Typography } from '../src/theme/colors';
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, ACCOUNTS, TransactionType } from '../src/models';
@@ -28,7 +28,9 @@ import {
     PawPrint,
     TrendingUp as TrendingUpIcon,
     HelpCircle,
-    Plus as PlusIcon
+    Plus as PlusIcon,
+    Pencil,
+    Trash2
 } from 'lucide-react-native';
 
 const IconRenderer = ({ name, color, size = 24 }: { name: string, color: string, size?: number }) => {
@@ -60,7 +62,7 @@ import * as Haptics from 'expo-haptics';
 
 export default function AddTransaction() {
     const Colors = useThemeColors();
-    const { addTransaction, updateTransaction, transactions, customCategories, addCustomCategory } = useFinance();
+    const { addTransaction, updateTransaction, transactions, customCategories, addCustomCategory, deleteCustomCategory, updateCustomCategory } = useFinance();
     const router = useRouter();
     const params = useLocalSearchParams();
     const editId = params.id as string;
@@ -115,9 +117,33 @@ export default function AddTransaction() {
     ];
 
     const handleAddCategory = () => {
-        const name = window.prompt("Enter category name:");
-        if (name && name.trim()) {
-            addCustomCategory(name.trim(), type);
+        if (Platform.OS === 'web') {
+            const name = window.prompt("Enter category name:");
+            if (name && name.trim()) {
+                addCustomCategory(name.trim(), type);
+            }
+        } else {
+            // Mobile implementation would use a Modal or similar, but prompt is fine for web context
+            // Since we are running in 'npx expo export:web', we'll stick to web compatible flows where possible
+            const name = window.prompt("Enter category name:");
+            if (name && name.trim()) {
+                addCustomCategory(name.trim(), type);
+            }
+        }
+    };
+
+    const handleEditCategory = (cat: any) => {
+        const newName = window.prompt("Enter new category name:", cat.name);
+        if (newName && newName.trim() && newName !== cat.name) {
+            updateCustomCategory(cat.name, newName.trim(), type);
+            if (category === cat.name) setCategory(newName.trim());
+        }
+    };
+
+    const handleDeleteCategory = (cat: any) => {
+        if (window.confirm(`Are you sure you want to delete '${cat.name}'?`)) {
+            deleteCustomCategory(cat.name, type);
+            if (category === cat.name) setCategory('');
         }
     };
 
@@ -271,36 +297,67 @@ export default function AddTransaction() {
                 <View style={styles.card}>
                     <Text style={[styles.label, { color: Colors.textMuted }]}>Category</Text>
                     <View style={styles.categoryGrid}>
-                        {categories.map((cat) => (
-                            <TouchableOpacity
-                                key={cat.name}
-                                style={[
-                                    styles.categoryItem,
-                                    { backgroundColor: Colors.surface, borderColor: Colors.border },
-                                    category === cat.name && { borderColor: cat.color, backgroundColor: cat.color + '15' }
-                                ]}
-                                onPress={() => setCategory(cat.name)}
-                            >
-                                <View style={styles.iconContainer}>
-                                    <IconRenderer name={cat.icon} color={category === cat.name ? cat.color : Colors.textMuted} size={22} />
-                                </View>
-                                <Text
-                                    style={[
-                                        styles.categoryName,
-                                        { color: Colors.textMuted },
-                                        category === cat.name && { color: cat.color, fontWeight: 'bold' }
-                                    ]}
-                                    numberOfLines={1}
-                                >
-                                    {cat.name}
-                                </Text>
-                                {category === cat.name && (
-                                    <View style={[styles.checkBadge, { backgroundColor: cat.color }]}>
-                                        <Check color={Colors.white} size={10} />
+                        {categories.map((cat) => {
+                            const isSelected = category === cat.name;
+                            const itemContent = (
+                                <>
+                                    {cat.isCustom && (
+                                        <View style={styles.customActionRow}>
+                                            <TouchableOpacity
+                                                style={[styles.smallActionBtn, { borderColor: Colors.primary }]}
+                                                onPress={(e) => {
+                                                    if (e && e.stopPropagation) e.stopPropagation();
+                                                    handleEditCategory(cat);
+                                                }}
+                                            >
+                                                <Pencil size={12} color={Colors.primary} strokeWidth={2.5} />
+                                            </TouchableOpacity>
+                                            <TouchableOpacity
+                                                style={[styles.smallActionBtn, { borderColor: Colors.expense }]}
+                                                onPress={(e) => {
+                                                    if (e && e.stopPropagation) e.stopPropagation();
+                                                    handleDeleteCategory(cat);
+                                                }}
+                                            >
+                                                <Trash2 size={12} color={Colors.expense} strokeWidth={2.5} />
+                                            </TouchableOpacity>
+                                        </View>
+                                    )}
+                                    <View style={styles.iconContainer}>
+                                        <IconRenderer name={cat.icon} color={isSelected ? cat.color : Colors.textMuted} size={22} />
                                     </View>
-                                )}
-                            </TouchableOpacity>
-                        ))}
+                                    <Text
+                                        style={[
+                                            styles.categoryName,
+                                            { color: Colors.textMuted },
+                                            isSelected && { color: cat.color, fontWeight: 'bold' }
+                                        ]}
+                                        numberOfLines={1}
+                                    >
+                                        {cat.name}
+                                    </Text>
+                                    {isSelected && (
+                                        <View style={[styles.checkBadge, { backgroundColor: cat.color }]}>
+                                            <Check color={Colors.white} size={10} />
+                                        </View>
+                                    )}
+                                </>
+                            );
+
+                            return (
+                                <TouchableOpacity
+                                    key={`${cat.name}-${cat.type}`}
+                                    style={[
+                                        styles.categoryItem,
+                                        { backgroundColor: Colors.surface, borderColor: Colors.border },
+                                        isSelected && { borderColor: cat.color, backgroundColor: cat.color + '15' }
+                                    ]}
+                                    onPress={() => setCategory(cat.name)}
+                                >
+                                    {itemContent}
+                                </TouchableOpacity>
+                            );
+                        })}
                         <TouchableOpacity
                             style={[
                                 styles.categoryItem,
@@ -437,16 +494,19 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         flexWrap: 'wrap',
         justifyContent: 'space-between',
+        paddingTop: 8,
     },
     categoryItem: {
-        width: '23.5%',
-        marginBottom: 10,
+        width: '22%',
+        marginBottom: 12,
         aspectRatio: 1,
         borderRadius: 14,
         justifyContent: 'center',
         alignItems: 'center',
         borderWidth: 1,
         padding: 4,
+        position: 'relative',
+        overflow: 'visible', // Ensure buttons don't clip
     },
     categoryName: {
         fontSize: 10,
@@ -516,4 +576,26 @@ const styles = StyleSheet.create({
     section: {
         marginBottom: 20,
     },
+    customActionRow: {
+        position: 'absolute',
+        top: 4,
+        left: 4,
+        flexDirection: 'row',
+        gap: 4,
+        zIndex: 100,
+    },
+    smallActionBtn: {
+        width: 20,
+        height: 20,
+        borderRadius: 10,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
+        backgroundColor: '#FFFFFF',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.3,
+        shadowRadius: 2,
+        elevation: 4,
+    }
 });

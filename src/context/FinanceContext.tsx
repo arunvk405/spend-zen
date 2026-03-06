@@ -36,6 +36,8 @@ interface FinanceContextType {
     deleteProjectedNote: (id: string) => Promise<void>;
     customCategories: any[];
     addCustomCategory: (name: string, type: 'INCOME' | 'EXPENSE') => Promise<void>;
+    deleteCustomCategory: (name: string, type: 'INCOME' | 'EXPENSE') => Promise<void>;
+    updateCustomCategory: (oldName: string, newName: string, type: 'INCOME' | 'EXPENSE') => Promise<void>;
 }
 
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
@@ -117,7 +119,11 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
             // Fetch Custom Categories
             const profile = await getUserProfile(user.uid);
             if (profile && profile.customCategories) {
-                setCustomCategories(profile.customCategories);
+                // Ensure all custom categories have the isCustom flag
+                setCustomCategories(profile.customCategories.map((c: any) => ({
+                    ...c,
+                    isCustom: true
+                })));
             } else {
                 setCustomCategories([]);
             }
@@ -201,6 +207,22 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setCustomCategories(updated);
     };
 
+    const deleteCustomCategory = async (name: string, type: 'INCOME' | 'EXPENSE') => {
+        if (!dbReady || !user) return;
+        const updated = customCategories.filter(c => !(c.name === name && c.type === type));
+        await updateCustomCategories(user.uid, updated);
+        setCustomCategories(updated);
+    };
+
+    const updateCustomCategory = async (oldName: string, newName: string, type: 'INCOME' | 'EXPENSE') => {
+        if (!dbReady || !user) return;
+        const updated = customCategories.map(c =>
+            (c.name === oldName && c.type === type) ? { ...c, name: newName } : c
+        );
+        await updateCustomCategories(user.uid, updated);
+        setCustomCategories(updated);
+    };
+
     return (
         <FinanceContext.Provider value={{
             transactions,
@@ -220,7 +242,9 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
             addProjectedNote,
             deleteProjectedNote,
             customCategories,
-            addCustomCategory
+            addCustomCategory,
+            deleteCustomCategory,
+            updateCustomCategory
         }}>
             {children}
         </FinanceContext.Provider>
