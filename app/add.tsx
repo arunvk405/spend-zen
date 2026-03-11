@@ -259,7 +259,7 @@ export default function AddTransaction() {
                         <Text style={[styles.currency, { color: Colors.textMuted }]}>₹</Text>
                         <TextInput
                             style={[styles.amountInput, { color: Colors.text }]}
-                            keyboardType="numeric"
+                            keyboardType="decimal-pad"
                             value={amount}
                             onChangeText={(text) => setAmount(text.replace(/[^0-9.]/g, ''))}
                             placeholder="0.00"

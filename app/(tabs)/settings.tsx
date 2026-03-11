@@ -414,7 +414,7 @@ export default function Settings() {
                                         style={[styles.modalInput, { color: Colors.text }]}
                                         placeholder="Amount (₹)"
                                         placeholderTextColor={Colors.textMuted}
-                                        keyboardType="numeric"
+                                        keyboardType="decimal-pad"
                                         value={projectedAmount}
                                         onChangeText={(text) => setProjectedAmount(text.replace(/[^0-9.]/g, ''))}
                                     />
