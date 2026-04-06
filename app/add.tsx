@@ -5,6 +5,8 @@ import { useThemeColors, Typography } from '../src/theme/colors';
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, ACCOUNTS, TransactionType } from '../src/models';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { getTransaction } from '../src/database/db';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { format } from 'date-fns';
 import {
     Check,
     ArrowLeft,
@@ -30,7 +32,8 @@ import {
     HelpCircle,
     Plus as PlusIcon,
     Pencil,
-    Trash2
+    Trash2,
+    Calendar as CalendarIcon
 } from 'lucide-react-native';
 
 const IconRenderer = ({ name, color, size = 24 }: { name: string, color: string, size?: number }) => {
@@ -75,6 +78,13 @@ export default function AddTransaction() {
     const [date, setDate] = useState(new Date().toISOString());
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isInitialLoading, setIsInitialLoading] = useState(!!editId);
+    const [showDatePicker, setShowDatePicker] = useState(false);
+
+    const onDateChange = (event: any, selectedDate?: Date) => {
+        const currentDate = selectedDate || new Date(date);
+        setShowDatePicker(Platform.OS === 'ios');
+        setDate(currentDate.toISOString());
+    };
 
     useEffect(() => {
         if (editId) {
@@ -377,6 +387,52 @@ export default function AddTransaction() {
                     </View>
                 </View>
 
+                {/* Date Selection */}
+                <View style={styles.card}>
+                    <Text style={[styles.label, { color: Colors.textMuted }]}>Date</Text>
+                    {Platform.OS === 'web' ? (
+                        <View style={[styles.dateInputContainer, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+                            <CalendarIcon color={Colors.textMuted} size={20} />
+                            <input
+                                type="date"
+                                value={new Date(date).toISOString().split('T')[0]}
+                                onChange={(e) => setDate(new Date(e.target.value).toISOString())}
+                                style={{
+                                    background: 'transparent',
+                                    border: 'none',
+                                    color: Colors.text,
+                                    fontSize: 16,
+                                    flex: 1,
+                                    marginLeft: 10,
+                                    padding: '12px 0',
+                                    outline: 'none',
+                                    fontFamily: 'inherit'
+                                }}
+                            />
+                        </View>
+                    ) : (
+                        <>
+                            <TouchableOpacity
+                                style={[styles.datePickerButton, { backgroundColor: Colors.surface, borderColor: Colors.border }]}
+                                onPress={() => setShowDatePicker(true)}
+                            >
+                                <CalendarIcon color={Colors.textMuted} size={20} />
+                                <Text style={[styles.datePickerText, { color: Colors.text }]}>
+                                    {format(new Date(date), 'dd MMMM yyyy')}
+                                </Text>
+                            </TouchableOpacity>
+                            {showDatePicker && (
+                                <DateTimePicker
+                                    value={new Date(date)}
+                                    mode="date"
+                                    display="default"
+                                    onChange={onDateChange}
+                                />
+                            )}
+                        </>
+                    )}
+                </View>
+
                 {/* Note Input */}
                 <View style={styles.card}>
                     <Text style={[styles.label, { color: Colors.textMuted }]}>Note</Text>
@@ -597,5 +653,25 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.3,
         shadowRadius: 2,
         elevation: 4,
+    },
+    datePickerButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 14,
+        borderRadius: 16,
+        borderWidth: 1,
+        gap: 12,
+    },
+    datePickerText: {
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    dateInputContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        borderRadius: 16,
+        borderWidth: 1,
     }
 });

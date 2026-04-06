@@ -64,7 +64,7 @@ export default function Settings() {
     const Colors = useThemeColors();
     const router = useRouter();
     const { theme, setTheme } = useTheme();
-    const { clearData, projectedExpenses, projectedNotes, totalProjectedAmount, addProjectedNote, deleteProjectedNote } = useFinance();
+    const { clearData, projectedExpenses, projectedNotes, totalProjectedAmount, addProjectedNote, deleteProjectedNote, clearAllProjectedNotes } = useFinance();
 
     const { user, logout } = useAuth();
     const [isEditing, setIsEditing] = useState(false);
@@ -234,6 +234,26 @@ export default function Settings() {
         }
     };
 
+    const handleClearAllProjected = () => {
+        if (projectedNotes.length === 0) return;
+        
+        const performClear = () => {
+            clearAllProjectedNotes();
+            if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        };
+
+        if (Platform.OS === 'web') {
+            if (window.confirm("Are you sure you want to clear ALL planned items?")) {
+                performClear();
+            }
+        } else {
+            Alert.alert("Clear All", "Are you sure you want to clear ALL planned items?", [
+                { text: "Cancel", style: "cancel" },
+                { text: "Clear All", style: "destructive", onPress: performClear }
+            ]);
+        }
+    };
+
     return (
         <ScrollView style={[styles.container, { backgroundColor: Colors.background }]} showsVerticalScrollIndicator={false}>
             <View style={styles.logoSection}>
@@ -314,7 +334,7 @@ export default function Settings() {
                 <View style={[styles.card, { backgroundColor: Colors.surface }]}>
                     <SettingsItem
                         icon={TrendingUp}
-                        label={`Next Month Prediction: ₹${Math.round(totalProjectedAmount).toLocaleString()}`}
+                        label={`Next Month Planning: ₹${Math.round(totalProjectedAmount).toLocaleString()}`}
                         color={Colors.primary}
                         onPress={() => setShowProjectedModal(true)}
                     />
@@ -382,7 +402,14 @@ export default function Settings() {
                         <View style={[styles.modalHeader, { borderBottomColor: Colors.border }]}>
                             <View>
                                 <Text style={[styles.modalTitle, { color: Colors.text }]}>Next Month Planning</Text>
-                                <Text style={[styles.modalSubtitle, { color: Colors.textMuted }]}>Projected & Planned Expenses</Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                                    <Text style={[styles.modalSubtitle, { color: Colors.textMuted }]}>Plan ahead for your financials</Text>
+                                    {projectedNotes.length > 0 && (
+                                        <TouchableOpacity onPress={handleClearAllProjected}>
+                                            <Text style={{ color: Colors.expense, fontSize: 13, fontWeight: '700' }}>Clear All Items</Text>
+                                        </TouchableOpacity>
+                                    )}
+                                </View>
                             </View>
                             <TouchableOpacity onPress={() => setShowProjectedModal(false)} style={styles.closeBtn}>
                                 <X size={24} color={Colors.text} />
@@ -392,16 +419,7 @@ export default function Settings() {
                         <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
                             <View style={[styles.summaryBox, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
                                 <View style={styles.summaryRow}>
-                                    <Text style={[styles.summaryLabel, { color: Colors.textMuted }]}>AI Trend Projection</Text>
-                                    <Text style={[styles.summaryValue, { color: Colors.text }]}>₹{Math.round(projectedExpenses).toLocaleString()}</Text>
-                                </View>
-                                <View style={styles.summaryRow}>
-                                    <Text style={[styles.summaryLabel, { color: Colors.textMuted }]}>User Planned Notes</Text>
-                                    <Text style={[styles.summaryValue, { color: Colors.primary }]}>+ ₹{projectedNotes.reduce((s, n) => s + Number(n.amount), 0).toLocaleString()}</Text>
-                                </View>
-                                <View style={[styles.summaryDivider, { backgroundColor: Colors.border }]} />
-                                <View style={styles.summaryRow}>
-                                    <Text style={[styles.totalLabel, { color: Colors.text }]}>Total Prediction</Text>
+                                    <Text style={[styles.totalLabel, { color: Colors.text }]}>Total Planned</Text>
                                     <Text style={[styles.totalValue, { color: Colors.primary }]}>₹{Math.round(totalProjectedAmount).toLocaleString()}</Text>
                                 </View>
                             </View>

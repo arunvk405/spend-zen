@@ -157,6 +157,21 @@ export async function deleteProjectedExpense(id: string): Promise<void> {
         throw e;
     }
 }
+
+export async function deleteAllProjectedExpenses(userId: string): Promise<void> {
+    try {
+        const q = query(
+            collection(db, PROJECTED_COLLECTION),
+            where("userId", "==", userId)
+        );
+        const querySnapshot = await getDocs(q);
+        const promises = querySnapshot.docs.map(doc => deleteDoc(doc.ref));
+        await Promise.all(promises);
+    } catch (e) {
+        console.error("Error clearing all projected expenses: ", e);
+        throw e;
+    }
+}
 export async function getTransaction(transactionId: string): Promise<Transaction | null> {
     try {
         const docRef = doc(db, COLLECTION_NAME, transactionId);

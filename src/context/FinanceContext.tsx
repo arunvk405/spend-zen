@@ -10,6 +10,7 @@ import {
     getProjectedExpenses,
     addProjectedExpense,
     deleteProjectedExpense,
+    deleteAllProjectedExpenses,
     updateCustomCategories,
     getUserProfile
 } from '../database/db';
@@ -34,6 +35,7 @@ interface FinanceContextType {
     refreshData: () => Promise<void>;
     addProjectedNote: (amount: number, description: string) => Promise<void>;
     deleteProjectedNote: (id: string) => Promise<void>;
+    clearAllProjectedNotes: () => Promise<void>;
     customCategories: any[];
     addCustomCategory: (name: string, type: 'INCOME' | 'EXPENSE') => Promise<void>;
     deleteCustomCategory: (name: string, type: 'INCOME' | 'EXPENSE') => Promise<void>;
@@ -93,20 +95,15 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
             setMonthlyIncome(income);
             setMonthlyExpenses(expense);
 
-            // Calculate Projected Expenses for next month 
-            // Based on current month's daily average
-            const dayOfMonth = now.getDate();
-            const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-            const dailyAverage = expense / dayOfMonth;
-            const projection = dailyAverage * daysInMonth;
-            setProjectedExpenses(projection);
+            // Remove automatic projection as per user request
+            setProjectedExpenses(0);
 
             // Fetch Projected Notes
             const notes = await getProjectedExpenses(user.uid);
             setProjectedNotes(notes);
 
             const notesTotal = notes.reduce((sum, n) => sum + Number(n.amount), 0);
-            setTotalProjectedAmount(projection + notesTotal);
+            setTotalProjectedAmount(notesTotal);
 
             const updatedAccounts = ACCOUNTS.map(acc => {
                 const accBalance = txs
@@ -192,6 +189,11 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         await deleteProjectedExpense(id);
         await refreshData();
     };
+    const clearAllProjectedNotes = async () => {
+        if (!dbReady || !user) return;
+        await deleteAllProjectedExpenses(user.uid);
+        await refreshData();
+    };
 
     const addCustomCategory = async (name: string, type: 'INCOME' | 'EXPENSE') => {
         if (!dbReady || !user) return;
@@ -241,6 +243,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
             refreshData,
             addProjectedNote,
             deleteProjectedNote,
+            clearAllProjectedNotes,
             customCategories,
             addCustomCategory,
             deleteCustomCategory,
