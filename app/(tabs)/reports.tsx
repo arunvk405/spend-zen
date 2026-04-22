@@ -13,18 +13,29 @@ const MONTHS = [
     'July', 'August', 'September', 'October', 'November', 'December'
 ];
 
-const ACCOUNT_FILTERS = [
-    { id: 'all', label: 'All' },
-    { id: 'cash', label: 'Cash' },
-    { id: 'bank', label: 'Bank' },
-    { id: 'credit', label: 'Credit' }
-];
+// Dynamic ACCOUNT_FILTERS are now generated inside the component
 
 export default function Reports() {
     const Colors = useThemeColors();
-    const { transactions } = useFinance();
+    const { transactions, bankAccounts, creditCards, cashAccountName } = useFinance();
+    
+    const getAccountName = (id: string) => {
+        if (id === 'cash') return cashAccountName;
+        const bank = bankAccounts.find(b => b.id === id);
+        if (bank) return bank.bankName;
+        const card = creditCards.find(c => c.id === id);
+        if (card) return card.cardName;
+        return id;
+    };
     const [selectedAccount, setSelectedAccount] = useState('all');
     const [selectedDate, setSelectedDate] = useState(new Date());
+
+    const accountFilters = useMemo(() => {
+        const filters = [{ id: 'all', label: 'All' }, { id: 'cash', label: cashAccountName }];
+        bankAccounts.forEach(b => filters.push({ id: b.id, label: b.bankName }));
+        creditCards.forEach(c => filters.push({ id: c.id, label: c.cardName }));
+        return filters;
+    }, [bankAccounts, creditCards, cashAccountName]);
 
     const filteredTransactionsByDate = useMemo(() => {
         return transactions.filter(t => {
@@ -86,7 +97,7 @@ export default function Reports() {
         const incomes = filteredTransactions.filter(t => t.type === 'INCOME');
         const breakdown: Record<string, number> = {};
         incomes.forEach(t => {
-            const label = t.accountId.charAt(0).toUpperCase() + t.accountId.slice(1);
+            const label = getAccountName(t.accountId);
             breakdown[label] = (breakdown[label] || 0) + t.amount;
         });
 
@@ -145,7 +156,7 @@ export default function Reports() {
                     style={styles.filterContainer}
                     contentContainerStyle={styles.filterContent}
                 >
-                    {ACCOUNT_FILTERS.map(filter => (
+                    {accountFilters.map(filter => (
                         <TouchableOpacity
                             key={filter.id}
                             style={[

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Platform, ActivityIndicator, Alert } from 'react-native';
 import { useFinance } from '../src/context/FinanceContext';
 import { useThemeColors, Typography } from '../src/theme/colors';
-import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, ACCOUNTS, TransactionType } from '../src/models';
+import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, TransactionType } from '../src/models';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { getTransaction } from '../src/database/db';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -65,7 +65,18 @@ import * as Haptics from 'expo-haptics';
 
 export default function AddTransaction() {
     const Colors = useThemeColors();
-    const { addTransaction, updateTransaction, transactions, customCategories, addCustomCategory, deleteCustomCategory, updateCustomCategory } = useFinance();
+    const { 
+        addTransaction, 
+        updateTransaction, 
+        transactions, 
+        customCategories, 
+        addCustomCategory, 
+        deleteCustomCategory, 
+        updateCustomCategory,
+        bankAccounts,
+        creditCards,
+        cashAccountName
+    } = useFinance();
     const router = useRouter();
     const params = useLocalSearchParams();
     const editId = params.id as string;
@@ -283,7 +294,24 @@ export default function AddTransaction() {
                 <View style={styles.card}>
                     <Text style={[styles.label, { color: Colors.textMuted }]}>Account</Text>
                     <View style={styles.chipScroll}>
-                        {ACCOUNTS.map((acc) => (
+                        {/* Cash */}
+                        <TouchableOpacity
+                            style={[
+                                styles.chip,
+                                { backgroundColor: Colors.surface, borderColor: Colors.border },
+                                accountId === 'cash' && { backgroundColor: '#4CAF50', borderColor: '#4CAF50' }
+                            ]}
+                            onPress={() => setAccountId('cash')}
+                        >
+                            <Text style={[
+                                styles.chipText,
+                                { color: Colors.text },
+                                accountId === 'cash' && { color: Colors.white, fontWeight: 'bold' }
+                            ]}>{cashAccountName}</Text>
+                        </TouchableOpacity>
+
+                        {/* Bank Accounts */}
+                        {bankAccounts.map((acc) => (
                             <TouchableOpacity
                                 key={acc.id}
                                 style={[
@@ -297,7 +325,26 @@ export default function AddTransaction() {
                                     styles.chipText,
                                     { color: Colors.text },
                                     accountId === acc.id && { color: Colors.white, fontWeight: 'bold' }
-                                ]}>{acc.name}</Text>
+                                ]}>{acc.bankName}</Text>
+                            </TouchableOpacity>
+                        ))}
+
+                        {/* Credit Cards */}
+                        {creditCards.map((card) => (
+                            <TouchableOpacity
+                                key={card.id}
+                                style={[
+                                    styles.chip,
+                                    { backgroundColor: Colors.surface, borderColor: Colors.border },
+                                    accountId === card.id && { backgroundColor: card.color, borderColor: card.color }
+                                ]}
+                                onPress={() => setAccountId(card.id)}
+                            >
+                                <Text style={[
+                                    styles.chipText,
+                                    { color: Colors.text },
+                                    accountId === card.id && { color: Colors.white, fontWeight: 'bold' }
+                                ]}>{card.cardName}</Text>
                             </TouchableOpacity>
                         ))}
                     </View>
@@ -530,21 +577,21 @@ const styles = StyleSheet.create({
     chipScroll: {
         flexDirection: 'row',
         flexWrap: 'wrap',
-        marginHorizontal: -4,
+        justifyContent: 'space-between',
     },
     chip: {
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderRadius: 24,
+        paddingHorizontal: 4,
+        paddingVertical: 10,
+        borderRadius: 8,
         borderWidth: 1,
-        minWidth: '45%', // Ensure 2 per row on small screens
+        width: '32%', 
         alignItems: 'center',
-        margin: 4,
-        flexGrow: 1,
+        marginBottom: 8,
     },
     chipText: {
         fontWeight: '500',
-        fontSize: 14,
+        fontSize: 11,
+        textAlign: 'center',
     },
     categoryGrid: {
         flexDirection: 'row',

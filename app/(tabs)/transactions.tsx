@@ -14,7 +14,7 @@ const MONTHS = [
 export default function TransactionsHistory() {
     const Colors = useThemeColors();
     const router = useRouter();
-    const { transactions, deleteTransaction } = useFinance();
+    const { transactions, deleteTransaction, bankAccounts, creditCards, cashAccountName } = useFinance();
     const [searchQuery, setSearchQuery] = useState('');
     const [filterType, setFilterType] = useState<'ALL' | 'INCOME' | 'EXPENSE'>('ALL');
 
@@ -60,6 +60,15 @@ export default function TransactionsHistory() {
         }
     };
 
+    const getAccountName = (id: string) => {
+        if (id === 'cash') return cashAccountName;
+        const bank = bankAccounts.find(b => b.id === id);
+        if (bank) return bank.bankName;
+        const card = creditCards.find(c => c.id === id);
+        if (card) return card.cardName;
+        return id;
+    };
+
     const renderItem = ({ item }: { item: any }) => (
         <View style={[styles.transactionItem, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
             <View style={[styles.dateBlock, { borderRightColor: Colors.border }]}>
@@ -77,7 +86,7 @@ export default function TransactionsHistory() {
                 ]}>
                     {item.type === 'INCOME' ? '+' : '-'}₹{item.amount.toLocaleString()}
                 </Text>
-                <Text style={[styles.accountId, { color: Colors.textMuted }]}>{item.accountId}</Text>
+                <Text style={[styles.accountId, { color: Colors.textMuted }]}>{getAccountName(item.accountId)}</Text>
             </View>
             <TouchableOpacity
                 style={[styles.editButton, { borderColor: Colors.border, backgroundColor: Colors.surface }]}

@@ -1,4 +1,4 @@
-import { Transaction } from '../models';
+import { Transaction, BankAccount, CreditCard } from '../models';
 import { db } from './firebaseConfig';
 import {
     collection,
@@ -16,6 +16,8 @@ import {
 const COLLECTION_NAME = 'transactions';
 const USERS_COLLECTION = 'users';
 const PROJECTED_COLLECTION = 'projected_expenses';
+const BANK_ACCOUNTS_COLLECTION = 'bank_accounts';
+const CREDIT_CARDS_COLLECTION = 'credit_cards';
 
 export async function initDatabase() {
     return true;
@@ -115,6 +117,35 @@ export async function deleteTransactionsByRange(userId: string, range: 'all' | '
     return toDelete.length;
 }
 
+export async function deleteTransactionsByAccount(userId: string, accountId: string): Promise<number> {
+    const transactions = await getTransactions(userId);
+    const toDelete = transactions
+        .filter(t => t.accountId === accountId)
+        .map(t => t.id as any);
+
+    const promises = toDelete.map(id => deleteTransaction(id));
+    await Promise.all(promises);
+    return toDelete.length;
+}
+
+export async function migrateTransactions(userId: string, oldAccountId: string, newAccountId: string): Promise<number> {
+    try {
+        const transactions = await getTransactions(userId);
+        const toUpdate = transactions.filter(t => t.accountId === oldAccountId);
+        
+        const promises = toUpdate.map(t => {
+            if (!t.id) return Promise.resolve();
+            return setDoc(doc(db, COLLECTION_NAME, t.id as string), { accountId: newAccountId }, { merge: true });
+        });
+        
+        await Promise.all(promises);
+        return toUpdate.length;
+    } catch (e) {
+        console.error("Error migrating transactions:", e);
+        return 0;
+    }
+}
+
 
 // Projected Expenses (Next Month Planning)
 export async function getProjectedExpenses(userId: string): Promise<any[]> {
@@ -210,3 +241,94 @@ export async function updateCustomCategories(userId: string, categories: any[]) 
         console.error("Error updating custom categories:", e);
     }
 }
+
+// ─── Bank Accounts ─────────────────────────────────────────────────────────
+
+export async function getBankAccounts(userId: string): Promise<BankAccount[]> {
+    try {
+        const q = query(collection(db, BANK_ACCOUNTS_COLLECTION), where('userId', '==', userId));
+        const snap = await getDocs(q);
+        return snap.docs.map(d => ({ id: d.id, ...d.data() } as BankAccount))
+            .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    } catch (e) {
+        console.error('Error getting bank accounts:', e);
+        return [];
+    }
+}
+
+export async function addBankAccount(
+    userId: string,
+    data: Omit<BankAccount, 'id' | 'userId' | 'createdAt'>,
+    customId?: string
+): Promise<string> {
+    const accountData = {
+        ...data,
+        userId,
+        createdAt: new Date().toISOString(),
+    };
+    
+    if (customId) {
+        await setDoc(doc(db, BANK_ACCOUNTS_COLLECTION, customId), accountData);
+        return customId;
+    }
+    
+    const docRef = await addDoc(collection(db, BANK_ACCOUNTS_COLLECTION), accountData);
+    return docRef.id;
+}
+
+export async function updateBankAccount(id: string, data: Partial<BankAccount>): Promise<void> {
+    await setDoc(doc(db, BANK_ACCOUNTS_COLLECTION, id), {
+        ...data,
+        updatedAt: new Date().toISOString(),
+    }, { merge: true });
+}
+
+export async function deleteBankAccount(id: string): Promise<void> {
+    await deleteDoc(doc(db, BANK_ACCOUNTS_COLLECTION, id));
+}
+
+// ─── Credit Cards ───────────────────────────────────────────────────────────
+
+export async function getCreditCards(userId: string): Promise<CreditCard[]> {
+    try {
+        const q = query(collection(db, CREDIT_CARDS_COLLECTION), where('userId', '==', userId));
+        const snap = await getDocs(q);
+        return snap.docs.map(d => ({ id: d.id, ...d.data() } as CreditCard))
+            .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    } catch (e) {
+        console.error('Error getting credit cards:', e);
+        return [];
+    }
+}
+
+export async function addCreditCard(
+    userId: string,
+    data: Omit<CreditCard, 'id' | 'userId' | 'createdAt'>,
+    customId?: string
+): Promise<string> {
+    const cardData = {
+        ...data,
+        userId,
+        createdAt: new Date().toISOString(),
+    };
+
+    if (customId) {
+        await setDoc(doc(db, CREDIT_CARDS_COLLECTION, customId), cardData);
+        return customId;
+    }
+
+    const docRef = await addDoc(collection(db, CREDIT_CARDS_COLLECTION), cardData);
+    return docRef.id;
+}
+
+export async function updateCreditCard(id: string, data: Partial<CreditCard>): Promise<void> {
+    await setDoc(doc(db, CREDIT_CARDS_COLLECTION, id), {
+        ...data,
+        updatedAt: new Date().toISOString(),
+    }, { merge: true });
+}
+
+export async function deleteCreditCard(id: string): Promise<void> {
+    await deleteDoc(doc(db, CREDIT_CARDS_COLLECTION, id));
+}
+

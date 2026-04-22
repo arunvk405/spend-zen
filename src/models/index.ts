@@ -6,7 +6,7 @@ export interface Transaction {
     type: TransactionType;
     category: string;
     date: string; // ISO format
-    accountId: string;
+    accountId: string; // 'cash', bank account Firestore ID, or credit card Firestore ID
     note?: string;
 }
 
@@ -18,12 +18,45 @@ export interface ProjectedExpense {
     createdAt: string;
 }
 
+// Legacy single Account (kept for cash only)
 export interface Account {
-    id: string; // 'cash' | 'bank' | 'credit'
+    id: string;
     name: string;
     balance: number;
     icon: string;
     color: string;
+}
+
+// Multiple Bank Accounts
+export interface BankAccount {
+    id: string;
+    userId: string;
+    bankName: string;
+    accountType: 'Savings' | 'Current' | 'Salary' | 'Other';
+    initialBalance: number; // User-set opening balance
+    color: string;
+    createdAt: string;
+}
+
+export interface BankAccountWithBalance extends BankAccount {
+    computedBalance: number; // initialBalance + income txns - expense txns
+}
+
+// Multiple Credit Cards
+export interface CreditCard {
+    id: string;
+    userId: string;
+    cardName: string;
+    creditLimit: number;
+    dueDay: number; // Day of the month (1-31)
+    color: string;
+    createdAt: string;
+}
+
+export interface CreditCardWithBalance extends CreditCard {
+    usedAmount: number;     // expense txns - payment txns (income txns on this card)
+    dueAmount: number;      // = usedAmount (outstanding)
+    availableBalance: number; // creditLimit - usedAmount
 }
 
 export type Category = {
@@ -56,6 +89,13 @@ export const EXPENSE_CATEGORIES: Category[] = [
     { name: 'Others', icon: 'package', color: '#9E9E9E', type: 'EXPENSE' },
 ];
 
+export const ACCOUNT_COLORS = [
+    '#4CAF50', '#2196F3', '#9C27B0', '#FF9800', '#F44336',
+    '#00BCD4', '#FF5722', '#607D8B', '#E91E63', '#3F51B5',
+    '#009688', '#8BC34A',
+];
+
+// Legacy static accounts (kept for backward compatibility in add.tsx only)
 export const ACCOUNTS: Account[] = [
     { id: 'cash', name: 'Cash in Hand', balance: 0, icon: 'wallet', color: '#4CAF50' },
     { id: 'bank', name: 'Bank Account', balance: 0, icon: 'landmark', color: '#2196F3' },

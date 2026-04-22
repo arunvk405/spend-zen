@@ -19,7 +19,8 @@ import {
     Plus,
     X,
     Save,
-    Calculator
+    Calculator,
+    Landmark
 } from 'lucide-react-native';
 import { updateProfile } from 'firebase/auth';
 import { auth } from '../../src/database/firebaseConfig';
@@ -332,6 +333,12 @@ export default function Settings() {
             <View style={styles.section}>
                 <Text style={[styles.sectionTitle, { color: Colors.textMuted }]}>Account</Text>
                 <View style={[styles.card, { backgroundColor: Colors.surface }]}>
+                    <SettingsItem
+                        icon={Landmark}
+                        label="Manage Accounts & Cards"
+                        color={Colors.primary}
+                        onPress={() => router.push('/manage-accounts')}
+                    />
                     <SettingsItem
                         icon={TrendingUp}
                         label={`Next Month Planning: ₹${Math.round(totalProjectedAmount).toLocaleString()}`}
