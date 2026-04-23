@@ -117,6 +117,17 @@ export async function deleteTransactionsByRange(userId: string, range: 'all' | '
     return toDelete.length;
 }
 
+export async function deleteTransactionsBeforeDate(userId: string, beforeDate: Date): Promise<number> {
+    const transactions = await getTransactions(userId);
+    const toDelete = transactions
+        .filter(t => new Date(t.date) < beforeDate)
+        .map(t => t.id as any);
+
+    const promises = toDelete.map(id => deleteTransaction(id));
+    await Promise.all(promises);
+    return toDelete.length;
+}
+
 export async function deleteTransactionsByAccount(userId: string, accountId: string): Promise<number> {
     const transactions = await getTransactions(userId);
     const toDelete = transactions

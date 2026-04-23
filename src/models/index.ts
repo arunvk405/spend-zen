@@ -1,4 +1,16 @@
 export type TransactionType = 'INCOME' | 'EXPENSE';
+export type HistoryRetentionType = '3months' | '6months' | 'all';
+
+export interface UserProfile {
+    uid: string;
+    email: string;
+    displayName?: string;
+    photoURL?: string;
+    cashAccountName?: string;
+    historyRetention?: HistoryRetentionType;
+    customCategories?: any[];
+}
+
 
 export interface Transaction {
     id: string | number;

@@ -7,10 +7,30 @@ import { useFinance } from '../../src/context/FinanceContext';
 import { useThemeColors } from '../../src/theme/colors';
 import {
     Wallet, Landmark, CreditCard, TrendingUp, TrendingDown,
-    ArrowRight, Briefcase, RotateCcw, Plus, AlertCircle, Pencil
+    ArrowRight, Briefcase, RotateCcw, Plus, AlertCircle, Pencil, Shield
 } from 'lucide-react-native';
 import { format, isSameMonth, isSameYear, parseISO } from 'date-fns';
 import { useRouter } from 'expo-router';
+
+const HoverCard = ({ children, style, onPress, disabled = false }: any) => {
+    const [isHovered, setIsHovered] = useState(false);
+    return (
+        <Pressable
+            onPress={onPress}
+            disabled={disabled}
+            onHoverIn={() => setIsHovered(true)}
+            onHoverOut={() => setIsHovered(false)}
+            style={({ pressed }) => [
+                style,
+                isHovered ? { shadowOpacity: 0.12, shadowRadius: 16, elevation: 8, transform: [{ translateY: -4 }] } : undefined,
+                pressed ? { transform: [{ scale: 0.98 }] } : undefined,
+                Platform.OS === 'web' ? { transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)' } : undefined
+            ] as any}
+        >
+            {children}
+        </Pressable>
+    );
+};
 
 export default function HomeDashboard() {
     const Colors = useThemeColors();
@@ -19,9 +39,12 @@ export default function HomeDashboard() {
         totalBalance, cashBalance, monthlyIncome, monthlyExpenses,
         bankAccounts, totalBankBalance,
         creditCards, totalCreditDue,
-        transactions, loading, clearAccountData,
-        cashAccountName, renameCashAccount
+        transactions, loading, clearAccountData, addTransaction,
+        cashAccountName, renameCashAccount,
+        historyRetention, updateHistoryRetention
     } = useFinance();
+
+
 
     const [confirmCardId, setConfirmCardId] = useState<string | null>(null);
     const [clearing, setClearing] = useState(false);
@@ -51,15 +74,25 @@ export default function HomeDashboard() {
     }, [transactions]);
 
     const handleClearCard = (cardId: string) => {
+        const card = creditCards.find(c => c.id === cardId);
+        if (!card || card.dueAmount <= 0) return;
+
         if (Platform.OS === 'web') {
             setConfirmCardId(cardId);
         } else {
             const { Alert } = require('react-native');
-            Alert.alert('Clear Card Dues', 'Delete all transactions for this card?', [
+            Alert.alert('Record Payment', `Record a payment of ₹${card.dueAmount.toLocaleString()} for ${card.cardName}? This keeps your history.`, [
                 { text: 'Cancel', style: 'cancel' },
-                { text: 'Clear', style: 'destructive', onPress: async () => {
+                { text: 'Record Payment', fontWeight: '700', onPress: async () => {
                     setClearing(true);
-                    await clearAccountData(cardId);
+                    await addTransaction({
+                        amount: card.dueAmount,
+                        type: 'INCOME',
+                        category: 'Credit Card Payment',
+                        date: new Date().toISOString(),
+                        accountId: cardId,
+                        note: `Full payment for ${card.cardName}`
+                    });
                     setClearing(false);
                 }},
             ]);
@@ -68,9 +101,19 @@ export default function HomeDashboard() {
 
     const confirmClear = async () => {
         if (!confirmCardId) return;
+        const card = creditCards.find(c => c.id === confirmCardId);
+        if (!card) return;
+        
         setConfirmCardId(null);
         setClearing(true);
-        await clearAccountData(confirmCardId);
+        await addTransaction({
+            amount: card.dueAmount,
+            type: 'INCOME',
+            category: 'Credit Card Payment',
+            date: new Date().toISOString(),
+            accountId: confirmCardId,
+            note: `Full payment for ${card.cardName}`
+        });
         setClearing(false);
     };
 
@@ -80,17 +123,17 @@ export default function HomeDashboard() {
         <Modal visible={!!confirmCardId} transparent animationType="fade" onRequestClose={() => setConfirmCardId(null)}>
             <Pressable style={s.modalOverlay} onPress={() => setConfirmCardId(null)}>
                 <Pressable style={[s.modalBox, { backgroundColor: Colors.surface }]} onPress={() => {}}>
-                    <Text style={[s.modalTitle, { color: Colors.text }]}>Clear Card Transactions?</Text>
+                    <Text style={[s.modalTitle, { color: Colors.text }]}>Record Payment?</Text>
                     <Text style={[s.modalMsg, { color: Colors.textMuted }]}>
-                        This deletes all transactions for this credit card. The card itself won't be deleted.
+                        This will record a full payment for this card. Your transaction history will be preserved.
                     </Text>
                     <View style={s.modalBtns}>
                         <Pressable style={[s.modalBtn, { borderColor: Colors.border, borderWidth: 1 }]} onPress={() => setConfirmCardId(null)}>
                             <Text style={{ color: Colors.textMuted, fontWeight: '600' }}>Cancel</Text>
                         </Pressable>
-                        <Pressable style={[s.modalBtn, { backgroundColor: '#EF4444' }]} onPress={confirmClear}>
+                        <Pressable style={[s.modalBtn, { backgroundColor: Colors.primary }]} onPress={confirmClear}>
                             {clearing ? <ActivityIndicator color="#fff" size="small" /> :
-                                <Text style={{ color: '#fff', fontWeight: '700' }}>Clear</Text>}
+                                <Text style={{ color: '#fff', fontWeight: '700' }}>Record Payment</Text>}
                         </Pressable>
                     </View>
                 </Pressable>
@@ -100,7 +143,7 @@ export default function HomeDashboard() {
         <ScrollView style={[s.container, { backgroundColor: Colors.background }]} contentContainerStyle={s.content}>
 
             {/* ── Net Balance Summary Card ─────────────────────────── */}
-            <View style={[s.summaryCard, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+            <HoverCard disabled={true} style={[s.summaryCard, { backgroundColor: Colors.surface, borderColor: Colors.border, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 4 }]}>
                 <Text style={[s.summaryLabel, { color: Colors.textMuted }]}>Total Net Balance</Text>
                 <Text style={[s.totalBalance, { color: Colors.text }]}>₹{totalBalance.toLocaleString()}</Text>
                 <View style={[s.statsRow, { borderTopColor: Colors.border }]}>
@@ -131,7 +174,7 @@ export default function HomeDashboard() {
                         </Text>
                     </View>
                 )}
-            </View>
+            </HoverCard>
 
             {/* ── Cash ─────────────────────────────────────────────── */}
             <View style={[s.sectionHeader]}>
@@ -140,7 +183,10 @@ export default function HomeDashboard() {
                     <Pencil size={14} color={Colors.textMuted} />
                 </TouchableOpacity>
             </View>
-            <View style={[s.cashCard, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+            <HoverCard 
+                style={[s.cashCard, { backgroundColor: Colors.surface, borderColor: Colors.border }]}
+                onPress={() => router.push({ pathname: '/reports', params: { accountId: 'cash' } })}
+            >
                 <View style={[s.accountIcon, { backgroundColor: '#4CAF5020' }]}>
                     <Wallet color="#4CAF50" size={22} />
                 </View>
@@ -148,7 +194,7 @@ export default function HomeDashboard() {
                     <Text style={[s.accountName, { color: Colors.textMuted }]}>{cashAccountName}</Text>
                     <Text style={[s.accountBalance, { color: Colors.text }]}>₹{cashBalance.toLocaleString()}</Text>
                 </View>
-            </View>
+            </HoverCard>
 
             {/* ── Bank Accounts ─────────────────────────────────────── */}
             <View style={s.sectionHeader}>
@@ -170,20 +216,24 @@ export default function HomeDashboard() {
             ) : (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.hScroll}>
                     {bankAccounts.map(acc => (
-                        <View key={acc.id} style={[s.bankCard, { backgroundColor: Colors.surface, borderColor: Colors.border, borderTopColor: acc.color, borderTopWidth: 3 }]}>
+                        <HoverCard 
+                            key={acc.id} 
+                            style={[s.bankCard, { backgroundColor: Colors.surface, borderColor: Colors.border, borderTopColor: acc.color, borderTopWidth: 3 }]}
+                            onPress={() => router.push({ pathname: '/reports', params: { accountId: acc.id } })}
+                        >
                             <View style={[s.accountIcon, { backgroundColor: acc.color + '20' }]}>
                                 <Landmark color={acc.color} size={20} />
                             </View>
                             <Text style={[s.accountName, { color: Colors.textMuted }]} numberOfLines={1}>{acc.bankName}</Text>
                             <Text style={[s.accountType, { color: Colors.textMuted }]}>{acc.accountType}</Text>
                             <Text style={[s.accountBalance, { color: Colors.text }]}>₹{acc.computedBalance.toLocaleString()}</Text>
-                        </View>
+                        </HoverCard>
                     ))}
-                    <TouchableOpacity onPress={() => router.push('/manage-accounts')}
+                    <HoverCard onPress={() => router.push('/manage-accounts')}
                         style={[s.bankCard, s.addCard, { borderColor: Colors.border }]}>
                         <Plus size={24} color={Colors.textMuted} />
                         <Text style={[{ color: Colors.textMuted, fontSize: 12, marginTop: 4 }]}>Add</Text>
-                    </TouchableOpacity>
+                    </HoverCard>
                 </ScrollView>
             )}
 
@@ -209,7 +259,11 @@ export default function HomeDashboard() {
             ) : (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.hScroll}>
                     {creditCards.map(card => (
-                        <View key={card.id} style={[s.bankCard, { width: 170, padding: 12, backgroundColor: Colors.surface, borderColor: Colors.border, borderTopColor: card.color, borderTopWidth: 3 }]}>
+                        <HoverCard 
+                            key={card.id} 
+                            style={[s.bankCard, { width: 170, padding: 12, backgroundColor: Colors.surface, borderColor: Colors.border, borderTopColor: card.color, borderTopWidth: 3 }]}
+                            onPress={() => router.push({ pathname: '/reports', params: { accountId: card.id } })}
+                        >
                             <View style={{ position: 'absolute', top: 8, right: 8, zIndex: 1 }}>
                                 <Pressable onPress={() => handleClearCard(card.id)} hitSlop={8}>
                                     <RotateCcw size={10} color={Colors.textMuted} />
@@ -246,13 +300,13 @@ export default function HomeDashboard() {
                                     <Text style={{ fontSize: 11, fontWeight: '700', color: card.dueAmount > 0 ? Colors.expense : Colors.text }}>₹{card.dueAmount.toLocaleString()}</Text>
                                 </View>
                             </View>
-                        </View>
+                        </HoverCard>
                     ))}
-                    <TouchableOpacity onPress={() => router.push('/manage-accounts?tab=credit')}
+                    <HoverCard onPress={() => router.push('/manage-accounts?tab=credit')}
                         style={[s.bankCard, s.addCard, { width: 100, borderColor: Colors.border }]}>
                         <Plus size={24} color={Colors.textMuted} />
                         <Text style={[{ color: Colors.textMuted, fontSize: 12, marginTop: 4 }]}>Add</Text>
-                    </TouchableOpacity>
+                    </HoverCard>
                 </ScrollView>
             )}
 
@@ -267,7 +321,7 @@ export default function HomeDashboard() {
                 </TouchableOpacity>
             </View>
             {currentMonthTransactions.slice(0, 5).map(tx => (
-                <View key={tx.id} style={[s.txItem, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+                <HoverCard disabled={true} key={tx.id} style={[s.txItem, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
                     <View style={[s.txIcon, { backgroundColor: Colors.background }]}>
                         <Briefcase size={18} color={Colors.textMuted} />
                     </View>
@@ -283,7 +337,7 @@ export default function HomeDashboard() {
                         </Text>
                         <Text style={[s.txAccountTag, { color: Colors.textMuted }]}>{getAccountName(tx.accountId)}</Text>
                     </View>
-                </View>
+                </HoverCard>
             ))}
             {currentMonthTransactions.length === 0 && (
                 <View style={[s.emptyCard, { borderColor: Colors.border, flexDirection: 'column', gap: 4, padding: 32 }]}>
@@ -316,13 +370,13 @@ const s = StyleSheet.create({
     sectionTotal: { fontSize: 14, fontWeight: '700' },
     addAccountBtn: { width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
     // Cash
-    cashCard: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 16, padding: 16, borderWidth: 1, marginBottom: 24 },
+    cashCard: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 16, padding: 16, borderWidth: 1, marginBottom: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
     // Bank
-    hScroll: { marginHorizontal: -20, paddingLeft: 20, marginBottom: 24 },
-    bankCard: { width: 148, padding: 14, borderRadius: 18, marginRight: 12, borderWidth: 1 },
-    addCard: { justifyContent: 'center', alignItems: 'center', borderStyle: 'dashed' },
+    hScroll: { marginHorizontal: -20, paddingLeft: 20, marginBottom: 24, paddingBottom: 16, paddingTop: 8, marginTop: -4 },
+    bankCard: { width: 148, padding: 14, borderRadius: 18, marginRight: 12, borderWidth: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
+    addCard: { justifyContent: 'center', alignItems: 'center', borderStyle: 'dashed', shadowOpacity: 0, elevation: 0 },
     // Credit card
-    creditCard: { borderRadius: 18, padding: 16, marginBottom: 14, borderWidth: 1 },
+    creditCard: { borderRadius: 18, padding: 16, marginBottom: 14, borderWidth: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
     creditCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
     creditCardName: { fontSize: 15, fontWeight: '700' },
     creditCardDueDate: { fontSize: 12, marginTop: 2 },
@@ -354,4 +408,16 @@ const s = StyleSheet.create({
     modalMsg: { fontSize: 14, lineHeight: 20, marginBottom: 24 },
     modalBtns: { flexDirection: 'row', gap: 12 },
     modalBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center' },
+    optionBtn: {
+        width: '100%',
+        padding: 16,
+        borderRadius: 12,
+        borderWidth: 1,
+        marginTop: 10,
+        alignItems: 'center',
+    },
+    optionText: {
+        fontSize: 15,
+        fontWeight: '700',
+    }
 });

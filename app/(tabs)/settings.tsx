@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Share, Switch, TextInput, ActivityIndicator, Modal, FlatList, KeyboardAvoidingView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Share, Switch, TextInput, ActivityIndicator, Modal, FlatList, KeyboardAvoidingView, Pressable, Platform } from 'react-native';
 import { useThemeColors, Typography } from '../../src/theme/colors';
 import { Logo } from '../../src/components/Logo';
 import {
@@ -30,11 +30,29 @@ import { useAuth } from '../../src/context/AuthContext';
 import { useRouter } from 'expo-router';
 const SettingsItem = ({ icon: Icon, label, onPress, color, value = undefined, toggle = false }: any) => {
     const Colors = useThemeColors();
+    const [isHovered, setIsHovered] = useState(false);
     return (
-        <TouchableOpacity
-            style={[styles.item, { borderBottomColor: Colors.border }]}
+        <Pressable
+            style={({ pressed }) => [
+                styles.item, 
+                { borderBottomColor: Colors.border },
+                isHovered ? { 
+                    backgroundColor: Colors.surface, 
+                    shadowColor: Colors.primary, 
+                    shadowOffset: { width: 0, height: 2 }, 
+                    shadowOpacity: 0.1, 
+                    shadowRadius: 8, 
+                    elevation: 3,
+                    transform: [{ translateY: -1 }],
+                    borderBottomColor: 'transparent',
+                    zIndex: 10
+                } : undefined,
+                pressed ? { backgroundColor: Colors.primary + '15', transform: [{ scale: 0.99 }] } : undefined,
+                Platform.OS === 'web' ? { transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)' } : undefined
+            ] as any}
             onPress={onPress}
-            activeOpacity={0.7}
+            onHoverIn={() => setIsHovered(true)}
+            onHoverOut={() => setIsHovered(false)}
         >
             <View style={styles.itemLeft}>
                 <View style={[styles.iconBox, { backgroundColor: color + '20' }]}>
@@ -52,20 +70,29 @@ const SettingsItem = ({ icon: Icon, label, onPress, color, value = undefined, to
             ) : (
                 <ChevronRight size={20} color={Colors.textMuted} />
             )}
-        </TouchableOpacity>
+        </Pressable>
     );
 };
 
 import { useTheme } from '../../src/context/ThemeContext';
 
 import * as Haptics from 'expo-haptics';
-import { Platform } from 'react-native';
 
 export default function Settings() {
     const Colors = useThemeColors();
     const router = useRouter();
     const { theme, setTheme } = useTheme();
-    const { clearData, projectedExpenses, projectedNotes, totalProjectedAmount, addProjectedNote, deleteProjectedNote, clearAllProjectedNotes } = useFinance();
+    const { 
+        clearData, 
+        projectedExpenses, 
+        projectedNotes, 
+        totalProjectedAmount, 
+        addProjectedNote, 
+        deleteProjectedNote, 
+        clearAllProjectedNotes,
+        historyRetention,
+        updateHistoryRetention
+    } = useFinance();
 
     const { user, logout } = useAuth();
     const [isEditing, setIsEditing] = useState(false);
@@ -77,6 +104,8 @@ export default function Settings() {
     const [projectedAmount, setProjectedAmount] = useState('');
     const [projectedDesc, setProjectedDesc] = useState('');
     const [isAddingProjected, setIsAddingProjected] = useState(false);
+    const [showRetentionSelector, setShowRetentionSelector] = useState(false);
+
 
     const handleUpdateProfile = async () => {
         if (!user) return;
@@ -202,6 +231,21 @@ export default function Settings() {
         }
     };
 
+    const handleUpdateRetention = () => {
+        if (Platform.OS === 'web') {
+            setShowRetentionSelector(true);
+        } else {
+            Alert.alert("History Retention", "Transactions older than this will be automatically deleted to keep the app fast.", [
+                { text: "Keep All", onPress: () => updateHistoryRetention('all') },
+                { text: "3 Months", onPress: () => updateHistoryRetention('3months') },
+                { text: "6 Months", onPress: () => updateHistoryRetention('6months') },
+                { text: "Cancel", style: "cancel" }
+            ]);
+        }
+    };
+
+
+
     const handleSaveProjected = async () => {
         if (!projectedAmount || !projectedDesc) {
             Alert.alert("Error", "Please fill in both amount and description");
@@ -270,43 +314,59 @@ export default function Settings() {
                         </View>
                         <View style={styles.profileInfo}>
                             {isEditing ? (
-                                <TextInput
-                                    style={[styles.nameInput, { color: Colors.text, borderBottomColor: Colors.primary }]}
-                                    value={name}
-                                    onChangeText={setName}
-                                    autoFocus
-                                    placeholder="Your Name"
-                                    placeholderTextColor={Colors.textMuted}
-                                />
+                                <View style={{ gap: 10 }}>
+                                    <TextInput
+                                        style={[styles.nameInput, { 
+                                            color: Colors.text, 
+                                            backgroundColor: Colors.background,
+                                            borderColor: Colors.border,
+                                            outlineStyle: 'none'
+                                        } as any]}
+                                        value={name}
+                                        onChangeText={setName}
+                                        autoFocus
+                                        placeholder="Your Name"
+                                        placeholderTextColor={Colors.textMuted}
+                                    />
+                                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                                        <TouchableOpacity
+                                            onPress={handleUpdateProfile}
+                                            style={{ backgroundColor: Colors.primary, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8, flex: 1, alignItems: 'center' }}
+                                        >
+                                            {updateLoading ? (
+                                                <ActivityIndicator size="small" color="#fff" />
+                                            ) : (
+                                                <Text style={{ color: '#fff', fontWeight: '600', fontSize: 13 }}>Save Changes</Text>
+                                            )}
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            onPress={() => setIsEditing(false)}
+                                            style={{ backgroundColor: Colors.background, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8, flex: 1, alignItems: 'center', borderWidth: 1, borderColor: Colors.border }}
+                                        >
+                                            <Text style={{ color: Colors.text, fontWeight: '600', fontSize: 13 }}>Cancel</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
                             ) : (
-                                <Text style={[styles.profileName, { color: Colors.text }]}>
-                                    {user?.displayName || 'Zen User'}
-                                </Text>
+                                <>
+                                    <Text style={[styles.profileName, { color: Colors.text }]}>
+                                        {user?.displayName || 'Zen User'}
+                                    </Text>
+                                    <Text style={[styles.profileEmail, { color: Colors.textMuted }]}>
+                                        {user?.email}
+                                    </Text>
+                                </>
                             )}
-                            <Text style={[styles.profileEmail, { color: Colors.textMuted }]}>
-                                {user?.email}
-                            </Text>
                         </View>
-                        <TouchableOpacity
-                            onPress={() => isEditing ? handleUpdateProfile() : setIsEditing(true)}
-                            style={[styles.editBtn, { backgroundColor: Colors.background }]}
-                        >
-                            {updateLoading ? (
-                                <ActivityIndicator size="small" color={Colors.primary} />
-                            ) : (
-                                isEditing ? (
-                                    <Text style={{ color: Colors.primary, fontWeight: '700' }}>Save</Text>
-                                ) : (
-                                    <Edit3 size={18} color={Colors.primary} />
-                                )
-                            )}
-                        </TouchableOpacity>
+                        {!isEditing && (
+                            <TouchableOpacity
+                                onPress={() => setIsEditing(true)}
+                                style={[styles.editBtn, { backgroundColor: Colors.background }]}
+                            >
+                                <Edit3 size={18} color={Colors.primary} />
+                            </TouchableOpacity>
+                        )}
                     </View>
-                    {isEditing && (
-                        <TouchableOpacity style={{ marginTop: 10 }} onPress={() => setIsEditing(false)}>
-                            <Text style={{ color: Colors.expense, textAlign: 'center', fontSize: 12 }}>Cancel</Text>
-                        </TouchableOpacity>
-                    )}
                 </View>
             </View>
 
@@ -379,11 +439,34 @@ export default function Settings() {
             </View>
 
             <View style={styles.section}>
+                <Text style={[styles.sectionTitle, { color: Colors.textMuted }]}>Privacy & History</Text>
+                <View style={[styles.card, { backgroundColor: Colors.surface }]}>
+                    <View style={[styles.item, { borderBottomColor: Colors.border, paddingVertical: 12 }]}>
+                        <View style={styles.itemLeft}>
+                            <View style={[styles.iconBox, { backgroundColor: Colors.primary + '20' }]}>
+                                <Shield size={20} color={Colors.primary} />
+                            </View>
+                            <View>
+                                <Text style={[styles.itemLabel, { color: Colors.text }]}>Auto-Clear History</Text>
+                                <Text style={{ fontSize: 12, color: Colors.textMuted }}>Currently: {historyRetention === 'all' ? 'Never delete' : `Delete after ${historyRetention === '3months' ? '3' : '6'} months`}</Text>
+                            </View>
+                        </View>
+                        <TouchableOpacity 
+                            onPress={handleUpdateRetention}
+                            style={{ backgroundColor: Colors.primary, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 }}
+                        >
+                            <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>Change</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </View>
+
+            <View style={styles.section}>
                 <Text style={[styles.sectionTitle, { color: Colors.textMuted }]}>About</Text>
                 <View style={[styles.card, { backgroundColor: Colors.surface }]}>
                     <SettingsItem
                         icon={Info}
-                        label="Version 1.0.0 (Spend Zen)"
+                        label="Version 2.0.0 (Spend Zen)"
                         color={Colors.textMuted}
                         onPress={() => { }}
                     />
@@ -485,7 +568,7 @@ export default function Settings() {
                                         </View>
                                         <View style={styles.noteRight}>
                                             <Text style={[styles.noteAmount, { color: Colors.primary }]}>₹{note.amount.toLocaleString()}</Text>
-                                            <TouchableOpacity onPress={() => handleDeleteProjected(note.id)}>
+                                            <TouchableOpacity onPress={() => deleteProjectedNote(note.id)}>
                                                 <Trash2 size={16} color={Colors.expense} />
                                             </TouchableOpacity>
                                         </View>
@@ -495,6 +578,40 @@ export default function Settings() {
                         </ScrollView>
                     </KeyboardAvoidingView>
                 </View>
+            </Modal>
+
+            {/* Retention Selection Modal (mainly for Web) */}
+            <Modal
+                visible={showRetentionSelector}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowRetentionSelector(false)}
+            >
+                <Pressable style={styles.modalOverlay} onPress={() => setShowRetentionSelector(false)}>
+                    <View style={[styles.modalContent, { backgroundColor: Colors.surface, height: 'auto', padding: 24, borderRadius: 24 }]}>
+                        <Text style={[styles.modalTitle, { color: Colors.text, textAlign: 'center', marginBottom: 12 }]}>History Retention</Text>
+                        <Text style={{ color: Colors.textMuted, textAlign: 'center', marginBottom: 24 }}>Transactions older than this will be automatically deleted.</Text>
+                        
+                        <TouchableOpacity 
+                            style={[styles.webOption, { borderColor: Colors.border }]} 
+                            onPress={() => { updateHistoryRetention('3months'); setShowRetentionSelector(false); }}
+                        >
+                            <Text style={{ color: Colors.text, fontWeight: '600' }}>Last 3 Months (Default)</Text>
+                        </TouchableOpacity>
+                        
+                        <TouchableOpacity 
+                            style={[styles.webOption, { borderColor: Colors.border }]} 
+                            onPress={() => { updateHistoryRetention('6months'); setShowRetentionSelector(false); }}
+                        >
+                            <Text style={{ color: Colors.text, fontWeight: '600' }}>Last 6 Months</Text>
+                        </TouchableOpacity>
+
+
+                        <TouchableOpacity style={{ marginTop: 20 }} onPress={() => setShowRetentionSelector(false)}>
+                            <Text style={{ color: Colors.expense, textAlign: 'center', fontWeight: '600' }}>Cancel</Text>
+                        </TouchableOpacity>
+                    </View>
+                </Pressable>
             </Modal>
         </ScrollView>
     );
@@ -576,11 +693,12 @@ const styles = StyleSheet.create({
         borderRadius: 10,
     },
     nameInput: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        paddingVertical: 4,
-        borderBottomWidth: 1,
-        marginBottom: 4,
+        fontSize: 16,
+        fontWeight: '600',
+        paddingVertical: 10,
+        paddingHorizontal: 14,
+        borderWidth: 1,
+        borderRadius: 10,
     },
     // Modal Styles
     modalOverlay: {
@@ -722,4 +840,12 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: 'bold',
     },
+    webOption: {
+        width: '100%',
+        padding: 16,
+        borderRadius: 12,
+        borderWidth: 1,
+        marginBottom: 12,
+        alignItems: 'center',
+    }
 });

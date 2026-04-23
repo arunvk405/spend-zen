@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, ScrollVi
 import { useRouter } from 'expo-router';
 import { useFinance } from '../../src/context/FinanceContext';
 import { useThemeColors, Typography } from '../../src/theme/colors';
-import { Search, Trash2, Calendar, ChevronLeft, ChevronRight, Pencil } from 'lucide-react-native';
+import { Search, Trash2, Calendar, ChevronLeft, ChevronRight, Pencil, Info } from 'lucide-react-native';
 import { format, startOfMonth, endOfMonth, isWithinInterval, parseISO, isSameMonth, isSameYear } from 'date-fns';
 
 const MONTHS = [
@@ -14,7 +14,7 @@ const MONTHS = [
 export default function TransactionsHistory() {
     const Colors = useThemeColors();
     const router = useRouter();
-    const { transactions, deleteTransaction, bankAccounts, creditCards, cashAccountName } = useFinance();
+    const { transactions, deleteTransaction, bankAccounts, creditCards, cashAccountName, historyRetention } = useFinance();
     const [searchQuery, setSearchQuery] = useState('');
     const [filterType, setFilterType] = useState<'ALL' | 'INCOME' | 'EXPENSE'>('ALL');
 
@@ -175,6 +175,19 @@ export default function TransactionsHistory() {
                         </TouchableOpacity>
                     ))}
                 </View>
+
+                {historyRetention && (
+                    <TouchableOpacity 
+                        style={[styles.infoBanner, { backgroundColor: Colors.primary + '10', borderColor: Colors.primary + '20' }]}
+                        onPress={() => router.push('/settings')}
+                    >
+                        <Info size={14} color={Colors.primary} />
+                        <Text style={[styles.infoText, { color: Colors.primary }]}>
+                            History Policy: Auto-clear older than {historyRetention === '3months' ? '3' : '6'} months. <Text style={{ fontWeight: 'bold', textDecorationLine: 'underline' }}>Change in Settings</Text>
+                        </Text>
+                    </TouchableOpacity>
+                )}
+
             </View>
 
             <FlatList
@@ -248,7 +261,22 @@ const styles = StyleSheet.create({
     filterRow: {
         flexDirection: 'row',
         gap: 10,
+        marginBottom: 16,
     },
+    infoBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 10,
+        borderRadius: 10,
+        borderWidth: 1,
+        gap: 8,
+    },
+    infoText: {
+        fontSize: 12,
+        fontWeight: '500',
+        flex: 1,
+    },
+
     filterChip: {
         paddingHorizontal: 16,
         paddingVertical: 8,

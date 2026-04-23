@@ -6,6 +6,8 @@ import {
     CreditCard,
     CreditCardWithBalance,
     ProjectedExpense,
+    HistoryRetentionType,
+    UserProfile,
 } from '../models';
 import {
     initDatabase,
@@ -31,8 +33,9 @@ import {
     updateCreditCard as updateCreditCardDb,
     deleteCreditCard as deleteCreditCardDb,
     migrateTransactions,
+    deleteTransactionsBeforeDate,
 } from '../database/db';
-import { isSameMonth, isSameYear, parseISO } from 'date-fns';
+import { isSameMonth, isSameYear, parseISO, subMonths } from 'date-fns';
 import { useAuth } from './AuthContext';
 
 interface FinanceContextType {
@@ -81,6 +84,9 @@ interface FinanceContextType {
     deleteCreditCard: (id: string) => Promise<void>;
     // Cash renaming
     renameCashAccount: (newName: string) => Promise<void>;
+    // History retention
+    historyRetention: HistoryRetentionType;
+    updateHistoryRetention: (retention: HistoryRetentionType) => Promise<void>;
 }
 
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
@@ -98,6 +104,8 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const [totalCreditDue, setTotalCreditDue] = useState(0);
     const [monthlyIncome, setMonthlyIncome] = useState(0);
     const [monthlyExpenses, setMonthlyExpenses] = useState(0);
+    const [historyRetention, setHistoryRetention] = useState<HistoryRetentionType>('3months');
+    const [hasClearedSession, setHasClearedSession] = useState(false);
     const [projectedExpenses, setProjectedExpenses] = useState(0);
     const [projectedNotes, setProjectedNotes] = useState<ProjectedExpense[]>([]);
     const [totalProjectedAmount, setTotalProjectedAmount] = useState(0);
@@ -118,6 +126,25 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
             // ── Auto-Migration for Legacy Users & Default Provisioning
             let needsRefresh = false;
+
+            // ── Auto Clear History Logic ────────────────────────────────────
+            const userProfile = profile as UserProfile;
+            if (userProfile?.historyRetention && userProfile.historyRetention !== 'all' && !hasClearedSession) {
+                const months = userProfile.historyRetention === '3months' ? 3 : 6;
+                const cutoff = subMonths(new Date(), months);
+                const clearedCount = await deleteTransactionsBeforeDate(user.uid, cutoff);
+                if (clearedCount > 0) {
+                    console.log(`Auto-cleared ${clearedCount} old transactions.`);
+                    // Refresh transactions if we cleared some
+                    const updatedTxs = await getTransactions(user.uid);
+                    txs.splice(0, txs.length, ...updatedTxs);
+                }
+                setHasClearedSession(true);
+            }
+
+            if (userProfile?.historyRetention) {
+                setHistoryRetention(userProfile.historyRetention);
+            }
             try {
                 // 1. Migrate legacy bank transactions if they exist
                 const legacyBankTxs = txs.filter(t => t.accountId === 'bank');
@@ -391,6 +418,23 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         }
     };
 
+    const updateHistoryRetention = async (retention: HistoryRetentionType) => {
+        if (!user) return;
+        try {
+            await upsertUserProfile(user.uid, { historyRetention: retention });
+            setHistoryRetention(retention);
+            // Optionally trigger a clear immediately
+            if (retention !== 'all') {
+                const months = retention === '3months' ? 3 : 6;
+                const cutoff = subMonths(new Date(), months);
+                await deleteTransactionsBeforeDate(user.uid, cutoff);
+                await refreshData();
+            }
+        } catch (e) {
+            console.error("Error updating history retention:", e);
+        }
+    };
+
     return (
         <FinanceContext.Provider value={{
             transactions,
@@ -415,6 +459,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
             addBankAccount, updateBankAccount, deleteBankAccount,
             addCreditCard, updateCreditCard, deleteCreditCard,
             renameCashAccount,
+            historyRetention, updateHistoryRetention,
         }}>
             {children}
         </FinanceContext.Provider>

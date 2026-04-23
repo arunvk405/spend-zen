@@ -1,10 +1,32 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Dimensions, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, ScrollView, TouchableOpacity, Pressable, Platform } from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
+
 import { useThemeColors, Typography } from '../../src/theme/colors';
 import { PieChart } from 'react-native-chart-kit';
 import { useFinance } from '../../src/context/FinanceContext';
 import { startOfMonth, endOfMonth, isWithinInterval, parseISO, isSameMonth, isSameYear } from 'date-fns';
 import { ChevronLeft, ChevronRight } from 'lucide-react-native';
+
+const HoverCard = ({ children, style, onPress, disabled = false }: any) => {
+    const [isHovered, setIsHovered] = useState(false);
+    return (
+        <Pressable
+            onPress={onPress}
+            disabled={disabled}
+            onHoverIn={() => setIsHovered(true)}
+            onHoverOut={() => setIsHovered(false)}
+            style={({ pressed }) => [
+                style,
+                isHovered ? { shadowOpacity: 0.12, shadowRadius: 16, elevation: 8, transform: [{ translateY: -4 }] } : undefined,
+                pressed ? { transform: [{ scale: 0.98 }] } : undefined,
+                Platform.OS === 'web' ? { transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)' } : undefined
+            ] as any}
+        >
+            {children}
+        </Pressable>
+    );
+};
 
 const screenWidth = Dimensions.get('window').width;
 
@@ -27,8 +49,17 @@ export default function Reports() {
         if (card) return card.cardName;
         return id;
     };
-    const [selectedAccount, setSelectedAccount] = useState('all');
+    const params = useLocalSearchParams();
+    const [selectedAccount, setSelectedAccount] = useState((params.accountId as string) || 'all');
     const [selectedDate, setSelectedDate] = useState(new Date());
+
+    // Sync selectedAccount if params change
+    React.useEffect(() => {
+        if (params.accountId) {
+            setSelectedAccount(params.accountId as string);
+        }
+    }, [params.accountId]);
+
 
     const accountFilters = useMemo(() => {
         const filters = [{ id: 'all', label: 'All' }, { id: 'cash', label: cashAccountName }];
@@ -133,7 +164,7 @@ export default function Reports() {
                     {MONTHS.map((month, index) => {
                         const isSelected = selectedDate.getMonth() === index;
                         return (
-                            <TouchableOpacity
+                            <HoverCard
                                 key={month}
                                 style={[
                                     styles.monthChip,
@@ -145,7 +176,7 @@ export default function Reports() {
                                     styles.monthText,
                                     { color: isSelected ? Colors.white : Colors.textMuted }
                                 ]}>{month}</Text>
-                            </TouchableOpacity>
+                            </HoverCard>
                         );
                     })}
                 </ScrollView>
@@ -157,7 +188,7 @@ export default function Reports() {
                     contentContainerStyle={styles.filterContent}
                 >
                     {accountFilters.map(filter => (
-                        <TouchableOpacity
+                        <HoverCard
                             key={filter.id}
                             style={[
                                 styles.filterChip,
@@ -171,13 +202,13 @@ export default function Reports() {
                             ]}>
                                 {filter.label}
                             </Text>
-                        </TouchableOpacity>
+                        </HoverCard>
                     ))}
                 </ScrollView>
             </View>
 
             {/* Income by Account */}
-            <View style={[styles.card, { backgroundColor: Colors.surface }]}>
+            <HoverCard disabled={true} style={[styles.card, { backgroundColor: Colors.surface, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 4 }]}>
                 <View style={styles.cardHeader}>
                     <Text style={[styles.cardTitle, { color: Colors.text }]}>Income by Type</Text>
                     <Text style={[styles.cardTag, { color: Colors.primary, backgroundColor: Colors.primary + '15' }]}>Source</Text>
@@ -197,10 +228,10 @@ export default function Reports() {
                 ) : (
                     <Text style={styles.emptyText}>No income data available.</Text>
                 )}
-            </View>
+            </HoverCard>
 
             {/* Expense Breakdown */}
-            <View style={[styles.card, { backgroundColor: Colors.surface }]}>
+            <HoverCard disabled={true} style={[styles.card, { backgroundColor: Colors.surface, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 4 }]}>
                 <View style={styles.cardHeader}>
                     <Text style={[styles.cardTitle, { color: Colors.text }]}>Monthly Expenses</Text>
                     <Text style={[styles.cardTag, { color: Colors.expense, backgroundColor: Colors.expense + '15' }]}>Categories</Text>
@@ -220,7 +251,7 @@ export default function Reports() {
                 ) : (
                     <Text style={styles.emptyText}>No expenses yet this month.</Text>
                 )}
-            </View>
+            </HoverCard>
         </ScrollView>
     );
 }
@@ -256,6 +287,9 @@ const styles = StyleSheet.create({
         marginBottom: 16,
         marginHorizontal: -20,
         paddingHorizontal: 20,
+        paddingTop: 8,
+        paddingBottom: 8,
+        marginTop: -8,
     },
     monthChip: {
         paddingHorizontal: 14,
@@ -271,6 +305,9 @@ const styles = StyleSheet.create({
     },
     filterContainer: {
         marginBottom: 10,
+        paddingTop: 8,
+        paddingBottom: 8,
+        marginTop: -8,
     },
     filterContent: {
         paddingRight: 20,
