@@ -1,15 +1,63 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, ScrollView, Pressable, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFinance } from '../../src/context/FinanceContext';
 import { useThemeColors, Typography } from '../../src/theme/colors';
-import { Search, Trash2, Calendar, ChevronLeft, ChevronRight, Pencil, Info } from 'lucide-react-native';
+import { 
+    Search, Trash2, Calendar, ChevronLeft, ChevronRight, Pencil, Info,
+    Briefcase, PiggyBank, Gift, TrendingUp, Laptop, Package,
+    Utensils, Activity, Home, Car, User, PawPrint, FileText, Film, CreditCard, Wallet, Landmark
+} from 'lucide-react-native';
+import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from '../../src/models';
 import { format, startOfMonth, endOfMonth, isWithinInterval, parseISO, isSameMonth, isSameYear } from 'date-fns';
 
 const MONTHS = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
 ];
+
+const HoverCard = ({ children, style, onPress, disabled = false }: any) => {
+    const [isHovered, setIsHovered] = useState(false);
+    return (
+        <Pressable
+            onPress={onPress}
+            disabled={disabled}
+            onHoverIn={() => setIsHovered(true)}
+            onHoverOut={() => setIsHovered(false)}
+            style={({ pressed }) => [
+                style,
+                isHovered ? { shadowOpacity: 0.12, shadowRadius: 16, elevation: 8, transform: [{ translateY: -4 }] } : undefined,
+                pressed ? { transform: [{ scale: 0.98 }] } : undefined,
+                Platform.OS === 'web' ? { transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)' } : undefined
+            ] as any}
+        >
+            {children}
+        </Pressable>
+    );
+};
+
+const IconRenderer = ({ name, color, size = 20 }: { name: string, color: string, size?: number }) => {
+    switch (name) {
+        case 'briefcase': return <Briefcase color={color} size={size} />;
+        case 'piggy-bank': return <PiggyBank color={color} size={size} />;
+        case 'gift': return <Gift color={color} size={size} />;
+        case 'trending-up': return <TrendingUp color={color} size={size} />;
+        case 'laptop': return <Laptop color={color} size={size} />;
+        case 'utensils': return <Utensils color={color} size={size} />;
+        case 'car': return <Car color={color} size={size} />;
+        case 'home': return <Home color={color} size={size} />;
+        case 'user': return <User color={color} size={size} />;
+        case 'paw-print': return <PawPrint color={color} size={size} />;
+        case 'film': return <Film color={color} size={size} />;
+        case 'file-text': return <FileText color={color} size={size} />;
+        case 'wallet': return <Wallet color={color} size={size} />;
+        case 'landmark': return <Landmark color={color} size={size} />;
+        case 'credit-card': return <CreditCard color={color} size={size} />;
+        case 'cross': return <Activity color={color} size={size} />;
+        case 'package': return <Package color={color} size={size} />;
+        default: return <Package color={color} size={size} />;
+    }
+};
 
 export default function TransactionsHistory() {
     const Colors = useThemeColors();
@@ -47,16 +95,30 @@ export default function TransactionsHistory() {
     };
 
     const handleDelete = async (item: any) => {
-        const confirmed = window.confirm(
-            `Are you sure you want to delete this ${item.type.toLowerCase()} transaction of ₹${item.amount}?`
-        );
-
-        if (confirmed) {
-            try {
-                await deleteTransaction(item.id);
-            } catch (error) {
-                window.alert('Failed to delete transaction');
+        if (Platform.OS === 'web') {
+            if (window.confirm(`Are you sure you want to delete this ${item.type.toLowerCase()} transaction of ₹${item.amount}?`)) {
+                try {
+                    await deleteTransaction(item.id);
+                } catch (error) {
+                    window.alert('Failed to delete transaction');
+                }
             }
+        } else {
+            const { Alert } = require('react-native');
+            Alert.alert(
+                'Delete Transaction',
+                `Are you sure you want to delete this ${item.type.toLowerCase()} transaction of ₹${item.amount}?`,
+                [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Delete', style: 'destructive', onPress: async () => {
+                        try {
+                            await deleteTransaction(item.id);
+                        } catch (error) {
+                            Alert.alert('Error', 'Failed to delete transaction');
+                        }
+                    }},
+                ]
+            );
         }
     };
 
@@ -69,39 +131,52 @@ export default function TransactionsHistory() {
         return id;
     };
 
-    const renderItem = ({ item }: { item: any }) => (
-        <View style={[styles.transactionItem, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
-            <View style={[styles.dateBlock, { borderRightColor: Colors.border }]}>
-                <Text style={[styles.dateDay, { color: Colors.text }]}>{format(new Date(item.date), 'dd')}</Text>
-                <Text style={[styles.dateMonth, { color: Colors.textMuted }]}>{format(new Date(item.date), 'MMM')}</Text>
+    const allCategories = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES];
+
+    const renderItem = ({ item }: { item: any }) => {
+        const categoryData = allCategories.find(c => c.name === item.category && c.type === item.type) || 
+                           allCategories.find(c => c.name === item.category) ||
+                           { icon: 'package', color: Colors.textMuted };
+
+        return (
+            <View style={[styles.transactionItem, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+                <View style={[styles.dateBlock, { borderRightColor: Colors.border }]}>
+                    <Text style={[styles.dateDay, { color: Colors.text }]}>{format(new Date(item.date), 'dd')}</Text>
+                    <Text style={[styles.dateMonth, { color: Colors.textMuted }]}>{format(new Date(item.date), 'MMM')}</Text>
+                </View>
+                <View style={styles.iconContainer}>
+                    <View style={[styles.iconCircle, { backgroundColor: categoryData.color + '15' }]}>
+                        <IconRenderer name={categoryData.icon} color={categoryData.color} size={22} />
+                    </View>
+                </View>
+                <View style={styles.txDetails}>
+                    <Text style={[styles.txCategory, { color: Colors.text }]}>{item.category}</Text>
+                    <Text style={[styles.txNote, { color: Colors.textMuted }]} numberOfLines={1}>{item.note || 'No note'}</Text>
+                </View>
+                <View style={styles.amountBlock}>
+                    <Text style={[
+                        styles.txAmount,
+                        { color: item.type === 'INCOME' ? Colors.income : Colors.expense }
+                    ]}>
+                        {item.type === 'INCOME' ? '+' : '-'}₹{item.amount.toLocaleString()}
+                    </Text>
+                    <Text style={[styles.accountId, { color: Colors.textMuted }]}>{getAccountName(item.accountId)}</Text>
+                </View>
+                <TouchableOpacity
+                    style={[styles.editButton, { borderColor: Colors.border, backgroundColor: Colors.surface }]}
+                    onPress={() => router.push({ pathname: '/add', params: { id: item.id } })}
+                >
+                    <Pencil color={Colors.primary} size={18} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                    style={[styles.deleteButton, { borderColor: Colors.border, backgroundColor: Colors.surface }]}
+                    onPress={() => handleDelete(item)}
+                >
+                    <Trash2 color={Colors.expense} size={18} />
+                </TouchableOpacity>
             </View>
-            <View style={styles.txDetails}>
-                <Text style={[styles.txCategory, { color: Colors.text }]}>{item.category}</Text>
-                <Text style={[styles.txNote, { color: Colors.textMuted }]} numberOfLines={1}>{item.note || 'No note'}</Text>
-            </View>
-            <View style={styles.amountBlock}>
-                <Text style={[
-                    styles.txAmount,
-                    { color: item.type === 'INCOME' ? Colors.income : Colors.expense }
-                ]}>
-                    {item.type === 'INCOME' ? '+' : '-'}₹{item.amount.toLocaleString()}
-                </Text>
-                <Text style={[styles.accountId, { color: Colors.textMuted }]}>{getAccountName(item.accountId)}</Text>
-            </View>
-            <TouchableOpacity
-                style={[styles.editButton, { borderColor: Colors.border, backgroundColor: Colors.surface }]}
-                onPress={() => router.push({ pathname: '/add', params: { id: item.id } })}
-            >
-                <Pencil color={Colors.primary} size={20} />
-            </TouchableOpacity>
-            <TouchableOpacity
-                style={[styles.deleteButton, { borderColor: Colors.border, backgroundColor: Colors.surface }]}
-                onPress={() => handleDelete(item)}
-            >
-                <Trash2 color={Colors.expense} size={20} />
-            </TouchableOpacity>
-        </View>
-    );
+        );
+    };
 
     return (
         <View style={[styles.container, { backgroundColor: Colors.background }]}>
@@ -124,7 +199,7 @@ export default function TransactionsHistory() {
                     {MONTHS.map((month, index) => {
                         const isSelected = selectedDate.getMonth() === index;
                         return (
-                            <TouchableOpacity
+                            <HoverCard
                                 key={month}
                                 style={[
                                     styles.monthChip,
@@ -136,7 +211,7 @@ export default function TransactionsHistory() {
                                     styles.monthText,
                                     { color: isSelected ? Colors.white : Colors.textMuted }
                                 ]}>{month}</Text>
-                            </TouchableOpacity>
+                            </HoverCard>
                         );
                     })}
                 </ScrollView>
@@ -211,6 +286,7 @@ const styles = StyleSheet.create({
     },
     header: {
         padding: 20,
+        paddingBottom: 10,
         borderBottomWidth: 1,
     },
     yearRow: {
@@ -231,17 +307,19 @@ const styles = StyleSheet.create({
         marginBottom: 16,
         marginHorizontal: -20,
         paddingHorizontal: 20,
+        paddingTop: 8,
+        paddingBottom: 8,
     },
     monthChip: {
-        paddingHorizontal: 14,
-        paddingVertical: 6,
+        paddingHorizontal: 16,
+        paddingVertical: 8,
         borderRadius: 12,
         marginRight: 8,
         borderWidth: 1,
         borderColor: 'transparent',
     },
     monthText: {
-        fontSize: 13,
+        fontSize: 14,
         fontWeight: '600',
     },
     searchBar: {
@@ -301,9 +379,23 @@ const styles = StyleSheet.create({
     dateBlock: {
         alignItems: 'center',
         justifyContent: 'center',
-        paddingRight: 16,
+        paddingRight: 12,
         borderRightWidth: 1,
-        width: 50,
+        width: 45,
+    },
+    iconContainer: {
+        marginLeft: 12,
+    },
+    iconCircle: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    txDetails: {
+        flex: 1,
+        paddingHorizontal: 12,
     },
     dateDay: {
         fontSize: 20,
@@ -314,10 +406,6 @@ const styles = StyleSheet.create({
         fontSize: 12,
         fontWeight: '400',
         textTransform: 'uppercase',
-    },
-    txDetails: {
-        flex: 1,
-        paddingHorizontal: 16,
     },
     txCategory: {
         fontSize: 16,

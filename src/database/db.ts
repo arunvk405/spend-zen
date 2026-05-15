@@ -118,15 +118,21 @@ export async function deleteTransactionsByRange(userId: string, range: 'all' | '
 }
 
 export async function deleteTransactionsBeforeDate(userId: string, beforeDate: Date): Promise<number> {
+    // To avoid needing a composite index (userId + date), we fetch by userId and filter locally
+    // This is safer for users who haven't set up indexes.
     const transactions = await getTransactions(userId);
     const toDelete = transactions
         .filter(t => new Date(t.date) < beforeDate)
-        .map(t => t.id as any);
+        .map(t => t.id as string);
+
+    if (toDelete.length === 0) return 0;
 
     const promises = toDelete.map(id => deleteTransaction(id));
     await Promise.all(promises);
     return toDelete.length;
 }
+
+
 
 export async function deleteTransactionsByAccount(userId: string, accountId: string): Promise<number> {
     const transactions = await getTransactions(userId);

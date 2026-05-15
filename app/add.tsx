@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Platform, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Platform, ActivityIndicator, Alert, Pressable } from 'react-native';
 import { useFinance } from '../src/context/FinanceContext';
 import { useThemeColors, Typography } from '../src/theme/colors';
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, TransactionType } from '../src/models';
@@ -7,6 +7,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { getTransaction } from '../src/database/db';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { format } from 'date-fns';
+import { BeautifulDatePicker } from '../src/components/BeautifulDatePicker';
 import {
     Check,
     ArrowLeft,
@@ -90,6 +91,9 @@ export default function AddTransaction() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isInitialLoading, setIsInitialLoading] = useState(!!editId);
     const [showDatePicker, setShowDatePicker] = useState(false);
+    const [showWebPicker, setShowWebPicker] = useState(false);
+
+    const dateInputRef = React.useRef<any>(null);
 
     const onDateChange = (event: any, selectedDate?: Date) => {
         const currentDate = selectedDate || new Date(date);
@@ -435,27 +439,36 @@ export default function AddTransaction() {
                 </View>
 
                 {/* Date Selection */}
-                <View style={styles.card}>
+                <View style={[styles.card, Platform.OS === 'web' && { zIndex: showWebPicker ? 10000 : 1 }]}>
                     <Text style={[styles.label, { color: Colors.textMuted }]}>Date</Text>
                     {Platform.OS === 'web' ? (
-                        <View style={[styles.dateInputContainer, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
-                            <CalendarIcon color={Colors.textMuted} size={20} />
-                            <input
-                                type="date"
-                                value={new Date(date).toISOString().split('T')[0]}
-                                onChange={(e) => setDate(new Date(e.target.value).toISOString())}
-                                style={{
-                                    background: 'transparent',
-                                    border: 'none',
-                                    color: Colors.text,
-                                    fontSize: 16,
-                                    flex: 1,
-                                    marginLeft: 10,
-                                    padding: '12px 0',
-                                    outline: 'none',
-                                    fontFamily: 'inherit'
-                                }}
-                            />
+                        <View style={{ width: '100%' }}>
+                            <TouchableOpacity 
+                                activeOpacity={0.7}
+                                onPress={() => setShowWebPicker(!showWebPicker)}
+                                style={[styles.datePickerButton, { backgroundColor: Colors.surface, borderColor: Colors.border }]}
+                            >
+                                <CalendarIcon color={Colors.primary} size={20} />
+                                <Text style={[styles.datePickerText, { color: Colors.text }]}>
+                                    {format(new Date(date), 'dd MMMM yyyy')}
+                                </Text>
+                            </TouchableOpacity>
+                            
+                            {showWebPicker && (
+                                <>
+                                    <Pressable 
+                                        style={{ position: (Platform.OS === 'web' ? 'fixed' : 'absolute') as any, top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.02)', zIndex: 9000 }} 
+                                        onPress={() => setShowWebPicker(false)}
+                                    />
+                                    <View style={{ position: 'absolute', top: 55, left: 0, zIndex: 10000 }}>
+                                        <BeautifulDatePicker 
+                                            value={new Date(date)} 
+                                            onChange={(d) => { setDate(d.toISOString()); setShowWebPicker(false); }} 
+                                            onClose={() => setShowWebPicker(false)} 
+                                        />
+                                    </View>
+                                </>
+                            )}
                         </View>
                     ) : (
                         <>

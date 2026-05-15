@@ -7,8 +7,10 @@ import { useFinance } from '../../src/context/FinanceContext';
 import { useThemeColors } from '../../src/theme/colors';
 import {
     Wallet, Landmark, CreditCard, TrendingUp, TrendingDown,
-    ArrowRight, Briefcase, RotateCcw, Plus, AlertCircle, Pencil, Shield
+    ArrowRight, Briefcase, RotateCcw, Plus, AlertCircle, Pencil, Shield,
+    PiggyBank, Gift, Laptop, Package, Utensils, Activity, Home, Car, User, PawPrint, FileText, Film
 } from 'lucide-react-native';
+import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from '../../src/models';
 import { format, isSameMonth, isSameYear, parseISO } from 'date-fns';
 import { useRouter } from 'expo-router';
 
@@ -32,6 +34,29 @@ const HoverCard = ({ children, style, onPress, disabled = false }: any) => {
     );
 };
 
+const IconRenderer = ({ name, color, size = 18 }: { name: string, color: string, size?: number }) => {
+    switch (name) {
+        case 'briefcase': return <Briefcase color={color} size={size} />;
+        case 'piggy-bank': return <PiggyBank color={color} size={size} />;
+        case 'gift': return <Gift color={color} size={size} />;
+        case 'trending-up': return <TrendingUp color={color} size={size} />;
+        case 'laptop': return <Laptop color={color} size={size} />;
+        case 'utensils': return <Utensils color={color} size={size} />;
+        case 'car': return <Car color={color} size={size} />;
+        case 'home': return <Home color={color} size={size} />;
+        case 'user': return <User color={color} size={size} />;
+        case 'paw-print': return <PawPrint color={color} size={size} />;
+        case 'film': return <Film color={color} size={size} />;
+        case 'file-text': return <FileText color={color} size={size} />;
+        case 'wallet': return <Wallet color={color} size={size} />;
+        case 'landmark': return <Landmark color={color} size={size} />;
+        case 'credit-card': return <CreditCard color={color} size={size} />;
+        case 'cross': return <Activity color={color} size={size} />;
+        case 'package': return <Package color={color} size={size} />;
+        default: return <Package color={color} size={size} />;
+    }
+};
+
 export default function HomeDashboard() {
     const Colors = useThemeColors();
     const router = useRouter();
@@ -39,7 +64,7 @@ export default function HomeDashboard() {
         totalBalance, cashBalance, monthlyIncome, monthlyExpenses,
         bankAccounts, totalBankBalance,
         creditCards, totalCreditDue,
-        transactions, loading, clearAccountData, addTransaction,
+        transactions, loading, hasFetchedOnce, hasError, refreshData, clearAccountData, addTransaction,
         cashAccountName, renameCashAccount,
         historyRetention, updateHistoryRetention
     } = useFinance();
@@ -139,6 +164,29 @@ export default function HomeDashboard() {
                 </Pressable>
             </Pressable>
         </Modal>
+        
+        {(!hasFetchedOnce && loading) && (
+            <View style={[s.loadingOverlay, { backgroundColor: Colors.background }]}>
+                <ActivityIndicator size="large" color={Colors.primary} />
+                <Text style={{ marginTop: 12, color: Colors.textMuted, fontWeight: '600' }}>Loading your finances...</Text>
+            </View>
+        )}
+
+        {hasError && (
+            <View style={[s.loadingOverlay, { backgroundColor: Colors.background }]}>
+                <AlertCircle size={48} color={Colors.expense} />
+                <Text style={{ marginTop: 12, color: Colors.text, fontWeight: '700', fontSize: 18 }}>Sync Failed</Text>
+                <Text style={{ marginTop: 4, color: Colors.textMuted, textAlign: 'center', paddingHorizontal: 40 }}>
+                    We couldn't fetch your latest data. Please check your connection.
+                </Text>
+                <TouchableOpacity 
+                    onPress={refreshData}
+                    style={{ marginTop: 24, backgroundColor: Colors.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 }}
+                >
+                    <Text style={{ color: '#fff', fontWeight: '700' }}>Try Again</Text>
+                </TouchableOpacity>
+            </View>
+        )}
 
         <ScrollView style={[s.container, { backgroundColor: Colors.background }]} contentContainerStyle={s.content}>
 
@@ -313,32 +361,47 @@ export default function HomeDashboard() {
             {/* ── Recent Transactions ───────────────────────────────── */}
             <View style={[s.sectionHeader, { marginTop: 8 }]}>
                 <Text style={[s.sectionTitle, { color: Colors.text }]}>Recent Transactions</Text>
-                <TouchableOpacity onPress={() => router.push('/transactions')}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <Text style={[s.seeAll, { color: Colors.primary }]}>See All </Text>
-                        <ArrowRight size={14} color={Colors.primary} />
-                    </View>
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                    {loading && <ActivityIndicator size="small" color={Colors.primary} />}
+                    <TouchableOpacity onPress={refreshData}>
+                        <RotateCcw size={16} color={Colors.textMuted} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => router.push('/transactions')}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <Text style={[s.seeAll, { color: Colors.primary }]}>See All </Text>
+                            <ArrowRight size={14} color={Colors.primary} />
+                        </View>
+                    </TouchableOpacity>
+                </View>
             </View>
-            {currentMonthTransactions.slice(0, 5).map(tx => (
-                <HoverCard disabled={true} key={tx.id} style={[s.txItem, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
-                    <View style={[s.txIcon, { backgroundColor: Colors.background }]}>
-                        <Briefcase size={18} color={Colors.textMuted} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                        <Text style={[s.txCategory, { color: Colors.text }]}>{tx.category}</Text>
-                        <Text style={[s.txNote, { color: Colors.textMuted }]} numberOfLines={1}>
-                            {tx.note || format(new Date(tx.date), 'MMM d, h:mm a')}
-                        </Text>
-                    </View>
-                    <View style={{ alignItems: 'flex-end' }}>
-                        <Text style={[s.txAmount, { color: tx.type === 'INCOME' ? Colors.income : Colors.expense }]}>
-                            {tx.type === 'INCOME' ? '+' : '-'}₹{tx.amount.toLocaleString()}
-                        </Text>
-                        <Text style={[s.txAccountTag, { color: Colors.textMuted }]}>{getAccountName(tx.accountId)}</Text>
-                    </View>
-                </HoverCard>
-            ))}
+            {(() => {
+                const allCategories = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES];
+                return currentMonthTransactions.slice(0, 5).map(tx => {
+                    const categoryData = allCategories.find(c => c.name === tx.category && c.type === tx.type) || 
+                                       allCategories.find(c => c.name === tx.category) ||
+                                       { icon: 'package', color: Colors.textMuted };
+                    
+                    return (
+                        <HoverCard disabled={true} key={tx.id} style={[s.txItem, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+                            <View style={[s.txIcon, { backgroundColor: categoryData.color + '15' }]}>
+                                <IconRenderer name={categoryData.icon} color={categoryData.color} size={18} />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={[s.txCategory, { color: Colors.text }]}>{tx.category}</Text>
+                                <Text style={[s.txNote, { color: Colors.textMuted }]} numberOfLines={1}>
+                                    {tx.note || format(new Date(tx.date), 'MMM d, h:mm a')}
+                                </Text>
+                            </View>
+                            <View style={{ alignItems: 'flex-end' }}>
+                                <Text style={[s.txAmount, { color: tx.type === 'INCOME' ? Colors.income : Colors.expense }]}>
+                                    {tx.type === 'INCOME' ? '+' : '-'}₹{tx.amount.toLocaleString()}
+                                </Text>
+                                <Text style={[s.txAccountTag, { color: Colors.textMuted }]}>{getAccountName(tx.accountId)}</Text>
+                            </View>
+                        </HoverCard>
+                    );
+                });
+            })()}
             {currentMonthTransactions.length === 0 && (
                 <View style={[s.emptyCard, { borderColor: Colors.border, flexDirection: 'column', gap: 4, padding: 32 }]}>
                     <Text style={[s.emptyText, { color: Colors.textMuted }]}>No transactions this month.</Text>
@@ -419,5 +482,11 @@ const s = StyleSheet.create({
     optionText: {
         fontSize: 15,
         fontWeight: '700',
+    },
+    loadingOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 1000,
     }
 });

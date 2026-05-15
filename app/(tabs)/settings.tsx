@@ -20,8 +20,12 @@ import {
     X,
     Save,
     Calculator,
-    Landmark
+    Landmark,
+    Calendar
 } from 'lucide-react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { format } from 'date-fns';
+import { BeautifulDatePicker } from '../../src/components/BeautifulDatePicker';
 import { updateProfile } from 'firebase/auth';
 import { auth } from '../../src/database/firebaseConfig';
 import { upsertUserProfile } from '../../src/database/db';
@@ -34,14 +38,14 @@ const SettingsItem = ({ icon: Icon, label, onPress, color, value = undefined, to
     return (
         <Pressable
             style={({ pressed }) => [
-                styles.item, 
+                styles.item,
                 { borderBottomColor: Colors.border },
-                isHovered ? { 
-                    backgroundColor: Colors.surface, 
-                    shadowColor: Colors.primary, 
-                    shadowOffset: { width: 0, height: 2 }, 
-                    shadowOpacity: 0.1, 
-                    shadowRadius: 8, 
+                isHovered ? {
+                    backgroundColor: Colors.surface,
+                    shadowColor: Colors.primary,
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.1,
+                    shadowRadius: 8,
                     elevation: 3,
                     transform: [{ translateY: -1 }],
                     borderBottomColor: 'transparent',
@@ -82,16 +86,17 @@ export default function Settings() {
     const Colors = useThemeColors();
     const router = useRouter();
     const { theme, setTheme } = useTheme();
-    const { 
-        clearData, 
-        projectedExpenses, 
-        projectedNotes, 
-        totalProjectedAmount, 
-        addProjectedNote, 
-        deleteProjectedNote, 
+    const {
+        clearData,
+        projectedExpenses,
+        projectedNotes,
+        totalProjectedAmount,
+        addProjectedNote,
+        deleteProjectedNote,
         clearAllProjectedNotes,
         historyRetention,
-        updateHistoryRetention
+        updateHistoryRetention,
+        clearTransactionsBefore
     } = useFinance();
 
     const { user, logout } = useAuth();
@@ -105,7 +110,10 @@ export default function Settings() {
     const [projectedDesc, setProjectedDesc] = useState('');
     const [isAddingProjected, setIsAddingProjected] = useState(false);
     const [showRetentionSelector, setShowRetentionSelector] = useState(false);
-
+    const [showCleanupModal, setShowCleanupModal] = useState(false);
+    const [clearDate, setClearDate] = useState(new Date());
+    const [showWebPicker, setShowWebPicker] = useState(false);
+    const clearDateInputRef = React.useRef<any>(null);
 
     const handleUpdateProfile = async () => {
         if (!user) return;
@@ -231,6 +239,19 @@ export default function Settings() {
         }
     };
 
+    const performManualClear = async (date: Date) => {
+        if (Platform.OS !== 'web') {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+        }
+        const count = await clearTransactionsBefore(date);
+        const successMsg = `Success! Deleted ${count} transactions older than ${format(date, 'dd MMM yyyy')}.`;
+        if (Platform.OS === 'web') {
+            window.alert(successMsg);
+        } else {
+            Alert.alert("Cleanup Complete", successMsg);
+        }
+    };
+
     const handleUpdateRetention = () => {
         if (Platform.OS === 'web') {
             setShowRetentionSelector(true);
@@ -281,7 +302,7 @@ export default function Settings() {
 
     const handleClearAllProjected = () => {
         if (projectedNotes.length === 0) return;
-        
+
         const performClear = () => {
             clearAllProjectedNotes();
             if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -316,8 +337,8 @@ export default function Settings() {
                             {isEditing ? (
                                 <View style={{ gap: 10 }}>
                                     <TextInput
-                                        style={[styles.nameInput, { 
-                                            color: Colors.text, 
+                                        style={[styles.nameInput, {
+                                            color: Colors.text,
                                             backgroundColor: Colors.background,
                                             borderColor: Colors.border,
                                             outlineStyle: 'none'
@@ -451,11 +472,28 @@ export default function Settings() {
                                 <Text style={{ fontSize: 12, color: Colors.textMuted }}>Currently: {historyRetention === 'all' ? 'Never delete' : `Delete after ${historyRetention === '3months' ? '3' : '6'} months`}</Text>
                             </View>
                         </View>
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             onPress={handleUpdateRetention}
                             style={{ backgroundColor: Colors.primary, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 }}
                         >
                             <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>Change</Text>
+                        </TouchableOpacity>
+                    </View>
+                    <View style={[styles.item, { borderBottomColor: Colors.border, paddingVertical: 12 }]}>
+                        <View style={styles.itemLeft}>
+                            <View style={[styles.iconBox, { backgroundColor: Colors.expense + '20' }]}>
+                                <Trash2 size={20} color={Colors.expense} />
+                            </View>
+                            <View>
+                                <Text style={[styles.itemLabel, { color: Colors.text }]}>Manual Cleanup</Text>
+                                <Text style={{ fontSize: 12, color: Colors.textMuted }}>One-time removal of old data</Text>
+                            </View>
+                        </View>
+                        <TouchableOpacity
+                            onPress={() => setShowCleanupModal(true)}
+                            style={{ backgroundColor: Colors.expense, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 }}
+                        >
+                            <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>Select Date</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -591,27 +629,127 @@ export default function Settings() {
                     <View style={[styles.modalContent, { backgroundColor: Colors.surface, height: 'auto', padding: 24, borderRadius: 24 }]}>
                         <Text style={[styles.modalTitle, { color: Colors.text, textAlign: 'center', marginBottom: 12 }]}>History Retention</Text>
                         <Text style={{ color: Colors.textMuted, textAlign: 'center', marginBottom: 24 }}>Transactions older than this will be automatically deleted.</Text>
-                        
-                        <TouchableOpacity 
-                            style={[styles.webOption, { borderColor: Colors.border }]} 
+
+                        <TouchableOpacity
+                            style={[styles.webOption, { borderColor: Colors.border }]}
                             onPress={() => { updateHistoryRetention('3months'); setShowRetentionSelector(false); }}
                         >
                             <Text style={{ color: Colors.text, fontWeight: '600' }}>Last 3 Months (Default)</Text>
                         </TouchableOpacity>
-                        
-                        <TouchableOpacity 
-                            style={[styles.webOption, { borderColor: Colors.border }]} 
+
+                        <TouchableOpacity
+                            style={[styles.webOption, { borderColor: Colors.border }]}
                             onPress={() => { updateHistoryRetention('6months'); setShowRetentionSelector(false); }}
                         >
                             <Text style={{ color: Colors.text, fontWeight: '600' }}>Last 6 Months</Text>
                         </TouchableOpacity>
-
 
                         <TouchableOpacity style={{ marginTop: 20 }} onPress={() => setShowRetentionSelector(false)}>
                             <Text style={{ color: Colors.expense, textAlign: 'center', fontWeight: '600' }}>Cancel</Text>
                         </TouchableOpacity>
                     </View>
                 </Pressable>
+            </Modal>
+
+            {/* Manual Cleanup Modal */}
+            <Modal
+                visible={showCleanupModal}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setShowCleanupModal(false)}
+            >
+                <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
+                    <View style={[styles.modalContent, { backgroundColor: Colors.background, height: 'auto', paddingBottom: 40 }]}>
+                        <View style={[styles.modalHeader, { borderBottomColor: Colors.border }]}>
+                            <View>
+                                <Text style={[styles.modalTitle, { color: Colors.text }]}>Data Cleanup</Text>
+                                <Text style={[styles.modalSubtitle, { color: Colors.textMuted }]}>Choose a cutoff date for deletion</Text>
+                            </View>
+                            <TouchableOpacity onPress={() => setShowCleanupModal(false)} style={styles.closeBtn}>
+                                <X size={24} color={Colors.text} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={{ gap: 20 }}>
+                            <View style={[styles.infoBox, { backgroundColor: Colors.expense + '10', borderColor: Colors.expense + '30' }]}>
+                                <Text style={{ color: Colors.expense, fontSize: 13, textAlign: 'center', lineHeight: 20 }}>
+                                    ⚠️ All transactions <Text style={{ fontWeight: 'bold' }}>BEFORE</Text> the selected date will be permanently deleted. This cannot be undone.
+                                </Text>
+                            </View>
+
+                            <View style={[styles.dateSelectionBox, { backgroundColor: Colors.surface, borderColor: Colors.border, zIndex: showWebPicker ? 10000 : 1 }]}>
+                                <Text style={{ color: Colors.textMuted, fontSize: 12, marginBottom: 8, fontWeight: '600' }}>CUTOFF DATE</Text>
+                                {Platform.OS === 'web' ? (
+                                    <View style={{ width: '100%' }}>
+                                        <TouchableOpacity
+                                            activeOpacity={0.7}
+                                            onPress={() => setShowWebPicker(!showWebPicker)}
+                                            style={[styles.datePickerButton, { backgroundColor: Colors.surface, borderColor: Colors.border }]}
+                                        >
+                                            <Calendar size={20} color={Colors.primary} />
+                                            <Text style={[styles.datePickerText, { color: Colors.text }]}>
+                                                {format(clearDate, 'dd MMMM yyyy')}
+                                            </Text>
+                                        </TouchableOpacity>
+
+                                        {showWebPicker && (
+                                            <>
+                                                <Pressable
+                                                    style={{ position: (Platform.OS === 'web' ? 'fixed' : 'absolute') as any, top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.02)', zIndex: 9000 }}
+                                                    onPress={() => setShowWebPicker(false)}
+                                                />
+                                                <View style={{ position: 'absolute', bottom: 50, left: 0, zIndex: 10000 }}>
+                                                    <BeautifulDatePicker
+                                                        value={clearDate}
+                                                        onChange={(d) => { setClearDate(d); setShowWebPicker(false); }}
+                                                        onClose={() => setShowWebPicker(false)}
+                                                    />
+                                                </View>
+                                            </>
+                                        )}
+                                    </View>
+                                ) : (
+                                    <DateTimePicker
+                                        value={clearDate}
+                                        mode="date"
+                                        display="spinner"
+                                        textColor={Colors.text}
+                                        onChange={(e, date) => date && setClearDate(date)}
+                                        style={{ height: 120 }}
+                                    />
+                                )}
+                            </View>
+
+                            <TouchableOpacity
+                                style={[styles.addBtn, { backgroundColor: Colors.expense, marginTop: 10 }]}
+                                onPress={() => {
+                                    const performAction = () => performManualClear(clearDate);
+                                    if (Platform.OS === 'web') {
+                                        if (window.confirm(`Final Warning: Delete everything before ${format(clearDate, 'dd MMM yyyy')}?`)) {
+                                            performAction();
+                                        }
+                                    } else {
+                                        Alert.alert(
+                                            "Final Confirmation",
+                                            `Delete all data before ${format(clearDate, 'dd MMMM yyyy')}?`,
+                                            [
+                                                { text: "Cancel", style: "cancel" },
+                                                { text: "Confirm Delete", style: "destructive", onPress: performAction }
+                                            ]
+                                        );
+                                    }
+                                }}
+                            >
+                                <Trash2 size={20} color="#fff" />
+                                <Text style={styles.addBtnText}>Delete Older Data</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity onPress={() => setShowCleanupModal(false)} style={{ alignItems: 'center' }}>
+                                <Text style={{ color: Colors.textMuted, fontWeight: '600' }}>Cancel</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
             </Modal>
         </ScrollView>
     );
@@ -627,7 +765,8 @@ const styles = StyleSheet.create({
     },
     logoSection: {
         alignItems: 'center',
-        marginVertical: 40,
+        marginTop: 20,
+        marginBottom: 24,
     },
     sectionTitle: {
         ...Typography.caption,
@@ -847,5 +986,30 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         marginBottom: 12,
         alignItems: 'center',
-    }
+    },
+    infoBox: {
+        padding: 16,
+        borderRadius: 12,
+        borderWidth: 1,
+        marginBottom: 8,
+    },
+    dateSelectionBox: {
+        padding: 20,
+        borderRadius: 16,
+        borderWidth: 1,
+    },
+    datePickerButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 14,
+        borderRadius: 16,
+        borderWidth: 1,
+        gap: 12,
+        width: '100%',
+    },
+    datePickerText: {
+        fontSize: 16,
+        fontWeight: '600',
+    },
 });

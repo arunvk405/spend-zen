@@ -20,6 +20,7 @@ import { auth } from '../src/database/firebaseConfig';
 import { useAuth } from '../src/context/AuthContext';
 import { useThemeColors } from '../src/theme/colors';
 import { Mail, Lock, User } from 'lucide-react-native';
+import { Logo } from '../src/components/Logo';
 
 export default function SignupScreen() {
     const Colors = useThemeColors();
@@ -80,8 +81,7 @@ export default function SignupScreen() {
                 <View style={[styles.card, { backgroundColor: '#FFFFFF', borderColor: '#E2E8F0' }]}>
                     <View style={styles.headerSection}>
                         <View style={styles.logoRow}>
-                            <Text style={[styles.logoPart1, { color: '#0F172A' }]}>Spend</Text>
-                            <Text style={[styles.logoPart2, { color: '#2563EB' }]}>Zen</Text>
+                            <Logo size={50} horizontal={true} />
                         </View>
                         <Text style={[styles.title, { color: '#0F172A' }]}>Create Account</Text>
                         <Text style={[styles.subtitle, { color: '#64748B' }]}>
