@@ -140,40 +140,57 @@ export default function TransactionsHistory() {
 
         return (
             <View style={[styles.transactionItem, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
-                <View style={[styles.dateBlock, { borderRightColor: Colors.border }]}>
-                    <Text style={[styles.dateDay, { color: Colors.text }]}>{format(new Date(item.date), 'dd')}</Text>
-                    <Text style={[styles.dateMonth, { color: Colors.textMuted }]}>{format(new Date(item.date), 'MMM')}</Text>
+                {/* Header Row: Category and Note */}
+                <View style={[styles.cardHeader, { 
+                    borderBottomColor: Colors.border + '30',
+                    backgroundColor: Colors.isDark ? '#ffffff05' : '#00000003' 
+                }]}>
+                    <Text style={[styles.txCategory, { color: Colors.text }]}>{item.category}</Text>
+                    {item.note && (
+                        <Text style={[styles.txNote, { color: Colors.textMuted }]} numberOfLines={1}>
+                            • {item.note}
+                        </Text>
+                    )}
                 </View>
-                <View style={styles.iconContainer}>
-                    <View style={[styles.iconCircle, { backgroundColor: categoryData.color + '15' }]}>
-                        <IconRenderer name={categoryData.icon} color={categoryData.color} size={22} />
+
+                {/* Body Row: Details and Actions */}
+                <View style={styles.cardBody}>
+                    <View style={[styles.dateBlock, { borderRightColor: Colors.border }]}>
+                        <Text style={[styles.dateDay, { color: Colors.text }]}>{format(new Date(item.date), 'dd')}</Text>
+                        <Text style={[styles.dateMonth, { color: Colors.textMuted }]}>{format(new Date(item.date), 'MMM')}</Text>
+                    </View>
+
+                    <View style={styles.iconContainer}>
+                        <View style={[styles.iconCircle, { backgroundColor: categoryData.color + '15' }]}>
+                            <IconRenderer name={categoryData.icon} color={categoryData.color} size={22} />
+                        </View>
+                    </View>
+
+                    <View style={styles.amountBlock}>
+                        <Text style={[
+                            styles.txAmount,
+                            { color: item.type === 'INCOME' ? Colors.income : Colors.expense }
+                        ]}>
+                            {item.type === 'INCOME' ? '+' : '-'}₹{item.amount.toLocaleString()}
+                        </Text>
+                        <Text style={[styles.accountId, { color: Colors.textMuted }]}>{getAccountName(item.accountId)}</Text>
+                    </View>
+
+                    <View style={styles.actionBlock}>
+                        <TouchableOpacity
+                            style={[styles.editButton, { borderColor: Colors.border, backgroundColor: Colors.surface }]}
+                            onPress={() => router.push({ pathname: '/add', params: { id: item.id } })}
+                        >
+                            <Pencil color={Colors.primary} size={16} />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.deleteButton, { borderColor: Colors.border, backgroundColor: Colors.surface }]}
+                            onPress={() => handleDelete(item)}
+                        >
+                            <Trash2 color={Colors.expense} size={16} />
+                        </TouchableOpacity>
                     </View>
                 </View>
-                <View style={styles.txDetails}>
-                    <Text style={[styles.txCategory, { color: Colors.text }]}>{item.category}</Text>
-                    <Text style={[styles.txNote, { color: Colors.textMuted }]} numberOfLines={1}>{item.note || 'No note'}</Text>
-                </View>
-                <View style={styles.amountBlock}>
-                    <Text style={[
-                        styles.txAmount,
-                        { color: item.type === 'INCOME' ? Colors.income : Colors.expense }
-                    ]}>
-                        {item.type === 'INCOME' ? '+' : '-'}₹{item.amount.toLocaleString()}
-                    </Text>
-                    <Text style={[styles.accountId, { color: Colors.textMuted }]}>{getAccountName(item.accountId)}</Text>
-                </View>
-                <TouchableOpacity
-                    style={[styles.editButton, { borderColor: Colors.border, backgroundColor: Colors.surface }]}
-                    onPress={() => router.push({ pathname: '/add', params: { id: item.id } })}
-                >
-                    <Pencil color={Colors.primary} size={18} />
-                </TouchableOpacity>
-                <TouchableOpacity
-                    style={[styles.deleteButton, { borderColor: Colors.border, backgroundColor: Colors.surface }]}
-                    onPress={() => handleDelete(item)}
-                >
-                    <Trash2 color={Colors.expense} size={18} />
-                </TouchableOpacity>
             </View>
         );
     };
@@ -369,22 +386,39 @@ const styles = StyleSheet.create({
         paddingBottom: 100, // Space for tab bar
     },
     transactionItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 16,
+        padding: 0, // Reset padding as internal views handle it
         borderRadius: 16,
         marginBottom: 12,
         borderWidth: 1,
+        overflow: 'hidden', // Ensure header background doesn't bleed
+    },
+    cardHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        borderBottomWidth: 1,
+        gap: 8,
+    },
+    cardBody: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 16,
+    },
+    actionBlock: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginLeft: 'auto', // Push to the right
     },
     dateBlock: {
         alignItems: 'center',
         justifyContent: 'center',
-        paddingRight: 12,
+        paddingRight: 16,
         borderRightWidth: 1,
-        width: 45,
+        width: 55,
     },
     iconContainer: {
-        marginLeft: 12,
+        marginHorizontal: 16,
     },
     iconCircle: {
         width: 40,
@@ -416,7 +450,8 @@ const styles = StyleSheet.create({
         marginTop: 2,
     },
     amountBlock: {
-        alignItems: 'flex-end',
+        alignItems: 'flex-start',
+        flex: 1,
     },
     txAmount: {
         fontSize: 16,
@@ -434,7 +469,6 @@ const styles = StyleSheet.create({
         borderWidth: 1,
     },
     editButton: {
-        marginLeft: 12,
         padding: 8,
         borderRadius: 8,
         borderWidth: 1,

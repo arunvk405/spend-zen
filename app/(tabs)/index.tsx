@@ -383,20 +383,36 @@ export default function HomeDashboard() {
                     
                     return (
                         <HoverCard disabled={true} key={tx.id} style={[s.txItem, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
-                            <View style={[s.txIcon, { backgroundColor: categoryData.color + '15' }]}>
-                                <IconRenderer name={categoryData.icon} color={categoryData.color} size={18} />
-                            </View>
-                            <View style={{ flex: 1 }}>
+                            {/* Header Row: Category and Note */}
+                            <View style={[s.txHeader, { 
+                                borderBottomColor: Colors.border + '30',
+                                backgroundColor: Colors.isDark ? '#ffffff05' : '#00000003' 
+                            }]}>
                                 <Text style={[s.txCategory, { color: Colors.text }]}>{tx.category}</Text>
-                                <Text style={[s.txNote, { color: Colors.textMuted }]} numberOfLines={1}>
-                                    {tx.note || format(new Date(tx.date), 'MMM d, h:mm a')}
-                                </Text>
+                                {tx.note && (
+                                    <Text style={[s.txNote, { color: Colors.textMuted }]} numberOfLines={1}>
+                                        • {tx.note}
+                                    </Text>
+                                )}
                             </View>
-                            <View style={{ alignItems: 'flex-end' }}>
-                                <Text style={[s.txAmount, { color: tx.type === 'INCOME' ? Colors.income : Colors.expense }]}>
-                                    {tx.type === 'INCOME' ? '+' : '-'}₹{tx.amount.toLocaleString()}
-                                </Text>
-                                <Text style={[s.txAccountTag, { color: Colors.textMuted }]}>{getAccountName(tx.accountId)}</Text>
+
+                            {/* Body Row: Icon, Amount, Account */}
+                            <View style={s.txBody}>
+                                <View style={[s.txIcon, { backgroundColor: categoryData.color + '15', marginHorizontal: 0 }]}>
+                                    <IconRenderer name={categoryData.icon} color={categoryData.color} size={18} />
+                                </View>
+                                
+                                <View style={{ marginLeft: 16, flex: 1 }}>
+                                    <Text style={[s.txAccountTag, { color: Colors.textMuted, marginTop: 0 }]}>
+                                        {getAccountName(tx.accountId)} • {format(new Date(tx.date), 'MMM d')}
+                                    </Text>
+                                </View>
+
+                                <View style={{ alignItems: 'flex-end' }}>
+                                    <Text style={[s.txAmount, { color: tx.type === 'INCOME' ? Colors.income : Colors.expense }]}>
+                                        {tx.type === 'INCOME' ? '+' : '-'}₹{tx.amount.toLocaleString()}
+                                    </Text>
+                                </View>
                             </View>
                         </HoverCard>
                     );
@@ -458,12 +474,31 @@ const s = StyleSheet.create({
     emptyCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderStyle: 'dashed', borderRadius: 14, padding: 18, marginBottom: 24 },
     emptyText: { fontSize: 14 },
     seeAll: { fontWeight: '600', fontSize: 14 },
-    txItem: { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 14, marginBottom: 10, borderWidth: 1 },
+    txItem: {
+        padding: 0,
+        borderRadius: 14,
+        marginBottom: 10,
+        borderWidth: 1,
+        overflow: 'hidden',
+    },
+    txHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+        borderBottomWidth: 1,
+        gap: 6,
+    },
+    txBody: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 14,
+    },
     txIcon: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-    txCategory: { fontSize: 15, fontWeight: '600' },
-    txNote: { fontSize: 12, marginTop: 2 },
+    txCategory: { fontSize: 14, fontWeight: '700' },
+    txNote: { fontSize: 11, fontWeight: '500' },
     txAmount: { fontSize: 15, fontWeight: 'bold' },
-    txAccountTag: { fontSize: 10, marginTop: 2, textTransform: 'uppercase', letterSpacing: 0.5 },
+    txAccountTag: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
     // Modal
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
     modalBox: { width: 320, borderRadius: 20, padding: 24, elevation: 10 },
