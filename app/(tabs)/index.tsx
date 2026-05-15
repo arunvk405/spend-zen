@@ -383,7 +383,6 @@ export default function HomeDashboard() {
                     
                     return (
                         <HoverCard disabled={true} key={tx.id} style={[s.txItem, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
-                            {/* Header Row: Category and Note */}
                             <View style={[s.txHeader, { 
                                 borderBottomColor: Colors.border + '30',
                                 backgroundColor: Colors.isDark ? '#ffffff05' : '#00000003' 
@@ -396,7 +395,6 @@ export default function HomeDashboard() {
                                 )}
                             </View>
 
-                            {/* Body Row: Icon, Amount, Account */}
                             <View style={s.txBody}>
                                 <View style={[s.txIcon, { backgroundColor: categoryData.color + '15', marginHorizontal: 0 }]}>
                                     <IconRenderer name={categoryData.icon} color={categoryData.color} size={18} />

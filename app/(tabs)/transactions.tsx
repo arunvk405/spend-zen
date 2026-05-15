@@ -140,32 +140,27 @@ export default function TransactionsHistory() {
 
         return (
             <View style={[styles.transactionItem, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
-                {/* Header Row: Category and Note */}
                 <View style={[styles.cardHeader, { 
                     borderBottomColor: Colors.border + '30',
                     backgroundColor: Colors.isDark ? '#ffffff05' : '#00000003' 
                 }]}>
                     <Text style={[styles.txCategory, { color: Colors.text }]}>{item.category}</Text>
-                    {item.note && (
+                    {item.note ? (
                         <Text style={[styles.txNote, { color: Colors.textMuted }]} numberOfLines={1}>
                             • {item.note}
                         </Text>
-                    )}
+                    ) : null}
                 </View>
-
-                {/* Body Row: Details and Actions */}
                 <View style={styles.cardBody}>
                     <View style={[styles.dateBlock, { borderRightColor: Colors.border }]}>
                         <Text style={[styles.dateDay, { color: Colors.text }]}>{format(new Date(item.date), 'dd')}</Text>
                         <Text style={[styles.dateMonth, { color: Colors.textMuted }]}>{format(new Date(item.date), 'MMM')}</Text>
                     </View>
-
                     <View style={styles.iconContainer}>
                         <View style={[styles.iconCircle, { backgroundColor: categoryData.color + '15' }]}>
                             <IconRenderer name={categoryData.icon} color={categoryData.color} size={22} />
                         </View>
                     </View>
-
                     <View style={styles.amountBlock}>
                         <Text style={[
                             styles.txAmount,
@@ -175,7 +170,6 @@ export default function TransactionsHistory() {
                         </Text>
                         <Text style={[styles.accountId, { color: Colors.textMuted }]}>{getAccountName(item.accountId)}</Text>
                     </View>
-
                     <View style={styles.actionBlock}>
                         <TouchableOpacity
                             style={[styles.editButton, { borderColor: Colors.border, backgroundColor: Colors.surface }]}
@@ -197,10 +191,7 @@ export default function TransactionsHistory() {
 
     return (
         <View style={[styles.container, { backgroundColor: Colors.background }]}>
-            {/* Search and Date Filter */}
             <View style={[styles.header, { backgroundColor: Colors.background, borderBottomColor: Colors.border }]}>
-
-                {/* Year Selector */}
                 <View style={styles.yearRow}>
                     <TouchableOpacity onPress={() => changeYear(-1)} style={styles.arrowBtn}>
                         <ChevronLeft color={Colors.textMuted} size={20} />
@@ -210,8 +201,6 @@ export default function TransactionsHistory() {
                         <ChevronRight color={Colors.textMuted} size={20} />
                     </TouchableOpacity>
                 </View>
-
-                {/* Month Selector */}
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.monthScroll}>
                     {MONTHS.map((month, index) => {
                         const isSelected = selectedDate.getMonth() === index;
@@ -232,8 +221,6 @@ export default function TransactionsHistory() {
                         );
                     })}
                 </ScrollView>
-
-                {/* Search Bar */}
                 <View style={[styles.searchBar, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
                     <Search color={Colors.textMuted} size={18} />
                     <TextInput
@@ -244,8 +231,6 @@ export default function TransactionsHistory() {
                         onChangeText={setSearchQuery}
                     />
                 </View>
-
-                {/* Type Filter */}
                 <View style={styles.filterRow}>
                     {['ALL', 'INCOME', 'EXPENSE'].map((t) => (
                         <TouchableOpacity
@@ -267,8 +252,7 @@ export default function TransactionsHistory() {
                         </TouchableOpacity>
                     ))}
                 </View>
-
-                {historyRetention && (
+                {historyRetention ? (
                     <TouchableOpacity 
                         style={[styles.infoBanner, { backgroundColor: Colors.primary + '10', borderColor: Colors.primary + '20' }]}
                         onPress={() => router.push('/settings')}
@@ -278,10 +262,8 @@ export default function TransactionsHistory() {
                             History Policy: Auto-clear older than {historyRetention === '3months' ? '3' : '6'} months. <Text style={{ fontWeight: 'bold', textDecorationLine: 'underline' }}>Change in Settings</Text>
                         </Text>
                     </TouchableOpacity>
-                )}
-
+                ) : null}
             </View>
-
             <FlatList
                 data={filteredTransactions}
                 keyExtractor={(item) => item.id.toString()}

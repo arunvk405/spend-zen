@@ -84,16 +84,19 @@ const InteractiveDonut: React.FC<InteractiveDonutProps> = ({
                 stroke={colors.surface}
                 strokeWidth={2}
                 opacity={selectedItem ? (isSelected ? 1 : 0.4) : 0.9}
-                onPress={() => onSelect(isSelected ? null : item.name)}
                 {...Platform.select({
                     web: {
+                        onClick: () => onSelect(isSelected ? null : item.name),
                         onMouseMove: (e: any) => handleMouseMove(e, item),
                         onMouseLeave: () => {
                             setTooltipPos(null);
                             onSelect(null);
                         },
                         style: { cursor: 'pointer', transition: 'opacity 0.2s ease' }
-                    } as any
+                    } as any,
+                    default: {
+                        onPress: () => onSelect(isSelected ? null : item.name)
+                    }
                 })}
             />
         );
