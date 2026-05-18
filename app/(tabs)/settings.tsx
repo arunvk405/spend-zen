@@ -21,14 +21,19 @@ import {
     Save,
     Calculator,
     Landmark,
-    Calendar
+    Calendar,
+    CreditCard
 } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { format } from 'date-fns';
 import { BeautifulDatePicker } from '../../src/components/BeautifulDatePicker';
 import { updateProfile } from 'firebase/auth';
-import { auth } from '../../src/database/firebaseConfig';
-import { upsertUserProfile } from '../../src/database/db';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { auth, storage } from '../../src/database/firebaseConfig';
+import * as Haptics from 'expo-haptics';
+import * as ImagePicker from 'expo-image-picker';
+import { upsertUserProfile, getUserProfile } from '../../src/database/db';
+import { Image } from 'react-native';
 import { useFinance } from '../../src/context/FinanceContext';
 import { useAuth } from '../../src/context/AuthContext';
 import { useRouter } from 'expo-router';
@@ -80,7 +85,6 @@ const SettingsItem = ({ icon: Icon, label, onPress, color, value = undefined, to
 
 import { useTheme } from '../../src/context/ThemeContext';
 
-import * as Haptics from 'expo-haptics';
 
 export default function Settings() {
     const Colors = useThemeColors();
@@ -103,6 +107,20 @@ export default function Settings() {
     const [isEditing, setIsEditing] = useState(false);
     const [name, setName] = useState(user?.displayName || '');
     const [updateLoading, setUpdateLoading] = useState(false);
+    const [imageLoading, setImageLoading] = useState(false);
+    const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
+
+    React.useEffect(() => {
+        const loadProfilePhoto = async () => {
+            if (user) {
+                const profile = await getUserProfile(user.uid);
+                if (profile?.photoURL) {
+                    setProfilePhoto(profile.photoURL);
+                }
+            }
+        };
+        loadProfilePhoto();
+    }, [user]);
 
     // Projected Expenses Modal States
     const [showProjectedModal, setShowProjectedModal] = useState(false);
@@ -114,6 +132,18 @@ export default function Settings() {
     const [clearDate, setClearDate] = useState(new Date());
     const [showWebPicker, setShowWebPicker] = useState(false);
     const clearDateInputRef = React.useRef<any>(null);
+
+    // Credit Card Strategy Modal States
+    const [showStrategyModal, setShowStrategyModal] = useState(false);
+    const [isAddingStrategy, setIsAddingStrategy] = useState(false);
+    const [selectedCardId, setSelectedCardId] = useState<string>('');
+    const [strategyPeriod, setStrategyPeriod] = useState('');
+    const { creditCards, updateCreditCard, totalCreditDue, userSalary, updateUserSalary } = useFinance();
+    const [localSalary, setLocalSalary] = useState(userSalary ? userSalary.toString() : '');
+
+    React.useEffect(() => {
+        if (showStrategyModal) setLocalSalary(userSalary ? userSalary.toString() : '');
+    }, [showStrategyModal, userSalary]);
 
     const handleUpdateProfile = async () => {
         if (!user) return;
@@ -133,6 +163,66 @@ export default function Settings() {
             Alert.alert("Error", "Failed to update profile");
         } finally {
             setUpdateLoading(false);
+        }
+    };
+
+    const handlePickImage = async () => {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+            Alert.alert('Permission needed', 'Sorry, we need camera roll permissions to make this work!');
+            return;
+        }
+
+        let result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.3,
+            base64: true,
+        });
+
+        if (!result.canceled) {
+            setImageLoading(true);
+            try {
+                let base64Image = '';
+                const uri = result.assets[0].uri;
+
+                if (Platform.OS === 'web') {
+                    // Force downscale and compress on web using a canvas to bypass size limits & CORS slowness
+                    base64Image = await new Promise<string>((resolve, reject) => {
+                        const img = new window.Image();
+                        img.src = uri;
+                        img.onload = () => {
+                            const canvas = document.createElement('canvas');
+                            const size = 128; // 128x128 is perfect for mobile/web profile thumbnails
+                            canvas.width = size;
+                            canvas.height = size;
+                            const ctx = canvas.getContext('2d');
+                            
+                            // Square crop center math
+                            const sourceSize = Math.min(img.width, img.height);
+                            const sourceX = (img.width - sourceSize) / 2;
+                            const sourceY = (img.height - sourceSize) / 2;
+
+                            ctx?.drawImage(img, sourceX, sourceY, sourceSize, sourceSize, 0, 0, size, size);
+                            resolve(canvas.toDataURL('image/jpeg', 0.5)); // High compression
+                        };
+                        img.onerror = (e) => reject(e);
+                    });
+                } else {
+                    base64Image = `data:image/jpeg;base64,${result.assets[0].base64}`;
+                }
+
+                if (user && base64Image) {
+                    await upsertUserProfile(user.uid, { photoURL: base64Image });
+                    setProfilePhoto(base64Image);
+                }
+            } catch (error) {
+                console.error("Error saving image: ", error);
+                Alert.alert("Upload Failed", "There was an error saving your profile picture.");
+            } finally {
+                setImageLoading(false);
+            }
         }
     };
 
@@ -330,9 +420,32 @@ export default function Settings() {
                 <Text style={[styles.sectionTitle, { color: Colors.textMuted }]}>Profile</Text>
                 <View style={[styles.card, { backgroundColor: Colors.surface, padding: 20 }]}>
                     <View style={styles.profileHeader}>
-                        <View style={[styles.profileIcon, { backgroundColor: Colors.primary + '20' }]}>
-                            <User color={Colors.primary} size={32} />
-                        </View>
+                        <TouchableOpacity onPress={handlePickImage} disabled={imageLoading}>
+                            <View style={[styles.profileIcon, { backgroundColor: Colors.primary + '20' }]}>
+                                {imageLoading ? (
+                                    <ActivityIndicator color={Colors.primary} size="small" />
+                                ) : (profilePhoto || user?.photoURL) ? (
+                                    Platform.OS === 'web' ? (
+                                        <img 
+                                            src={profilePhoto || user?.photoURL} 
+                                            style={{ width: 64, height: 64, borderRadius: 32, objectFit: 'cover' }} 
+                                            referrerPolicy="no-referrer"
+                                            alt="Profile"
+                                        />
+                                    ) : (
+                                        <Image 
+                                            source={{ uri: profilePhoto || user?.photoURL }} 
+                                            style={{ width: 64, height: 64, borderRadius: 32 }} 
+                                        />
+                                    )
+                                ) : (
+                                    <User color={Colors.primary} size={32} />
+                                )}
+                                <View style={{ position: 'absolute', bottom: -4, right: -4, backgroundColor: Colors.primary, borderRadius: 12, padding: 4, borderWidth: 2, borderColor: Colors.surface }}>
+                                    <Edit3 size={10} color="#fff" />
+                                </View>
+                            </View>
+                        </TouchableOpacity>
                         <View style={styles.profileInfo}>
                             {isEditing ? (
                                 <View style={{ gap: 10 }}>
@@ -425,6 +538,12 @@ export default function Settings() {
                         label={`Next Month Planning: ₹${Math.round(totalProjectedAmount).toLocaleString()}`}
                         color={Colors.primary}
                         onPress={() => setShowProjectedModal(true)}
+                    />
+                    <SettingsItem
+                        icon={CreditCard}
+                        label="Card Usage Strategy"
+                        color={Colors.primary}
+                        onPress={() => setShowStrategyModal(true)}
                     />
                     <SettingsItem
                         icon={LogOut}
@@ -607,6 +726,182 @@ export default function Settings() {
                                         <View style={styles.noteRight}>
                                             <Text style={[styles.noteAmount, { color: Colors.primary }]}>₹{note.amount.toLocaleString()}</Text>
                                             <TouchableOpacity onPress={() => deleteProjectedNote(note.id)}>
+                                                <Trash2 size={16} color={Colors.expense} />
+                                            </TouchableOpacity>
+                                        </View>
+                                    </View>
+                                ))
+                            )}
+                        </ScrollView>
+                    </KeyboardAvoidingView>
+                </View>
+            </Modal>
+
+            {/* Card Usage Strategy Modal */}
+            <Modal
+                visible={showStrategyModal}
+                animationType="slide"
+                transparent={true}
+                onRequestClose={() => setShowStrategyModal(false)}
+            >
+                <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
+                    <KeyboardAvoidingView
+                        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                        style={[styles.modalContent, { backgroundColor: Colors.background }]}
+                    >
+                        <View style={[styles.modalHeader, { borderBottomColor: Colors.border }]}>
+                            <View>
+                                <Text style={[styles.modalTitle, { color: Colors.text }]}>Card Usage Strategy</Text>
+                                <Text style={[styles.modalSubtitle, { color: Colors.textMuted }]}>Manage best periods to use your cards</Text>
+                            </View>
+                            <TouchableOpacity onPress={() => setShowStrategyModal(false)} style={styles.closeBtn}>
+                                <X size={24} color={Colors.text} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
+                            {/* Salary & Safety Rule Section */}
+                            <View style={{ backgroundColor: Colors.surface, padding: 16, borderRadius: 16, borderWidth: 1, borderColor: Colors.border, marginBottom: 20 }}>
+                                <Text style={{ color: Colors.textMuted, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8, fontWeight: '600' }}>Your Monthly Salary</Text>
+                                <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
+                                    <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border, borderRadius: 12, paddingHorizontal: 12 }}>
+                                        <Text style={{ color: Colors.textMuted, fontWeight: '600', marginRight: 4 }}>₹</Text>
+                                        <TextInput
+                                            style={{ flex: 1, color: Colors.text, paddingVertical: 10, fontSize: 15, outlineStyle: 'none' } as any}
+                                            placeholder="Enter salary"
+                                            placeholderTextColor={Colors.textMuted}
+                                            keyboardType="decimal-pad"
+                                            value={localSalary}
+                                            onChangeText={t => setLocalSalary(t.replace(/[^0-9.]/g, ''))}
+                                            onBlur={() => {
+                                                const val = parseFloat(localSalary);
+                                                if (!isNaN(val) && val !== userSalary) {
+                                                    updateUserSalary(val);
+                                                }
+                                            }}
+                                        />
+                                    </View>
+                                </View>
+
+                                <View style={{ backgroundColor: Colors.primary + '10', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: Colors.primary + '30', marginBottom: 12 }}>
+                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                                        <Text style={{ color: Colors.text, fontWeight: '700', fontSize: 14 }}>Safe Credit Limit (40%)</Text>
+                                        <Text style={{ color: Colors.primary, fontWeight: '800', fontSize: 16 }}>₹{Math.round((userSalary || 0) * 0.4).toLocaleString()}</Text>
+                                    </View>
+                                    <Text style={{ color: Colors.textMuted, fontSize: 12, lineHeight: 18 }}>
+                                        Financial experts recommend using no more than 40% of your monthly income on credit cards to ensure you can pay them off comfortably.
+                                    </Text>
+                                </View>
+
+                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12, borderTopWidth: 1, borderTopColor: Colors.border }}>
+                                    <Text style={{ color: Colors.text, fontWeight: '600', fontSize: 13 }}>Current Total Due</Text>
+                                    <Text style={{ color: Colors.expense, fontWeight: '800', fontSize: 15 }}>
+                                        ₹{totalCreditDue.toLocaleString()}
+                                    </Text>
+                                </View>
+
+                                {totalCreditDue > (userSalary || 0) * 0.4 && (
+                                    <View style={{ backgroundColor: Colors.expense + '10', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: Colors.expense + '30', marginTop: 12 }}>
+                                        <Text style={{ color: Colors.expense, fontWeight: '700', fontSize: 13, marginBottom: 4 }}>⚠️ High Credit Utilization Alert</Text>
+                                        <Text style={{ color: Colors.textMuted, fontSize: 11, lineHeight: 16 }}>
+                                            Your credit card balance exceeds your 40% safe limit. Paying off even small balances mid-month before your statements close keeps your credit utilization low and secures a prime credit score!
+                                        </Text>
+                                    </View>
+                                )}
+                            </View>
+
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, marginLeft: 4 }}>
+                                <Text style={[styles.formLabel, { color: Colors.text, marginBottom: 0, marginLeft: 0 }]}>Added Strategies</Text>
+                                {!isAddingStrategy && (
+                                    <TouchableOpacity onPress={() => setIsAddingStrategy(true)}>
+                                        <Text style={{ color: Colors.primary, fontWeight: '700' }}>+ Add New</Text>
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+
+                            {isAddingStrategy && (
+                                <View style={{ marginBottom: 24 }}>
+                                    <Text style={{ color: Colors.textMuted, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8, marginTop: 10, fontWeight: '600' }}>Select Card *</Text>
+                                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+                                        {creditCards.filter(c => !c.usagePeriod || c.id === selectedCardId).map(c => (
+                                            <Pressable 
+                                                key={c.id} 
+                                                onPress={() => setSelectedCardId(c.id)}
+                                                style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1.5, borderColor: selectedCardId === c.id ? Colors.primary : Colors.border, backgroundColor: selectedCardId === c.id ? Colors.primary + '20' : Colors.surface }}
+                                            >
+                                                <Text style={{ color: selectedCardId === c.id ? Colors.primary : Colors.textMuted, fontWeight: '600', fontSize: 13 }}>{c.cardName}</Text>
+                                            </Pressable>
+                                        ))}
+                                    </View>
+                                    {creditCards.filter(c => !c.usagePeriod || c.id === selectedCardId).length === 0 && (
+                                        <Text style={{ color: Colors.textMuted, fontSize: 13, marginBottom: 16, fontStyle: 'italic' }}>No available cards to add strategy.</Text>
+                                    )}
+
+                                    <Text style={{ color: Colors.textMuted, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8, fontWeight: '600' }}>Usage Period *</Text>
+                                    <TextInput
+                                        style={{ borderRadius: 12, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, marginBottom: 4, backgroundColor: Colors.surface, color: Colors.text, borderColor: Colors.border, outlineStyle: 'none' } as any}
+                                        placeholder="e.g. 6-15 or 6th to 15th"
+                                        placeholderTextColor={Colors.textMuted}
+                                        value={strategyPeriod}
+                                        onChangeText={setStrategyPeriod}
+                                    />
+
+                                    <View style={{ flexDirection: 'row', gap: 12, marginTop: 20 }}>
+                                        <TouchableOpacity
+                                            style={{ flex: 1, height: 50, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border }}
+                                            onPress={() => { setIsAddingStrategy(false); setSelectedCardId(''); setStrategyPeriod(''); }}
+                                        >
+                                            <Text style={{ color: Colors.text, fontWeight: '700', fontSize: 15 }}>Cancel</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={{ flex: 1, height: 50, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.primary }}
+                                            onPress={async () => {
+                                                if (!selectedCardId || !strategyPeriod) {
+                                                    Alert.alert("Error", "Please select a card and enter a period");
+                                                    return;
+                                                }
+                                                await updateCreditCard(selectedCardId, { usagePeriod: strategyPeriod });
+                                                setIsAddingStrategy(false);
+                                                setSelectedCardId('');
+                                                setStrategyPeriod('');
+                                            }}
+                                        >
+                                            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>Save</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            )}
+
+                            {creditCards.filter(c => c.usagePeriod).length === 0 ? (
+                                <View style={[styles.emptyBox, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+                                    <Text style={{ color: Colors.textMuted, fontSize: 13, textAlign: 'center' }}>No card strategies added yet.</Text>
+                                </View>
+                            ) : (
+                                [...creditCards.filter(c => c.usagePeriod)]
+                                    .sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime())
+                                    .map((card) => (
+                                    <View key={card.id} style={[styles.noteItem, { backgroundColor: Colors.surface, borderBottomColor: Colors.border }]}>
+                                        <View style={styles.noteLeft}>
+                                            <Text style={[styles.noteDesc, { color: Colors.text }]}>{card.cardName}</Text>
+                                            <View style={{ backgroundColor: Colors.primary + '15', alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, marginTop: 4 }}>
+                                                <Text style={{ color: Colors.primary, fontWeight: '700', fontSize: 14 }}>Use: {card.usagePeriod}</Text>
+                                            </View>
+                                        </View>
+                                        <View style={[styles.noteRight, { flexDirection: 'row', gap: 16, alignItems: 'center' }]}>
+                                            <View style={{ alignItems: 'flex-end', marginRight: 10 }}>
+                                                <Text style={{ fontSize: 10, color: Colors.textMuted, textTransform: 'uppercase', fontWeight: '600', marginBottom: 2 }}>Due</Text>
+                                                <Text style={{ color: Colors.expense, fontWeight: '700', fontSize: 14 }}>₹{card.dueAmount.toLocaleString()}</Text>
+                                            </View>
+                                            <TouchableOpacity onPress={() => {
+                                                setSelectedCardId(card.id);
+                                                setStrategyPeriod(card.usagePeriod || '');
+                                                setIsAddingStrategy(true);
+                                            }}>
+                                                <Edit3 size={16} color={Colors.primary} />
+                                            </TouchableOpacity>
+                                            <TouchableOpacity onPress={async () => {
+                                                await updateCreditCard(card.id, { usagePeriod: '' });
+                                            }}>
                                                 <Trash2 size={16} color={Colors.expense} />
                                             </TouchableOpacity>
                                         </View>

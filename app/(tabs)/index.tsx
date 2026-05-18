@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import {
     View, Text, StyleSheet, ScrollView, TouchableOpacity,
-    Platform, Modal, Pressable, ActivityIndicator
+    Platform, Modal, Pressable, ActivityIndicator, Animated
 } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { useFinance } from '../../src/context/FinanceContext';
 import { useThemeColors } from '../../src/theme/colors';
 import {
@@ -12,7 +13,29 @@ import {
 } from 'lucide-react-native';
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from '../../src/models';
 import { format, isSameMonth, isSameYear, parseISO } from 'date-fns';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
+
+const MOTIVATIONAL_QUOTES = [
+    { quote: "Do not save what is left after spending, but spend what is left after saving.", author: "Warren Buffett", category: "Savings" },
+    { quote: "A budget is telling your money where to go instead of wondering where it went.", author: "Dave Ramsey", category: "Budgeting" },
+    { quote: "Beware of little expenses; a small leak will sink a great ship.", author: "Benjamin Franklin", category: "Mindfulness" },
+    { quote: "The goal isn't more money. The goal is living life on your terms.", author: "Chris Brogan", category: "Freedom" },
+    { quote: "Financial freedom is available to those who learn about it and work for it.", author: "Robert Kiyosaki", category: "Education" },
+    { quote: "It’s not how much money you make, but how much money you keep.", author: "Robert Kiyosaki", category: "Wealth" },
+    { quote: "The safe utilization rule: Use credit like cash, and pay off full due immediately to boost score.", author: "Zen Wisdom", category: "Credit" },
+    { quote: "Too many people spend money they haven't earned, to buy things they don't want, to impress people they don't like.", author: "Will Rogers", category: "Mindfulness" },
+    { quote: "Investing should be more like watching paint dry or watching grass grow. If you want excitement, take $800 and go to Las Vegas.", author: "Paul Samuelson", category: "Investing" },
+    { quote: "Never depend on a single income. Make investments to create a second source.", author: "Warren Buffett", category: "Growth" },
+    { quote: "The rich invest in time, the poor invest in money.", author: "Warren Buffett", category: "Mindset" },
+    { quote: "Every time you borrow money, you're robbing your future self.", author: "Nathan W. Morris", category: "Debt" },
+    { quote: "You must gain control over your money or the lack of it will forever control you.", author: "Dave Ramsey", category: "Control" },
+    { quote: "Rich people have small TVs and big libraries, and poor people have small libraries and big TVs.", author: "Zig Ziglar", category: "Growth" },
+    { quote: "Do not buy things you cannot afford with money you do not have to impress people you do not know.", author: "Common Sense", category: "Mindfulness" },
+    { quote: "An investment in knowledge pays the best interest.", author: "Benjamin Franklin", category: "Education" },
+    { quote: "If you buy things you do not need, soon you will have to sell things you need.", author: "Warren Buffett", category: "Mindfulness" },
+    { quote: "The habit of saving is itself an education; it fosters every virtue and broadens the mind.", author: "T.T. Munger", category: "Savings" },
+    { quote: "Buy assets, not liabilities. An asset puts money in your pocket.", author: "Robert Kiyosaki", category: "Assets" }
+];
 
 const HoverCard = ({ children, style, onPress, disabled = false }: any) => {
     const [isHovered, setIsHovered] = useState(false);
@@ -68,6 +91,47 @@ export default function HomeDashboard() {
         cashAccountName, renameCashAccount,
         historyRetention, updateHistoryRetention
     } = useFinance();
+
+    const [fadeAnim] = useState(new Animated.Value(1));
+    const [currentQuoteIndex, setCurrentQuoteIndex] = useState(() => {
+        return new Date().getDate() % MOTIVATIONAL_QUOTES.length;
+    });
+
+    const triggerNewQuote = React.useCallback(() => {
+        Animated.timing(fadeAnim, {
+            toValue: 0,
+            duration: 150,
+            useNativeDriver: true
+        }).start(() => {
+            setCurrentQuoteIndex(prevIndex => {
+                let nextIndex = prevIndex;
+                while (nextIndex === prevIndex) {
+                    nextIndex = Math.floor(Math.random() * MOTIVATIONAL_QUOTES.length);
+                }
+                return nextIndex;
+            });
+            
+            Animated.timing(fadeAnim, {
+                toValue: 1,
+                duration: 250,
+                useNativeDriver: true
+            }).start();
+        });
+    }, [fadeAnim]);
+
+    useFocusEffect(
+        React.useCallback(() => {
+            // Pick a fresh quote immediately on page open/focus
+            triggerNewQuote();
+
+            // Set up auto-rotation interval of 10 seconds
+            const interval = setInterval(() => {
+                triggerNewQuote();
+            }, 10000);
+
+            return () => clearInterval(interval);
+        }, [triggerNewQuote])
+    );
 
 
 
@@ -223,6 +287,86 @@ export default function HomeDashboard() {
                     </View>
                 )}
             </HoverCard>
+
+            {/* ── Dynamic & Interactive Financial Mindset Spark ────── */}
+            <Pressable
+                onPress={triggerNewQuote}
+                style={({ pressed }) => [
+                    {
+                        backgroundColor: Colors.surface,
+                        borderRadius: 16,
+                        padding: 16,
+                        borderWidth: 1,
+                        borderColor: Colors.border,
+                        borderLeftWidth: 4,
+                        borderLeftColor: Colors.primary,
+                        marginTop: 16,
+                        marginBottom: 8,
+                        flexDirection: 'row',
+                        gap: 12,
+                        alignItems: 'center',
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 4 },
+                        shadowOpacity: pressed ? 0.02 : 0.05,
+                        shadowRadius: 8,
+                        elevation: 2,
+                    },
+                    pressed ? { transform: [{ scale: 0.99 }] } : undefined,
+                    Platform.OS === 'web' ? { cursor: 'pointer', transition: 'all 0.15s ease' } : undefined
+                ] as any}
+            >
+                <View style={{
+                    backgroundColor: Colors.primary + '15',
+                    padding: 10,
+                    borderRadius: 12,
+                    justifyContent: 'center',
+                    alignItems: 'center'
+                }}>
+                    <PiggyBank color={Colors.primary} size={22} />
+                </View>
+                <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                        <Text style={{
+                            color: Colors.textMuted,
+                            fontSize: 10,
+                            fontWeight: '700',
+                            textTransform: 'uppercase',
+                            letterSpacing: 0.5
+                        }}>
+                            — {MOTIVATIONAL_QUOTES[currentQuoteIndex].category} Spark
+                        </Text>
+                        <Text style={{
+                            color: Colors.primary,
+                            fontSize: 9,
+                            fontWeight: '700',
+                            textTransform: 'uppercase',
+                            letterSpacing: 0.5,
+                            opacity: 0.8
+                        }}>
+                            Tap to rotate
+                        </Text>
+                    </View>
+                    <Text style={{
+                        color: Colors.text,
+                        fontSize: 13,
+                        fontWeight: '600',
+                        lineHeight: 18,
+                        fontStyle: 'italic'
+                    }}>
+                        "{MOTIVATIONAL_QUOTES[currentQuoteIndex].quote}"
+                    </Text>
+                    <Text style={{
+                        color: Colors.textMuted,
+                        fontSize: 11,
+                        fontWeight: '700',
+                        marginTop: 4,
+                        textTransform: 'uppercase',
+                        letterSpacing: 0.5
+                    }}>
+                        — {MOTIVATIONAL_QUOTES[currentQuoteIndex].author}
+                    </Text>
+                </Animated.View>
+            </Pressable>
 
             {/* ── Cash ─────────────────────────────────────────────── */}
             <View style={[s.sectionHeader]}>

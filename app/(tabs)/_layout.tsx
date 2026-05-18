@@ -1,7 +1,7 @@
 import { Tabs, useRouter, Redirect } from 'expo-router';
 import { useThemeColors } from '../../src/theme/colors';
 import { Home, PieChart, Landmark, Settings, Plus } from 'lucide-react-native';
-import { TouchableOpacity, View, StyleSheet, ActivityIndicator } from 'react-native';
+import { TouchableOpacity, View, StyleSheet, ActivityIndicator, Platform } from 'react-native';
 import { useAuth } from '../../src/context/AuthContext';
 
 export default function TabLayout() {
@@ -35,7 +35,10 @@ export default function TabLayout() {
                     position: 'absolute',
                     borderTopWidth: 1,
                     elevation: 0,
-                    shadowOpacity: 0,
+                    ...Platform.select({
+                        ios: { shadowOpacity: 0 },
+                        default: {}
+                    }),
                 },
                 headerStyle: {
                     backgroundColor: Colors.background,
@@ -70,7 +73,7 @@ export default function TabLayout() {
                             style={[props.style, styles.centerButtonContainer]}
                             onPress={() => router.push('/add')}
                         >
-                            <View style={[styles.centerButton, { backgroundColor: Colors.primary, shadowColor: Colors.primary }]}>
+                            <View style={[styles.centerButton, { backgroundColor: Colors.primary }, Platform.OS === 'ios' && { shadowColor: Colors.primary }]}>
                                 <Plus color="#fff" size={32} strokeWidth={3} />
                             </View>
                         </TouchableOpacity>
@@ -108,8 +111,16 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         elevation: 8,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
+        ...Platform.select({
+            ios: {
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.3,
+                shadowRadius: 8,
+            },
+            web: {
+                boxShadow: '0px 4px 8px rgba(16, 185, 129, 0.3)',
+            },
+            default: {},
+        }),
     },
 });

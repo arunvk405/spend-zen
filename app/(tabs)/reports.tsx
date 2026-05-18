@@ -247,6 +247,60 @@ export default function Reports() {
                 </View>
             </View>
 
+            {/* Context-Aware Financial Mindset Recommendation */}
+            <View style={{
+                backgroundColor: Colors.surface,
+                borderRadius: 20,
+                padding: 16,
+                marginHorizontal: 16,
+                marginBottom: 16,
+                borderWidth: 1,
+                borderColor: Colors.border,
+                borderLeftWidth: 4,
+                borderLeftColor: stats.net >= 0 ? Colors.income : Colors.expense,
+                flexDirection: 'row',
+                gap: 12,
+                alignItems: 'center'
+            }}>
+                <View style={{
+                    backgroundColor: (stats.net >= 0 ? Colors.income : Colors.expense) + '15',
+                    padding: 10,
+                    borderRadius: 12,
+                    justifyContent: 'center',
+                    alignItems: 'center'
+                }}>
+                    {stats.net >= 0 ? (
+                        <ArrowUpCircle color={Colors.income} size={22} />
+                    ) : (
+                        <ArrowDownCircle color={Colors.expense} size={22} />
+                    )}
+                </View>
+                <View style={{ flex: 1 }}>
+                    <Text style={{
+                        color: Colors.text,
+                        fontSize: 13,
+                        fontWeight: '600',
+                        lineHeight: 18
+                    }}>
+                        {stats.net >= 0 ? (
+                            `Great job! You saved ₹${stats.net.toLocaleString()} this month. Consider transferring this to an investment or emergency fund to build long-term security!`
+                        ) : (
+                            `You're in the red by ₹${Math.abs(stats.net).toLocaleString()} this month. Reviewing your subscriptions or scaling back on dining out could bring you right back on track!`
+                        )}
+                    </Text>
+                    <Text style={{
+                        color: Colors.textMuted,
+                        fontSize: 10,
+                        fontWeight: '700',
+                        marginTop: 4,
+                        textTransform: 'uppercase',
+                        letterSpacing: 0.5
+                    }}>
+                        {stats.net >= 0 ? "Savings Motivation" : "Optimization Advice"}
+                    </Text>
+                </View>
+            </View>
+
             {/* Expense Breakdown */}
             <HoverCard disabled={true} style={[styles.card, { backgroundColor: Colors.surface }]}>
                 <View style={styles.cardHeader}>

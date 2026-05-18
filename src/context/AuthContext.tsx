@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, onAuthStateChanged, signOut, signInWithPopup } from 'firebase/auth';
 import { auth, googleProvider } from '../database/firebaseConfig';
-import { upsertUserProfile } from '../database/db';
+import { upsertUserProfile, getUserProfile } from '../database/db';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform, Alert } from 'react-native';
 
@@ -21,12 +21,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
             if (authUser) {
-                // Sync basic auth info to Firestore
+                // Sync basic auth info to Firestore without overwriting custom pictures/names
+                const existingProfile = await getUserProfile(authUser.uid);
                 await upsertUserProfile(authUser.uid, {
                     uid: authUser.uid,
                     email: authUser.email,
-                    displayName: authUser.displayName,
-                    photoURL: authUser.photoURL,
+                    displayName: existingProfile?.displayName || authUser.displayName,
+                    photoURL: existingProfile?.photoURL || authUser.photoURL,
                 });
             }
             setUser(authUser);

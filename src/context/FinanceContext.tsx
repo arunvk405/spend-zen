@@ -90,6 +90,8 @@ interface FinanceContextType {
     historyRetention: HistoryRetentionType;
     updateHistoryRetention: (retention: HistoryRetentionType) => Promise<void>;
     clearTransactionsBefore: (date: Date) => Promise<number>;
+    userSalary: number;
+    updateUserSalary: (amount: number) => Promise<void>;
 }
 
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
@@ -108,6 +110,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const [monthlyIncome, setMonthlyIncome] = useState(0);
     const [monthlyExpenses, setMonthlyExpenses] = useState(0);
     const [historyRetention, setHistoryRetention] = useState<HistoryRetentionType>('3months');
+    const [userSalary, setUserSalary] = useState(0);
     const hasClearedSession = useRef(false);
     const [projectedExpenses, setProjectedExpenses] = useState(0);
     const [projectedNotes, setProjectedNotes] = useState<ProjectedExpense[]>([]);
@@ -157,6 +160,9 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
             if (userProfile?.historyRetention) {
                 setHistoryRetention(userProfile.historyRetention);
+            }
+            if (userProfile?.monthlySalary) {
+                setUserSalary(userProfile.monthlySalary);
             }
             try {
                 // 1. Migrate legacy bank transactions if they exist
@@ -456,6 +462,16 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return count;
     };
 
+    const updateUserSalary = async (amount: number) => {
+        if (!user) return;
+        try {
+            await upsertUserProfile(user.uid, { monthlySalary: amount });
+            setUserSalary(amount);
+        } catch (e) {
+            console.error("Error updating user salary:", e);
+        }
+    };
+
     return (
         <FinanceContext.Provider value={{
             transactions,
@@ -484,6 +500,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
             renameCashAccount,
             historyRetention, updateHistoryRetention,
             clearTransactionsBefore,
+            userSalary, updateUserSalary,
         }}>
             {children}
         </FinanceContext.Provider>

@@ -8,6 +8,7 @@ export interface UserProfile {
     photoURL?: string;
     cashAccountName?: string;
     historyRetention?: HistoryRetentionType;
+    monthlySalary?: number;
     customCategories?: any[];
 }
 
@@ -63,6 +64,8 @@ export interface CreditCard {
     dueDay: number; // Day of the month (1-31)
     color: string;
     createdAt: string;
+    updatedAt?: string;
+    usagePeriod?: string;
 }
 
 export interface CreditCardWithBalance extends CreditCard {
