@@ -8,7 +8,7 @@ import { useFinance } from '../../src/context/FinanceContext';
 import { useThemeColors } from '../../src/theme/colors';
 import {
     Wallet, Landmark, CreditCard, TrendingUp, TrendingDown,
-    ArrowRight, Briefcase, RotateCcw, Plus, AlertCircle, Pencil, Shield,
+    ArrowRight, Briefcase, RotateCcw, Plus, AlertCircle, Pencil, Shield, X,
     PiggyBank, Gift, Laptop, Package, Utensils, Activity, Home, Car, User, PawPrint, FileText, Film
 } from 'lucide-react-native';
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from '../../src/models';
@@ -136,6 +136,7 @@ export default function HomeDashboard() {
 
 
     const [confirmCardId, setConfirmCardId] = useState<string | null>(null);
+    const [selectedSourceAccountId, setSelectedSourceAccountId] = useState<string | null>(null);
     const [clearing, setClearing] = useState(false);
 
     const handleRenameCash = () => {
@@ -166,26 +167,9 @@ export default function HomeDashboard() {
         const card = creditCards.find(c => c.id === cardId);
         if (!card || card.dueAmount <= 0) return;
 
-        if (Platform.OS === 'web') {
-            setConfirmCardId(cardId);
-        } else {
-            const { Alert } = require('react-native');
-            Alert.alert('Record Payment', `Record a payment of ₹${card.dueAmount.toLocaleString()} for ${card.cardName}? This keeps your history.`, [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'Record Payment', fontWeight: '700', onPress: async () => {
-                    setClearing(true);
-                    await addTransaction({
-                        amount: card.dueAmount,
-                        type: 'INCOME',
-                        category: 'Credit Card Payment',
-                        date: new Date().toISOString(),
-                        accountId: cardId,
-                        note: `Full payment for ${card.cardName}`
-                    });
-                    setClearing(false);
-                }},
-            ]);
-        }
+        // Default to cash or first bank account
+        setSelectedSourceAccountId('cash');
+        setConfirmCardId(cardId);
     };
 
     const confirmClear = async () => {
@@ -195,27 +179,139 @@ export default function HomeDashboard() {
         
         setConfirmCardId(null);
         setClearing(true);
-        await addTransaction({
-            amount: card.dueAmount,
-            type: 'INCOME',
-            category: 'Credit Card Payment',
-            date: new Date().toISOString(),
-            accountId: confirmCardId,
-            note: `Full payment for ${card.cardName}`
-        });
-        setClearing(false);
+        try {
+            // 1. If a funding source is chosen (e.g. Bank or Cash), record the EXPENSE transaction first
+            if (selectedSourceAccountId) {
+                await addTransaction({
+                    amount: card.dueAmount,
+                    type: 'EXPENSE',
+                    category: 'Credit Card Payment',
+                    date: new Date().toISOString(),
+                    accountId: selectedSourceAccountId,
+                    note: `Paid ${card.cardName} due`
+                });
+            }
+
+            // 2. Record the INCOME transaction on the Credit Card itself to settle the liability
+            const sourceName = selectedSourceAccountId 
+                ? getAccountName(selectedSourceAccountId) 
+                : 'Direct Reset';
+
+            await addTransaction({
+                amount: card.dueAmount,
+                type: 'INCOME',
+                category: 'Credit Card Payment',
+                date: new Date().toISOString(),
+                accountId: confirmCardId,
+                note: `Settled using ${sourceName}`
+            });
+
+            if (Platform.OS !== 'web') {
+                try {
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                } catch (e) {}
+            }
+        } catch (error) {
+            console.error("Error settling card:", error);
+        } finally {
+            setClearing(false);
+            setSelectedSourceAccountId(null);
+        }
     };
 
     return (
         <>
-        {/* Web confirm modal */}
+        {/* Web & Native Confirm & Select Funding Source Modal */}
         <Modal visible={!!confirmCardId} transparent animationType="fade" onRequestClose={() => setConfirmCardId(null)}>
             <Pressable style={s.modalOverlay} onPress={() => setConfirmCardId(null)}>
-                <Pressable style={[s.modalBox, { backgroundColor: Colors.surface }]} onPress={() => {}}>
-                    <Text style={[s.modalTitle, { color: Colors.text }]}>Record Payment?</Text>
-                    <Text style={[s.modalMsg, { color: Colors.textMuted }]}>
-                        This will record a full payment for this card. Your transaction history will be preserved.
-                    </Text>
+                <Pressable style={[s.modalBox, { backgroundColor: Colors.surface, width: '90%', maxWidth: 360 }]} onPress={(e) => e.stopPropagation()}>
+                    <Text style={[s.modalTitle, { color: Colors.text }]}>Record Card Payment</Text>
+                    {(() => {
+                        const card = creditCards.find(c => c.id === confirmCardId);
+                        if (!card) return null;
+                        return (
+                            <>
+                                <Text style={[s.modalMsg, { color: Colors.textMuted, marginBottom: 14 }]}>
+                                    Select the funding source to settle <Text style={{ color: Colors.primary, fontWeight: '700' }}>₹{card.dueAmount.toLocaleString()}</Text> due on <Text style={{ color: Colors.text, fontWeight: '700' }}>{card.cardName}</Text>:
+                                </Text>
+
+                                <ScrollView style={{ maxHeight: 180, marginBottom: 16 }} showsVerticalScrollIndicator={false}>
+                                    {/* Cash Account Option */}
+                                    <Pressable 
+                                        style={{
+                                            flexDirection: 'row',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center',
+                                            padding: 12,
+                                            borderRadius: 12,
+                                            borderWidth: 1,
+                                            borderColor: selectedSourceAccountId === 'cash' ? Colors.primary : Colors.border,
+                                            backgroundColor: selectedSourceAccountId === 'cash' ? Colors.primary + '08' : Colors.surface,
+                                            marginBottom: 8
+                                        }}
+                                        onPress={() => setSelectedSourceAccountId('cash')}
+                                    >
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                                            <View style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: Colors.income + '15', justifyContent: 'center', alignItems: 'center' }}>
+                                                <Wallet size={16} color={Colors.income} />
+                                            </View>
+                                            <Text style={{ color: Colors.text, fontSize: 13, fontWeight: '600' }}>{cashAccountName}</Text>
+                                        </View>
+                                        <Text style={{ color: Colors.textMuted, fontSize: 12, fontWeight: '600' }}>₹{cashBalance.toLocaleString()}</Text>
+                                    </Pressable>
+
+                                    {/* Bank Accounts List */}
+                                    {bankAccounts.map(bank => (
+                                        <Pressable 
+                                            key={bank.id}
+                                            style={{
+                                                flexDirection: 'row',
+                                                justifyContent: 'space-between',
+                                                alignItems: 'center',
+                                                padding: 12,
+                                                borderRadius: 12,
+                                                borderWidth: 1,
+                                                borderColor: selectedSourceAccountId === bank.id ? Colors.primary : Colors.border,
+                                                backgroundColor: selectedSourceAccountId === bank.id ? Colors.primary + '08' : Colors.surface,
+                                                marginBottom: 8
+                                            }}
+                                            onPress={() => setSelectedSourceAccountId(bank.id)}
+                                        >
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                                                <View style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: bank.color + '15', justifyContent: 'center', alignItems: 'center' }}>
+                                                    <Landmark size={16} color={bank.color} />
+                                                </View>
+                                                <Text style={{ color: Colors.text, fontSize: 13, fontWeight: '600' }} numberOfLines={1}>{bank.bankName}</Text>
+                                            </View>
+                                            <Text style={{ color: Colors.textMuted, fontSize: 12, fontWeight: '600' }}>₹{bank.computedBalance.toLocaleString()}</Text>
+                                        </Pressable>
+                                    ))}
+
+                                    {/* No Account (Just reset card due) */}
+                                    <Pressable 
+                                        style={{
+                                            flexDirection: 'row',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center',
+                                            padding: 12,
+                                            borderRadius: 12,
+                                            borderWidth: 1,
+                                            borderColor: selectedSourceAccountId === null ? Colors.primary : Colors.border,
+                                            backgroundColor: selectedSourceAccountId === null ? Colors.primary + '08' : Colors.surface,
+                                        }}
+                                        onPress={() => setSelectedSourceAccountId(null)}
+                                    >
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                                            <View style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: Colors.textMuted + '15', justifyContent: 'center', alignItems: 'center' }}>
+                                                <X size={16} color={Colors.textMuted} />
+                                            </View>
+                                            <Text style={{ color: Colors.text, fontSize: 13, fontWeight: '600' }}>No Source (Just Reset Card)</Text>
+                                        </View>
+                                    </Pressable>
+                                </ScrollView>
+                            </>
+                        );
+                    })()}
                     <View style={s.modalBtns}>
                         <Pressable style={[s.modalBtn, { borderColor: Colors.border, borderWidth: 1 }]} onPress={() => setConfirmCardId(null)}>
                             <Text style={{ color: Colors.textMuted, fontWeight: '600' }}>Cancel</Text>
@@ -256,30 +352,58 @@ export default function HomeDashboard() {
 
             {/* ── Net Balance Summary Card ─────────────────────────── */}
             <HoverCard disabled={true} style={[s.summaryCard, { backgroundColor: Colors.surface, borderColor: Colors.border, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 4 }]}>
-                <Text style={[s.summaryLabel, { color: Colors.textMuted }]}>Total Net Balance</Text>
-                <Text style={[s.totalBalance, { color: Colors.text }]}>₹{totalBalance.toLocaleString()}</Text>
+                <Text style={[s.summaryLabel, { color: Colors.textMuted }]}>AVAILABLE BALANCE</Text>
+                <Text style={[s.totalBalance, { color: Colors.text }]}>
+                    ₹{totalBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </Text>
                 <View style={[s.statsRow, { borderTopColor: Colors.border }]}>
                     <View style={s.statItem}>
                         <View style={[s.statIcon, { backgroundColor: Colors.income + '20' }]}>
-                            <TrendingUp color={Colors.income} size={16} />
+                            <Landmark color={Colors.income} size={16} />
                         </View>
                         <View>
-                            <Text style={[s.statLabel, { color: Colors.textMuted }]}>Monthly Income</Text>
-                            <Text style={[s.statValue, { color: Colors.income }]}>+₹{monthlyIncome.toLocaleString()}</Text>
+                            <Text style={[s.statLabel, { color: Colors.textMuted }]}>Bank Balance</Text>
+                            <Text style={[s.statValue, { color: Colors.income }]}>₹{totalBankBalance.toLocaleString()}</Text>
                         </View>
                     </View>
                     <View style={s.statItem}>
-                        <View style={[s.statIcon, { backgroundColor: Colors.expense + '20' }]}>
-                            <TrendingDown color={Colors.expense} size={16} />
+                        <View style={[s.statIcon, { backgroundColor: Colors.primary + '20' }]}>
+                            <Wallet color={Colors.primary} size={16} />
                         </View>
                         <View>
-                            <Text style={[s.statLabel, { color: Colors.textMuted }]}>Monthly Expenses</Text>
-                            <Text style={[s.statValue, { color: Colors.expense }]}>-₹{monthlyExpenses.toLocaleString()}</Text>
+                            <Text style={[s.statLabel, { color: Colors.textMuted }]}>{cashAccountName || 'Cash in Hand'}</Text>
+                            <Text style={[s.statValue, { color: Colors.primary }]}>₹{cashBalance.toLocaleString()}</Text>
                         </View>
                     </View>
                 </View>
+
+                {/* Compact, elegant monthly budget stats banner directly integrated */}
+                <View style={{ 
+                    flexDirection: 'row', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center', 
+                    marginTop: 14, 
+                    paddingVertical: 8, 
+                    paddingHorizontal: 12, 
+                    borderRadius: 12, 
+                    backgroundColor: Colors.surface,
+                    borderWidth: 1,
+                    borderColor: Colors.border
+                }}>
+                    <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: Colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 }}>May Summary:</Text>
+                        <Text style={{ fontSize: 11, color: Colors.income, fontWeight: '600' }}>In: +₹{monthlyIncome.toLocaleString()}</Text>
+                        <Text style={{ fontSize: 11, color: Colors.expense, fontWeight: '600' }}>Out: -₹{monthlyExpenses.toLocaleString()}</Text>
+                    </View>
+                    <View style={{ backgroundColor: (monthlyIncome - monthlyExpenses) >= 0 ? Colors.income + '15' : Colors.expense + '15', paddingVertical: 2, paddingHorizontal: 8, borderRadius: 6 }}>
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: (monthlyIncome - monthlyExpenses) >= 0 ? Colors.income : Colors.expense }}>
+                            Save: ₹{(monthlyIncome - monthlyExpenses).toLocaleString()}
+                        </Text>
+                    </View>
+                </View>
+
                 {totalCreditDue > 0 && (
-                    <View style={[s.dueAlert, { backgroundColor: Colors.expense + '15', borderColor: Colors.expense + '30' }]}>
+                    <View style={[s.dueAlert, { backgroundColor: Colors.expense + '15', borderColor: Colors.expense + '30', marginTop: 10 }]}>
                         <AlertCircle size={14} color={Colors.expense} />
                         <Text style={[s.dueAlertText, { color: Colors.expense }]}>
                             Total Credit Card Due: ₹{totalCreditDue.toLocaleString()}

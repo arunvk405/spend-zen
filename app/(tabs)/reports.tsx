@@ -86,6 +86,9 @@ export default function Reports() {
         let income = 0;
         let expense = 0;
         filteredTransactions.forEach(t => {
+            // Skip credit card payment resetting transactions from actual income totals
+            if (t.category === 'Credit Card Payment') return;
+
             if (t.type === 'INCOME') income += t.amount;
             else expense += t.amount;
         });
@@ -115,7 +118,7 @@ export default function Reports() {
     };
 
     const expenseBreakdown = useMemo(() => {
-        const expenses = filteredTransactions.filter(t => t.type === 'EXPENSE');
+        const expenses = filteredTransactions.filter(t => t.type === 'EXPENSE' && t.category !== 'Credit Card Payment');
         const breakdown: Record<string, { amount: number, color: string }> = {};
         
         expenses.forEach(t => {
@@ -138,7 +141,7 @@ export default function Reports() {
     }, [filteredTransactions, Colors]);
 
     const incomeBreakdown = useMemo(() => {
-        const incomes = filteredTransactions.filter(t => t.type === 'INCOME');
+        const incomes = filteredTransactions.filter(t => t.type === 'INCOME' && t.category !== 'Credit Card Payment');
         const breakdown: Record<string, { amount: number, color: string }> = {};
         
         incomes.forEach(t => {

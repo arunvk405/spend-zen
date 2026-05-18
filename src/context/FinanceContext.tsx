@@ -256,8 +256,10 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
                 // Monthly income/expense (non-credit)
                 if (isSameMonth(parseISO(t.date), now) && isSameYear(parseISO(t.date), now)) {
-                    if (t.type === 'INCOME') income += amount;
-                    else expense += amount;
+                    if (t.category !== 'Credit Card Payment') {
+                        if (t.type === 'INCOME') income += amount;
+                        else expense += amount;
+                    }
                 }
             });
 
