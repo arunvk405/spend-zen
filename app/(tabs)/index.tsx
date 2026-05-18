@@ -353,7 +353,11 @@ export default function HomeDashboard() {
             {/* ── Net Balance Summary Card ─────────────────────────── */}
             <HoverCard disabled={true} style={[s.summaryCard, { backgroundColor: Colors.surface, borderColor: Colors.border, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 4 }]}>
                 <Text style={[s.summaryLabel, { color: Colors.textMuted }]}>AVAILABLE BALANCE</Text>
-                <Text style={[s.totalBalance, { color: Colors.text }]}>
+                <Text 
+                    numberOfLines={1} 
+                    adjustsFontSizeToFit 
+                    style={[s.totalBalance, { color: Colors.text }]}
+                >
                     ₹{totalBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </Text>
                 <View style={[s.statsRow, { borderTopColor: Colors.border }]}>
@@ -361,44 +365,66 @@ export default function HomeDashboard() {
                         <View style={[s.statIcon, { backgroundColor: Colors.income + '20' }]}>
                             <Landmark color={Colors.income} size={16} />
                         </View>
-                        <View>
-                            <Text style={[s.statLabel, { color: Colors.textMuted }]}>Bank Balance</Text>
-                            <Text style={[s.statValue, { color: Colors.income }]}>₹{totalBankBalance.toLocaleString()}</Text>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text style={[s.statLabel, { color: Colors.textMuted }]} numberOfLines={1}>Bank Balance</Text>
+                            <Text 
+                                numberOfLines={1} 
+                                adjustsFontSizeToFit 
+                                style={[s.statValue, { color: Colors.income }]}
+                            >
+                                ₹{totalBankBalance.toLocaleString()}
+                            </Text>
                         </View>
                     </View>
                     <View style={s.statItem}>
                         <View style={[s.statIcon, { backgroundColor: Colors.primary + '20' }]}>
                             <Wallet color={Colors.primary} size={16} />
                         </View>
-                        <View>
-                            <Text style={[s.statLabel, { color: Colors.textMuted }]}>{cashAccountName || 'Cash in Hand'}</Text>
-                            <Text style={[s.statValue, { color: Colors.primary }]}>₹{cashBalance.toLocaleString()}</Text>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text style={[s.statLabel, { color: Colors.textMuted }]} numberOfLines={1}>{cashAccountName || 'Cash in Hand'}</Text>
+                            <Text 
+                                numberOfLines={1} 
+                                adjustsFontSizeToFit 
+                                style={[s.statValue, { color: Colors.primary }]}
+                            >
+                                ₹{cashBalance.toLocaleString()}
+                            </Text>
                         </View>
                     </View>
                 </View>
 
                 {/* Compact, elegant monthly budget stats banner directly integrated */}
                 <View style={{ 
-                    flexDirection: 'row', 
-                    justifyContent: 'space-between', 
-                    alignItems: 'center', 
                     marginTop: 14, 
-                    paddingVertical: 8, 
+                    paddingVertical: 10, 
                     paddingHorizontal: 12, 
                     borderRadius: 12, 
-                    backgroundColor: Colors.surface,
+                    backgroundColor: Colors.isDark ? '#ffffff05' : '#00000002',
                     borderWidth: 1,
                     borderColor: Colors.border
                 }}>
-                    <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
-                        <Text style={{ fontSize: 11, fontWeight: '700', color: Colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 }}>May Summary:</Text>
-                        <Text style={{ fontSize: 11, color: Colors.income, fontWeight: '600' }}>In: +₹{monthlyIncome.toLocaleString()}</Text>
-                        <Text style={{ fontSize: 11, color: Colors.expense, fontWeight: '600' }}>Out: -₹{monthlyExpenses.toLocaleString()}</Text>
-                    </View>
-                    <View style={{ backgroundColor: (monthlyIncome - monthlyExpenses) >= 0 ? Colors.income + '15' : Colors.expense + '15', paddingVertical: 2, paddingHorizontal: 8, borderRadius: 6 }}>
-                        <Text style={{ fontSize: 11, fontWeight: '700', color: (monthlyIncome - monthlyExpenses) >= 0 ? Colors.income : Colors.expense }}>
-                            Save: ₹{(monthlyIncome - monthlyExpenses).toLocaleString()}
+                    {/* Row 1: Month Title & Savings */}
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: Colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                            {format(new Date(), 'MMMM')} Summary
                         </Text>
+                        <View style={{ backgroundColor: (monthlyIncome - monthlyExpenses) >= 0 ? Colors.income + '15' : Colors.expense + '15', paddingVertical: 2, paddingHorizontal: 8, borderRadius: 6 }}>
+                            <Text style={{ fontSize: 11, fontWeight: '700', color: (monthlyIncome - monthlyExpenses) >= 0 ? Colors.income : Colors.expense }}>
+                                Save: ₹{(monthlyIncome - monthlyExpenses).toLocaleString()}
+                            </Text>
+                        </View>
+                    </View>
+                    
+                    {/* Row 2: Inflow / Outflow side-by-side */}
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: Colors.border + '30', paddingTop: 8 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                            <Text style={{ fontSize: 11, color: Colors.textMuted }}>In:</Text>
+                            <Text style={{ fontSize: 11, color: Colors.income, fontWeight: '600' }}>+₹{monthlyIncome.toLocaleString()}</Text>
+                        </View>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                            <Text style={{ fontSize: 11, color: Colors.textMuted }}>Out:</Text>
+                            <Text style={{ fontSize: 11, color: Colors.expense, fontWeight: '600' }}>-₹{monthlyExpenses.toLocaleString()}</Text>
+                        </View>
                     </View>
                 </View>
 

@@ -236,17 +236,35 @@ export default function Reports() {
                 <View style={[styles.summaryItem, { backgroundColor: Colors.surface }]}>
                     <ArrowUpCircle color={Colors.income} size={20} />
                     <Text style={[styles.summaryLabel, { color: Colors.textMuted }]}>Income</Text>
-                    <Text style={[styles.summaryValue, { color: Colors.income }]}>₹{stats.income.toLocaleString()}</Text>
+                    <Text 
+                        numberOfLines={1} 
+                        adjustsFontSizeToFit 
+                        style={[styles.summaryValue, { color: Colors.income }]}
+                    >
+                        ₹{stats.income.toLocaleString()}
+                    </Text>
                 </View>
                 <View style={[styles.summaryItem, { backgroundColor: Colors.surface }]}>
                     <ArrowDownCircle color={Colors.expense} size={20} />
                     <Text style={[styles.summaryLabel, { color: Colors.textMuted }]}>Expense</Text>
-                    <Text style={[styles.summaryValue, { color: Colors.expense }]}>₹{stats.expense.toLocaleString()}</Text>
+                    <Text 
+                        numberOfLines={1} 
+                        adjustsFontSizeToFit 
+                        style={[styles.summaryValue, { color: Colors.expense }]}
+                    >
+                        ₹{stats.expense.toLocaleString()}
+                    </Text>
                 </View>
                 <View style={[styles.summaryItem, { backgroundColor: Colors.surface }]}>
                     <Wallet color={Colors.primary} size={20} />
                     <Text style={[styles.summaryLabel, { color: Colors.textMuted }]}>Savings</Text>
-                    <Text style={[styles.summaryValue, { color: stats.net >= 0 ? Colors.primary : Colors.expense }]}>₹{stats.net.toLocaleString()}</Text>
+                    <Text 
+                        numberOfLines={1} 
+                        adjustsFontSizeToFit 
+                        style={[styles.summaryValue, { color: stats.net >= 0 ? Colors.primary : Colors.expense }]}
+                    >
+                        ₹{stats.net.toLocaleString()}
+                    </Text>
                 </View>
             </View>
 
