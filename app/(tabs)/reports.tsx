@@ -1,6 +1,6 @@
-import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Dimensions, ScrollView, TouchableOpacity, Pressable, Platform, Animated } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
+import { View, Text, StyleSheet, Dimensions, ScrollView, TouchableOpacity, Pressable, Platform, Animated, FlatList } from 'react-native';
+import { useLocalSearchParams, useFocusEffect } from 'expo-router';
 
 import { useThemeColors, Typography } from '../../src/theme/colors';
 import { PieChart } from 'react-native-chart-kit';
@@ -36,6 +36,13 @@ const MONTHS = [
     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
 ];
 
+const ITEM_WIDTH = 72; // 64 width + 8 marginRight
+const getItemLayout = (data: any, index: number) => ({
+    length: ITEM_WIDTH,
+    offset: ITEM_WIDTH * index,
+    index,
+});
+
 export default function Reports() {
     const Colors = useThemeColors();
     const { transactions, bankAccounts, creditCards, cashAccountName } = useFinance();
@@ -54,6 +61,20 @@ export default function Reports() {
     const params = useLocalSearchParams();
     const [selectedAccount, setSelectedAccount] = useState((params.accountId as string) || 'all');
     const [selectedDate, setSelectedDate] = useState(new Date());
+    const monthListRef = useRef<FlatList>(null);
+
+    useFocusEffect(
+        React.useCallback(() => {
+            const timer = setTimeout(() => {
+                monthListRef.current?.scrollToIndex({
+                    index: selectedDate.getMonth(),
+                    animated: true,
+                    viewPosition: 0.5,
+                });
+            }, 150);
+            return () => clearTimeout(timer);
+        }, [selectedDate])
+    );
 
     // Sync selectedAccount if params change
     React.useEffect(() => {
@@ -184,12 +205,30 @@ export default function Reports() {
                     </TouchableOpacity>
                 </View>
 
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.monthScroll}>
-                    {MONTHS.map((month, index) => {
+                <FlatList
+                    ref={monthListRef}
+                    data={MONTHS}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.monthScroll}
+                    contentContainerStyle={styles.monthContent}
+                    keyExtractor={(item) => item}
+                    getItemLayout={getItemLayout}
+                    onScrollToIndexFailed={(info) => {
+                        const promise = new Promise((resolve) => setTimeout(resolve, 50));
+                        promise.then(() => {
+                            monthListRef.current?.scrollToIndex({
+                                index: info.index,
+                                animated: true,
+                                viewPosition: 0.5,
+                            });
+                        });
+                    }}
+                    renderItem={({ item, index }) => {
                         const isSelected = selectedDate.getMonth() === index;
                         return (
                             <HoverCard
-                                key={month}
+                                key={item}
                                 style={[
                                     styles.monthChip,
                                     isSelected && { backgroundColor: Colors.primary, borderColor: Colors.primary }
@@ -199,11 +238,11 @@ export default function Reports() {
                                 <Text style={[
                                     styles.monthText,
                                     { color: isSelected ? Colors.white : Colors.textMuted }
-                                ]}>{month}</Text>
+                                ]}>{item}</Text>
                             </HoverCard>
                         );
-                    })}
-                </ScrollView>
+                    }}
+                />
 
                 <ScrollView
                     horizontal
@@ -441,11 +480,12 @@ export default function Reports() {
 const styles = StyleSheet.create({
     container: { flex: 1 },
     header: { padding: 20, paddingBottom: 10 },
-    yearRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+    yearRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
     yearText: { fontSize: 18, fontWeight: 'bold', marginHorizontal: 20 },
     arrowBtn: { padding: 4 },
-    monthScroll: { marginBottom: 16, marginHorizontal: -20, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 8 },
-    monthChip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12, marginRight: 8, borderWidth: 1, borderColor: 'transparent' },
+    monthScroll: { marginBottom: 16, marginHorizontal: -20 },
+    monthContent: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 8 },
+    monthChip: { width: 64, height: 36, justifyContent: 'center', alignItems: 'center', borderRadius: 12, marginRight: 8, borderWidth: 1, borderColor: 'transparent' },
     monthText: { fontSize: 14, fontWeight: '600' },
     filterContainer: { marginBottom: 10, paddingTop: 8, paddingBottom: 8 },
     filterContent: { paddingRight: 20 },

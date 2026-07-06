@@ -1,6 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, ScrollView, Pressable, Platform } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useFinance } from '../../src/context/FinanceContext';
 import { useThemeColors, Typography } from '../../src/theme/colors';
 import { 
@@ -15,6 +15,13 @@ const MONTHS = [
     'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
 ];
+
+const ITEM_WIDTH = 72; // 64 width + 8 marginRight
+const getItemLayout = (data: any, index: number) => ({
+    length: ITEM_WIDTH,
+    offset: ITEM_WIDTH * index,
+    index,
+});
 
 const HoverCard = ({ children, style, onPress, disabled = false }: any) => {
     const [isHovered, setIsHovered] = useState(false);
@@ -68,6 +75,20 @@ export default function TransactionsHistory() {
 
     // Month/Year filter state
     const [selectedDate, setSelectedDate] = useState(new Date());
+    const monthListRef = useRef<FlatList>(null);
+
+    useFocusEffect(
+        React.useCallback(() => {
+            const timer = setTimeout(() => {
+                monthListRef.current?.scrollToIndex({
+                    index: selectedDate.getMonth(),
+                    animated: true,
+                    viewPosition: 0.5,
+                });
+            }, 150);
+            return () => clearTimeout(timer);
+        }, [selectedDate])
+    );
 
     const filteredTransactions = useMemo(() => {
         return transactions.filter(tx => {
@@ -201,12 +222,30 @@ export default function TransactionsHistory() {
                         <ChevronRight color={Colors.textMuted} size={20} />
                     </TouchableOpacity>
                 </View>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.monthScroll}>
-                    {MONTHS.map((month, index) => {
+                <FlatList
+                    ref={monthListRef}
+                    data={MONTHS}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.monthScroll}
+                    contentContainerStyle={styles.monthContent}
+                    keyExtractor={(item) => item}
+                    getItemLayout={getItemLayout}
+                    onScrollToIndexFailed={(info) => {
+                        const promise = new Promise((resolve) => setTimeout(resolve, 50));
+                        promise.then(() => {
+                            monthListRef.current?.scrollToIndex({
+                                index: info.index,
+                                animated: true,
+                                viewPosition: 0.5,
+                            });
+                        });
+                    }}
+                    renderItem={({ item, index }) => {
                         const isSelected = selectedDate.getMonth() === index;
                         return (
                             <HoverCard
-                                key={month}
+                                key={item}
                                 style={[
                                     styles.monthChip,
                                     isSelected && { backgroundColor: Colors.primary, borderColor: Colors.primary }
@@ -216,11 +255,11 @@ export default function TransactionsHistory() {
                                 <Text style={[
                                     styles.monthText,
                                     { color: isSelected ? Colors.white : Colors.textMuted }
-                                ]}>{month}</Text>
+                                ]}>{item}</Text>
                             </HoverCard>
                         );
-                    })}
-                </ScrollView>
+                    }}
+                />
                 <View style={[styles.searchBar, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
                     <Search color={Colors.textMuted} size={18} />
                     <TextInput
@@ -292,7 +331,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        marginBottom: 16,
+        marginBottom: 10,
     },
     yearText: {
         fontSize: 18,
@@ -305,13 +344,17 @@ const styles = StyleSheet.create({
     monthScroll: {
         marginBottom: 16,
         marginHorizontal: -20,
+    },
+    monthContent: {
         paddingHorizontal: 20,
         paddingTop: 8,
         paddingBottom: 8,
     },
     monthChip: {
-        paddingHorizontal: 16,
-        paddingVertical: 8,
+        width: 64,
+        height: 36,
+        justifyContent: 'center',
+        alignItems: 'center',
         borderRadius: 12,
         marginRight: 8,
         borderWidth: 1,
