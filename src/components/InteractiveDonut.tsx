@@ -16,6 +16,7 @@ interface InteractiveDonutProps {
     onSelect: (name: string | null) => void;
     selectedItem: DataItem | null;
     colors: any;
+    onCenterPress?: (item: DataItem) => void;
 }
 
 const InteractiveDonut: React.FC<InteractiveDonutProps> = ({ 
@@ -24,7 +25,8 @@ const InteractiveDonut: React.FC<InteractiveDonutProps> = ({
     innerRadius, 
     onSelect, 
     selectedItem,
-    colors 
+    colors,
+    onCenterPress
 }) => {
     const [tooltipPos, setTooltipPos] = useState<{ x: number, y: number } | null>(null);
     const containerRef = useRef<View>(null);
@@ -115,33 +117,56 @@ const InteractiveDonut: React.FC<InteractiveDonutProps> = ({
             </Svg>
             
             {/* Dynamic Center Content (Always centered) */}
-            <View style={[styles.centerContent, { width: effectiveInnerRadius * 1.8, height: effectiveInnerRadius * 1.8 }]}>
-                {selectedItem ? (
-                    <>
-                        <Text style={[styles.tooltipName, { color: colors.textMuted }]} numberOfLines={2}>
-                            {selectedItem.name.toUpperCase()}
+            {selectedItem && onCenterPress ? (
+                <TouchableOpacity 
+                    style={[styles.centerContent, { width: effectiveInnerRadius * 1.8, height: effectiveInnerRadius * 1.8, pointerEvents: 'auto' as any }]}
+                    onPress={() => onCenterPress(selectedItem)}
+                    activeOpacity={0.7}
+                >
+                    <Text style={[styles.tooltipName, { color: colors.textMuted }]} numberOfLines={2}>
+                        {selectedItem.name.toUpperCase()}
+                    </Text>
+                    <Text style={[styles.tooltipAmount, { color: colors.text }]}>
+                        ₹{selectedItem.amount.toLocaleString()}
+                    </Text>
+                    <View style={[styles.badge, { backgroundColor: selectedItem.color + '15' }]}>
+                        <Text style={[styles.badgeText, { color: selectedItem.color }]}>
+                            {selectedItem.percent.toFixed(1)}%
                         </Text>
-                        <Text style={[styles.tooltipAmount, { color: colors.text }]}>
-                            ₹{selectedItem.amount.toLocaleString()}
-                        </Text>
-                        <View style={[styles.badge, { backgroundColor: selectedItem.color + '15' }]}>
-                            <Text style={[styles.badgeText, { color: selectedItem.color }]}>
-                                {selectedItem.percent.toFixed(1)}%
+                    </View>
+                    <Text style={{ fontSize: 9, color: colors.primary, marginTop: 4, fontWeight: '600' }}>
+                        View History →
+                    </Text>
+                </TouchableOpacity>
+            ) : (
+                <View style={[styles.centerContent, { width: effectiveInnerRadius * 1.8, height: effectiveInnerRadius * 1.8 }]}>
+                    {selectedItem ? (
+                        <>
+                            <Text style={[styles.tooltipName, { color: colors.textMuted }]} numberOfLines={2}>
+                                {selectedItem.name.toUpperCase()}
                             </Text>
-                        </View>
-                    </>
-                ) : (
-                    <>
-                        <Text style={[styles.centerLabel, { color: colors.textMuted }]}>TOTAL</Text>
-                        <Text style={[styles.centerValue, { color: colors.text }]}>
-                            ₹{data.reduce((sum, i) => sum + i.amount, 0).toLocaleString()}
-                        </Text>
-                        <Text style={{ fontSize: 10, color: colors.textMuted, marginTop: 4 }}>
-                            {data.length} Categories
-                        </Text>
-                    </>
-                )}
-            </View>
+                            <Text style={[styles.tooltipAmount, { color: colors.text }]}>
+                                ₹{selectedItem.amount.toLocaleString()}
+                            </Text>
+                            <View style={[styles.badge, { backgroundColor: selectedItem.color + '15' }]}>
+                                <Text style={[styles.badgeText, { color: selectedItem.color }]}>
+                                    {selectedItem.percent.toFixed(1)}%
+                                </Text>
+                            </View>
+                        </>
+                    ) : (
+                        <>
+                            <Text style={[styles.centerLabel, { color: colors.textMuted }]}>TOTAL</Text>
+                            <Text style={[styles.centerValue, { color: colors.text }]}>
+                                ₹{data.reduce((sum, i) => sum + i.amount, 0).toLocaleString()}
+                            </Text>
+                            <Text style={{ fontSize: 10, color: colors.textMuted, marginTop: 4 }}>
+                                {data.length} Categories
+                            </Text>
+                        </>
+                    )}
+                </View>
+            )}
         </View>
     );
 };

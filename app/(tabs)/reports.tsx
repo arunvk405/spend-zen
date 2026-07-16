@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, Dimensions, ScrollView, TouchableOpacity, Pressable, Platform, Animated, FlatList } from 'react-native';
-import { useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { useLocalSearchParams, useFocusEffect, useRouter } from 'expo-router';
 
 import { useThemeColors, Typography } from '../../src/theme/colors';
 import { PieChart } from 'react-native-chart-kit';
@@ -45,6 +45,7 @@ const getItemLayout = (data: any, index: number) => ({
 
 export default function Reports() {
     const Colors = useThemeColors();
+    const router = useRouter();
     const { transactions, bankAccounts, creditCards, cashAccountName } = useFinance();
     
     const [selectedExpenseCat, setSelectedExpenseCat] = useState<string | null>(null);
@@ -61,6 +62,17 @@ export default function Reports() {
     const params = useLocalSearchParams();
     const [selectedAccount, setSelectedAccount] = useState((params.accountId as string) || 'all');
     const [selectedDate, setSelectedDate] = useState(new Date());
+
+    const navigateToHistory = (category: string, type: 'EXPENSE' | 'INCOME') => {
+        router.push({
+            pathname: '/transactions',
+            params: {
+                category,
+                type,
+                date: selectedDate.toISOString()
+            }
+        });
+    };
     const monthListRef = useRef<FlatList>(null);
 
     useFocusEffect(
@@ -381,6 +393,7 @@ export default function Reports() {
                                 onSelect={setSelectedExpenseCat as any}
                                 selectedItem={expenseBreakdown.find(b => b.name === selectedExpenseCat) || null}
                                 colors={Colors}
+                                onCenterPress={(item) => navigateToHistory(item.name, 'EXPENSE')}
                             />
                         </View>
 
@@ -392,7 +405,7 @@ export default function Reports() {
                                         styles.breakdownItem, 
                                         selectedExpenseCat === item.name && { backgroundColor: item.color + '10', borderRadius: 12, padding: 8, marginHorizontal: -8 }
                                     ]}
-                                    onPress={() => setSelectedExpenseCat(item.name === selectedExpenseCat ? null : item.name)}
+                                    onPress={() => navigateToHistory(item.name, 'EXPENSE')}
                                 >
                                     <View style={styles.itemHeader}>
                                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -439,6 +452,7 @@ export default function Reports() {
                                 onSelect={setSelectedIncomeCat as any}
                                 selectedItem={incomeBreakdown.find(b => b.name === selectedIncomeCat) || null}
                                 colors={Colors}
+                                onCenterPress={(item) => navigateToHistory(item.name, 'INCOME')}
                             />
                         </View>
 
@@ -450,7 +464,7 @@ export default function Reports() {
                                         styles.breakdownItem,
                                         selectedIncomeCat === item.name && { backgroundColor: item.color + '10', borderRadius: 12, padding: 8, marginHorizontal: -8 }
                                     ]}
-                                    onPress={() => setSelectedIncomeCat(item.name === selectedIncomeCat ? null : item.name)}
+                                    onPress={() => navigateToHistory(item.name, 'INCOME')}
                                 >
                                     <View style={styles.itemHeader}>
                                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>

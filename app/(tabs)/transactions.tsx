@@ -1,12 +1,13 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, ScrollView, Pressable, Platform } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, ScrollView, Pressable, Platform, Modal } from 'react-native';
+import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useFinance } from '../../src/context/FinanceContext';
 import { useThemeColors, Typography } from '../../src/theme/colors';
 import { 
     Search, Trash2, Calendar, ChevronLeft, ChevronRight, Pencil, Info,
     Briefcase, PiggyBank, Gift, TrendingUp, Laptop, Package,
-    Utensils, Activity, Home, Car, User, PawPrint, FileText, Film, CreditCard, Wallet, Landmark
+    Utensils, Activity, Home, Car, User, PawPrint, FileText, Film, CreditCard, Wallet, Landmark,
+    SlidersHorizontal, X
 } from 'lucide-react-native';
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from '../../src/models';
 import { format, startOfMonth, endOfMonth, isWithinInterval, parseISO, isSameMonth, isSameYear } from 'date-fns';
@@ -70,12 +71,42 @@ export default function TransactionsHistory() {
     const Colors = useThemeColors();
     const router = useRouter();
     const { transactions, deleteTransaction, bankAccounts, creditCards, cashAccountName, historyRetention } = useFinance();
-    const [searchQuery, setSearchQuery] = useState('');
+    const params = useLocalSearchParams<{ category?: string; date?: string; type?: string }>();
+    const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+    const [selectedAccounts, setSelectedAccounts] = useState<string[]>([]);
+    const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+
+    // Modal temp states
+    const [tempCategories, setTempCategories] = useState<string[]>([]);
+    const [tempAccounts, setTempAccounts] = useState<string[]>([]);
+
     const [filterType, setFilterType] = useState<'ALL' | 'INCOME' | 'EXPENSE'>('ALL');
 
     // Month/Year filter state
     const [selectedDate, setSelectedDate] = useState(new Date());
     const monthListRef = useRef<FlatList>(null);
+
+    useEffect(() => {
+        if (params.category || params.date || params.type) {
+            const hasCategory = typeof params.category === 'string' && params.category.length > 0;
+            const hasDate = typeof params.date === 'string' && params.date.length > 0;
+            const hasType = typeof params.type === 'string' && params.type.length > 0;
+
+            if (hasCategory || hasDate || hasType) {
+                if (hasCategory) {
+                    setSelectedCategories([params.category as string]);
+                }
+                if (hasType) {
+                    setFilterType(params.type as 'ALL' | 'INCOME' | 'EXPENSE');
+                }
+                if (hasDate) {
+                    setSelectedDate(new Date(params.date as string));
+                }
+                // Clear the params from the router so they don't lock the state when tab changes
+                router.setParams({ category: '', date: '', type: '' });
+            }
+        }
+    }, [params.category, params.date, params.type]);
 
     useFocusEffect(
         React.useCallback(() => {
@@ -94,14 +125,70 @@ export default function TransactionsHistory() {
         return transactions.filter(tx => {
             const txDate = parseISO(tx.date);
             const matchesDate = isSameMonth(txDate, selectedDate) && isSameYear(txDate, selectedDate);
-
-            const matchesSearch = tx.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                (tx.note && tx.note.toLowerCase().includes(searchQuery.toLowerCase()));
             const matchesType = filterType === 'ALL' || tx.type === filterType;
+            const matchesCategory = selectedCategories.length === 0 || selectedCategories.includes(tx.category);
+            const matchesAccount = selectedAccounts.length === 0 || selectedAccounts.includes(tx.accountId);
 
-            return matchesDate && matchesSearch && matchesType;
+            return matchesDate && matchesType && matchesCategory && matchesAccount;
         });
-    }, [transactions, searchQuery, filterType, selectedDate]);
+    }, [transactions, filterType, selectedDate, selectedCategories, selectedAccounts]);
+
+    const categoriesToSelect = useMemo(() => {
+        if (filterType === 'INCOME') return INCOME_CATEGORIES;
+        if (filterType === 'EXPENSE') return EXPENSE_CATEGORIES;
+        
+        const combined = [...INCOME_CATEGORIES];
+        EXPENSE_CATEGORIES.forEach(exp => {
+            if (!combined.some(inc => inc.name === exp.name)) {
+                combined.push(exp);
+            }
+        });
+        return combined;
+    }, [filterType]);
+
+    const accountsToSelect = useMemo(() => {
+        const list = [{ id: 'cash', name: cashAccountName }];
+        bankAccounts.forEach(b => list.push({ id: b.id, name: b.bankName }));
+        creditCards.forEach(c => list.push({ id: c.id, name: c.cardName }));
+        return list;
+    }, [bankAccounts, creditCards, cashAccountName]);
+
+    const openModal = () => {
+        setTempCategories([...selectedCategories]);
+        setTempAccounts([...selectedAccounts]);
+        setIsFilterModalOpen(true);
+    };
+
+    const handleApply = () => {
+        setSelectedCategories([...tempCategories]);
+        setSelectedAccounts([...tempAccounts]);
+        setIsFilterModalOpen(false);
+    };
+
+    const handleReset = () => {
+        setTempCategories([]);
+        setTempAccounts([]);
+    };
+
+    const handleCancel = () => {
+        setIsFilterModalOpen(false);
+    };
+
+    const toggleTempCategory = (categoryName: string) => {
+        if (tempCategories.includes(categoryName)) {
+            setTempCategories(tempCategories.filter(c => c !== categoryName));
+        } else {
+            setTempCategories([...tempCategories, categoryName]);
+        }
+    };
+
+    const toggleTempAccount = (accountId: string) => {
+        if (tempAccounts.includes(accountId)) {
+            setTempAccounts(tempAccounts.filter(a => a !== accountId));
+        } else {
+            setTempAccounts([...tempAccounts, accountId]);
+        }
+    };
 
     const changeYear = (delta: number) => {
         const newDate = new Date(selectedDate);
@@ -260,15 +347,51 @@ export default function TransactionsHistory() {
                         );
                     }}
                 />
-                <View style={[styles.searchBar, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
-                    <Search color={Colors.textMuted} size={18} />
-                    <TextInput
-                        style={[styles.searchInput, { color: Colors.text }]}
-                        placeholder="Search categories or notes..."
-                        placeholderTextColor={Colors.textMuted}
-                        value={searchQuery}
-                        onChangeText={setSearchQuery}
-                    />
+                <View style={styles.filterHeaderRow}>
+                    <ScrollView 
+                        horizontal 
+                        showsHorizontalScrollIndicator={false} 
+                        style={styles.activeChipsScroll}
+                        contentContainerStyle={styles.activeChipsContent}
+                    >
+                        {selectedCategories.length === 0 && selectedAccounts.length === 0 ? (
+                            <Text style={[styles.noActiveFiltersText, { color: Colors.textMuted }]}>
+                                All categories & accounts
+                            </Text>
+                        ) : (
+                            <>
+                                {selectedCategories.map(cat => (
+                                    <TouchableOpacity 
+                                        key={`cat-${cat}`}
+                                        style={[styles.activeFilterChip, { backgroundColor: Colors.primary + '15', borderColor: Colors.primary + '30' }]}
+                                        onPress={() => setSelectedCategories(selectedCategories.filter(c => c !== cat))}
+                                    >
+                                        <Text style={[styles.activeFilterChipText, { color: Colors.primary }]}>{cat}</Text>
+                                        <X color={Colors.primary} size={12} style={styles.activeFilterChipIcon} />
+                                    </TouchableOpacity>
+                                ))}
+                                {selectedAccounts.map(accId => {
+                                    const accName = getAccountName(accId);
+                                    return (
+                                        <TouchableOpacity 
+                                            key={`acc-${accId}`}
+                                            style={[styles.activeFilterChip, { backgroundColor: Colors.income + '15', borderColor: Colors.income + '30' }]}
+                                            onPress={() => setSelectedAccounts(selectedAccounts.filter(a => a !== accId))}
+                                        >
+                                            <Text style={[styles.activeFilterChipText, { color: Colors.income }]}>{accName}</Text>
+                                            <X color={Colors.income} size={12} style={styles.activeFilterChipIcon} />
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                            </>
+                        )}
+                    </ScrollView>
+                    <TouchableOpacity 
+                        style={[styles.filterIconButton, { backgroundColor: Colors.surface, borderColor: Colors.border }]} 
+                        onPress={openModal}
+                    >
+                        <SlidersHorizontal color={Colors.primary} size={20} />
+                    </TouchableOpacity>
                 </View>
                 <View style={styles.filterRow}>
                     {['ALL', 'INCOME', 'EXPENSE'].map((t) => (
@@ -314,6 +437,102 @@ export default function TransactionsHistory() {
                     </View>
                 }
             />
+            
+            {/* Modal filter overlay */}
+            <Modal
+                visible={isFilterModalOpen}
+                animationType="slide"
+                transparent={true}
+                onRequestClose={handleCancel}
+            >
+                <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
+                    <View style={[styles.modalContent, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+                        {/* Modal Header */}
+                        <View style={[styles.modalHeader, { borderBottomColor: Colors.border }]}>
+                            <Text style={[styles.modalTitle, { color: Colors.text }]}>Filter Transactions</Text>
+                            <TouchableOpacity onPress={handleCancel} style={styles.modalCloseButton}>
+                                <X color={Colors.textMuted} size={22} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+                            {/* Categories Section */}
+                            <View style={styles.modalSection}>
+                                <Text style={[styles.sectionTitle, { color: Colors.text }]}>Categories</Text>
+                                <View style={styles.chipsGrid}>
+                                    {categoriesToSelect.map(cat => {
+                                        const isSelected = tempCategories.includes(cat.name);
+                                        return (
+                                            <TouchableOpacity
+                                                key={`temp-cat-${cat.name}`}
+                                                style={[
+                                                    styles.modalChip,
+                                                    { borderColor: Colors.border, backgroundColor: Colors.background },
+                                                    isSelected && { backgroundColor: Colors.primary + '15', borderColor: Colors.primary }
+                                                ]}
+                                                onPress={() => toggleTempCategory(cat.name)}
+                                            >
+                                                <Text style={[
+                                                    styles.modalChipText,
+                                                    { color: Colors.text },
+                                                    isSelected && { color: Colors.primary, fontWeight: '700' }
+                                                ]}>
+                                                    {cat.name}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        );
+                                    })}
+                                </View>
+                            </View>
+
+                            {/* Accounts Section */}
+                            <View style={styles.modalSection}>
+                                <Text style={[styles.sectionTitle, { color: Colors.text }]}>Accounts / Banks</Text>
+                                <View style={styles.chipsGrid}>
+                                    {accountsToSelect.map(acc => {
+                                        const isSelected = tempAccounts.includes(acc.id);
+                                        return (
+                                            <TouchableOpacity
+                                                key={`temp-acc-${acc.id}`}
+                                                style={[
+                                                    styles.modalChip,
+                                                    { borderColor: Colors.border, backgroundColor: Colors.background },
+                                                    isSelected && { backgroundColor: Colors.income + '15', borderColor: Colors.income }
+                                                ]}
+                                                onPress={() => toggleTempAccount(acc.id)}
+                                            >
+                                                <Text style={[
+                                                    styles.modalChipText,
+                                                    { color: Colors.text },
+                                                    isSelected && { color: Colors.income, fontWeight: '700' }
+                                                ]}>
+                                                    {acc.name}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        );
+                                    })}
+                                </View>
+                            </View>
+                        </ScrollView>
+
+                        {/* Modal Footer */}
+                        <View style={[styles.modalFooter, { borderTopColor: Colors.border }]}>
+                            <TouchableOpacity 
+                                style={[styles.modalResetButton, { borderColor: Colors.border }]} 
+                                onPress={handleReset}
+                            >
+                                <Text style={[styles.modalResetButtonText, { color: Colors.textMuted }]}>Reset All</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity 
+                                style={[styles.modalApplyButton, { backgroundColor: Colors.primary }]} 
+                                onPress={handleApply}
+                            >
+                                <Text style={styles.modalApplyButtonText}>Apply Filters</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -504,5 +723,144 @@ const styles = StyleSheet.create({
     },
     emptyText: {
         fontSize: 16,
+    },
+    // New Filter Styles
+    filterHeaderRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        height: 48,
+        marginBottom: 16,
+        gap: 8,
+    },
+    activeChipsScroll: {
+        flex: 1,
+    },
+    activeChipsContent: {
+        alignItems: 'center',
+        gap: 8,
+    },
+    noActiveFiltersText: {
+        fontSize: 14,
+        fontStyle: 'italic',
+    },
+    activeFilterChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 16,
+        borderWidth: 1,
+        gap: 4,
+    },
+    activeFilterChipText: {
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    activeFilterChipIcon: {
+        marginLeft: 2,
+    },
+    filterIconButton: {
+        width: 44,
+        height: 44,
+        borderRadius: 12,
+        borderWidth: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+    },
+    // Modal Styles
+    modalOverlay: {
+        flex: 1,
+        justifyContent: 'flex-end',
+    },
+    modalContent: {
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        paddingTop: 16,
+        paddingHorizontal: 20,
+        paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+        maxHeight: '80%',
+        borderTopWidth: 1,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+        elevation: 10,
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingBottom: 16,
+        borderBottomWidth: 1,
+    },
+    modalTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+    },
+    modalCloseButton: {
+        padding: 4,
+    },
+    modalBody: {
+        marginVertical: 16,
+    },
+    modalSection: {
+        marginBottom: 24,
+    },
+    sectionTitle: {
+        fontSize: 14,
+        fontWeight: '700',
+        marginBottom: 12,
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+    },
+    chipsGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+    },
+    modalChip: {
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 16,
+        borderWidth: 1,
+    },
+    modalChipText: {
+        fontSize: 13,
+        fontWeight: '500',
+    },
+    modalFooter: {
+        flexDirection: 'row',
+        gap: 12,
+        paddingTop: 16,
+        borderTopWidth: 1,
+    },
+    modalResetButton: {
+        flex: 1,
+        height: 48,
+        borderRadius: 12,
+        borderWidth: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    modalResetButtonText: {
+        fontSize: 15,
+        fontWeight: '600',
+    },
+    modalApplyButton: {
+        flex: 2,
+        height: 48,
+        borderRadius: 12,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    modalApplyButtonText: {
+        color: '#fff',
+        fontSize: 15,
+        fontWeight: '700',
     },
 });
