@@ -8,6 +8,8 @@ import {
     ProjectedExpense,
     HistoryRetentionType,
     UserProfile,
+    RecurringBill,
+    SavingsGoal,
 } from '../models';
 import {
     initDatabase,
@@ -35,7 +37,7 @@ import {
     migrateTransactions,
     deleteTransactionsBeforeDate,
 } from '../database/db';
-import { isSameMonth, isSameYear, parseISO, subMonths, startOfMonth } from 'date-fns';
+import { isSameMonth, isSameYear, parseISO, subMonths, startOfMonth, format } from 'date-fns';
 import { useAuth } from './AuthContext';
 
 interface FinanceContextType {
@@ -76,6 +78,19 @@ interface FinanceContextType {
     addCustomCategory: (name: string, type: 'INCOME' | 'EXPENSE') => Promise<void>;
     deleteCustomCategory: (name: string, type: 'INCOME' | 'EXPENSE') => Promise<void>;
     updateCustomCategory: (oldName: string, newName: string, type: 'INCOME' | 'EXPENSE') => Promise<void>;
+    // Category budgets
+    categoryBudgets: Record<string, number>;
+    updateCategoryBudgets: (budgets: Record<string, number>) => Promise<void>;
+    // Recurring Bills
+    recurringBills: RecurringBill[];
+    addRecurringBill: (bill: Omit<RecurringBill, 'id'>) => Promise<void>;
+    deleteRecurringBill: (id: string) => Promise<void>;
+    payRecurringBill: (bill: RecurringBill) => Promise<void>;
+    // Savings Goals
+    savingsGoals: SavingsGoal[];
+    addSavingsGoal: (goal: Omit<SavingsGoal, 'id' | 'currentAmount' | 'createdAt'>) => Promise<void>;
+    deleteSavingsGoal: (id: string) => Promise<void>;
+    allocateToGoal: (goalId: string, amount: number, accountId: string) => Promise<void>;
     // Bank accounts CRUD
     addBankAccount: (data: { bankName: string; accountType: BankAccount['accountType']; initialBalance: number; color: string }) => Promise<void>;
     updateBankAccount: (id: string, data: Partial<BankAccount>) => Promise<void>;
@@ -119,6 +134,9 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const [hasFetchedOnce, setHasFetchedOnce] = useState(false);
     const [hasError, setHasError] = useState(false);
     const [customCategories, setCustomCategories] = useState<any[]>([]);
+    const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
+    const [recurringBills, setRecurringBills] = useState<RecurringBill[]>([]);
+    const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([]);
 
     const refreshData = useCallback(async () => {
         if (!dbReady || !user) return;
@@ -304,6 +322,21 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
             } else {
                 setCustomCategories([]);
             }
+            if (userProfile?.categoryBudgets) {
+                setCategoryBudgets(userProfile.categoryBudgets);
+            } else {
+                setCategoryBudgets({});
+            }
+            if (userProfile?.recurringBills) {
+                setRecurringBills(userProfile.recurringBills);
+            } else {
+                setRecurringBills([]);
+            }
+            if (userProfile?.savingsGoals) {
+                setSavingsGoals(userProfile.savingsGoals);
+            } else {
+                setSavingsGoals([]);
+            }
         } catch (err) {
             console.error('Error refreshing data:', err);
             setHasError(true);
@@ -474,6 +507,124 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         }
     };
 
+    const updateCategoryBudgets = async (budgets: Record<string, number>) => {
+        if (!user) return;
+        try {
+            await upsertUserProfile(user.uid, { categoryBudgets: budgets });
+            setCategoryBudgets(budgets);
+        } catch (e) {
+            console.error("Error updating category budgets:", e);
+        }
+    };
+
+    const addRecurringBill = async (billData: Omit<RecurringBill, 'id'>) => {
+        if (!user) return;
+        try {
+            const newBill: RecurringBill = {
+                ...billData,
+                id: Math.random().toString(36).substring(2, 9),
+            };
+            const updated = [...recurringBills, newBill];
+            await upsertUserProfile(user.uid, { recurringBills: updated });
+            setRecurringBills(updated);
+        } catch (e) {
+            console.error("Error adding recurring bill:", e);
+        }
+    };
+
+    const deleteRecurringBill = async (id: string) => {
+        if (!user) return;
+        try {
+            const updated = recurringBills.filter(b => b.id !== id);
+            await upsertUserProfile(user.uid, { recurringBills: updated });
+            setRecurringBills(updated);
+        } catch (e) {
+            console.error("Error deleting recurring bill:", e);
+        }
+    };
+
+    const payRecurringBill = async (bill: RecurringBill) => {
+        if (!user) return;
+        try {
+            await addTxDb(user.uid, {
+                amount: bill.amount,
+                category: bill.category,
+                type: 'EXPENSE',
+                accountId: bill.accountId,
+                date: new Date().toISOString(),
+                note: `Recurring Bill: ${bill.name}`
+            });
+
+            const currentMonthStr = format(new Date(), 'yyyy-MM');
+            const updated = recurringBills.map(b => {
+                if (b.id === bill.id) {
+                    return { ...b, lastPaidMonth: currentMonthStr };
+                }
+                return b;
+            });
+            await upsertUserProfile(user.uid, { recurringBills: updated });
+            await refreshData();
+        } catch (e) {
+            console.error("Error paying recurring bill:", e);
+        }
+    };
+
+    const addSavingsGoal = async (goalData: Omit<SavingsGoal, 'id' | 'currentAmount' | 'createdAt'>) => {
+        if (!user) return;
+        try {
+            const newGoal: SavingsGoal = {
+                ...goalData,
+                id: Math.random().toString(36).substring(2, 9),
+                currentAmount: 0,
+                createdAt: new Date().toISOString(),
+            };
+            const updated = [...savingsGoals, newGoal];
+            await upsertUserProfile(user.uid, { savingsGoals: updated });
+            setSavingsGoals(updated);
+        } catch (e) {
+            console.error("Error adding savings goal:", e);
+        }
+    };
+
+    const deleteSavingsGoal = async (id: string) => {
+        if (!user) return;
+        try {
+            const updated = savingsGoals.filter(g => g.id !== id);
+            await upsertUserProfile(user.uid, { savingsGoals: updated });
+            setSavingsGoals(updated);
+        } catch (e) {
+            console.error("Error deleting savings goal:", e);
+        }
+    };
+
+    const allocateToGoal = async (goalId: string, amount: number, accountId: string) => {
+        if (!user) return;
+        try {
+            const targetGoal = savingsGoals.find(g => g.id === goalId);
+            if (!targetGoal) return;
+
+            await addTxDb(user.uid, {
+                amount: amount,
+                category: 'Investment/SIP',
+                type: 'EXPENSE',
+                accountId: accountId,
+                date: new Date().toISOString(),
+                note: `Allocated to Goal: ${targetGoal.name}`
+            });
+
+            const updated = savingsGoals.map(g => {
+                if (g.id === goalId) {
+                    return { ...g, currentAmount: g.currentAmount + amount };
+                }
+                return g;
+            });
+            await upsertUserProfile(user.uid, { savingsGoals: updated });
+            await refreshData();
+        } catch (e) {
+            console.error("Error allocating to savings goal:", e);
+        }
+    };
+
     return (
         <FinanceContext.Provider value={{
             transactions,
@@ -497,6 +648,16 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
             addProjectedNote, deleteProjectedNote, clearAllProjectedNotes,
             customCategories,
             addCustomCategory, deleteCustomCategory, updateCustomCategory,
+            categoryBudgets,
+            updateCategoryBudgets,
+            recurringBills,
+            addRecurringBill,
+            deleteRecurringBill,
+            payRecurringBill,
+            savingsGoals,
+            addSavingsGoal,
+            deleteSavingsGoal,
+            allocateToGoal,
             addBankAccount, updateBankAccount, deleteBankAccount,
             addCreditCard, updateCreditCard, deleteCreditCard,
             renameCashAccount,

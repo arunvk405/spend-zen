@@ -3,11 +3,11 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, ScrollVi
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useFinance } from '../../src/context/FinanceContext';
 import { useThemeColors, Typography } from '../../src/theme/colors';
-import { 
+import {
     Search, Trash2, Calendar, ChevronLeft, ChevronRight, Pencil, Info,
     Briefcase, PiggyBank, Gift, TrendingUp, Laptop, Package,
     Utensils, Activity, Home, Car, User, PawPrint, FileText, Film, CreditCard, Wallet, Landmark,
-    SlidersHorizontal, X
+    SlidersHorizontal, X, Download
 } from 'lucide-react-native';
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from '../../src/models';
 import { format, startOfMonth, endOfMonth, isWithinInterval, parseISO, isSameMonth, isSameYear } from 'date-fns';
@@ -136,7 +136,7 @@ export default function TransactionsHistory() {
     const categoriesToSelect = useMemo(() => {
         if (filterType === 'INCOME') return INCOME_CATEGORIES;
         if (filterType === 'EXPENSE') return EXPENSE_CATEGORIES;
-        
+
         const combined = [...INCOME_CATEGORIES];
         EXPENSE_CATEGORIES.forEach(exp => {
             if (!combined.some(inc => inc.name === exp.name)) {
@@ -163,6 +163,44 @@ export default function TransactionsHistory() {
         setSelectedCategories([...tempCategories]);
         setSelectedAccounts([...tempAccounts]);
         setIsFilterModalOpen(false);
+    };
+
+    const handleExportCSV = () => {
+        if (filteredTransactions.length === 0) {
+            if (Platform.OS === 'web') {
+                window.alert("No transactions to export");
+            } else {
+                const { Alert } = require('react-native');
+                Alert.alert("Export", "No transactions to export");
+            }
+            return;
+        }
+
+        // Header row
+        let csv = 'Date,Category,Type,Amount,Account,Note\n';
+
+        filteredTransactions.forEach(t => {
+            const accountName = getAccountName(t.accountId);
+            const noteText = t.note ? t.note.replace(/"/g, '""') : '';
+            csv += `"${t.date.split('T')[0]}","${t.category}","${t.type}",${t.amount},"${accountName}","${noteText}"\n`;
+        });
+
+        if (Platform.OS === 'web') {
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.setAttribute('href', url);
+            link.setAttribute('download', `SpendZen_Export_${format(selectedDate, 'yyyy_MM')}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        } else {
+            const { Share } = require('react-native');
+            Share.share({
+                message: csv,
+                title: 'Spend Zen Transactions Export'
+            }).catch((err: any) => console.error(err));
+        }
     };
 
     const handleReset = () => {
@@ -218,13 +256,15 @@ export default function TransactionsHistory() {
                 `Are you sure you want to delete this ${item.type.toLowerCase()} transaction of ₹${item.amount}?`,
                 [
                     { text: 'Cancel', style: 'cancel' },
-                    { text: 'Delete', style: 'destructive', onPress: async () => {
-                        try {
-                            await deleteTransaction(item.id);
-                        } catch (error) {
-                            Alert.alert('Error', 'Failed to delete transaction');
+                    {
+                        text: 'Delete', style: 'destructive', onPress: async () => {
+                            try {
+                                await deleteTransaction(item.id);
+                            } catch (error) {
+                                Alert.alert('Error', 'Failed to delete transaction');
+                            }
                         }
-                    }},
+                    },
                 ]
             );
         }
@@ -242,15 +282,15 @@ export default function TransactionsHistory() {
     const allCategories = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES];
 
     const renderItem = ({ item }: { item: any }) => {
-        const categoryData = allCategories.find(c => c.name === item.category && c.type === item.type) || 
-                           allCategories.find(c => c.name === item.category) ||
-                           { icon: 'package', color: Colors.textMuted };
+        const categoryData = allCategories.find(c => c.name === item.category && c.type === item.type) ||
+            allCategories.find(c => c.name === item.category) ||
+            { icon: 'package', color: Colors.textMuted };
 
         return (
             <View style={[styles.transactionItem, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
-                <View style={[styles.cardHeader, { 
+                <View style={[styles.cardHeader, {
                     borderBottomColor: Colors.border + '30',
-                    backgroundColor: Colors.isDark ? '#ffffff05' : '#00000003' 
+                    backgroundColor: Colors.isDark ? '#ffffff05' : '#00000003'
                 }]}>
                     <Text style={[styles.txCategory, { color: Colors.text }]}>{item.category}</Text>
                     {item.note ? (
@@ -348,9 +388,9 @@ export default function TransactionsHistory() {
                     }}
                 />
                 <View style={styles.filterHeaderRow}>
-                    <ScrollView 
-                        horizontal 
-                        showsHorizontalScrollIndicator={false} 
+                    <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
                         style={styles.activeChipsScroll}
                         contentContainerStyle={styles.activeChipsContent}
                     >
@@ -361,7 +401,7 @@ export default function TransactionsHistory() {
                         ) : (
                             <>
                                 {selectedCategories.map(cat => (
-                                    <TouchableOpacity 
+                                    <TouchableOpacity
                                         key={`cat-${cat}`}
                                         style={[styles.activeFilterChip, { backgroundColor: Colors.primary + '15', borderColor: Colors.primary + '30' }]}
                                         onPress={() => setSelectedCategories(selectedCategories.filter(c => c !== cat))}
@@ -373,7 +413,7 @@ export default function TransactionsHistory() {
                                 {selectedAccounts.map(accId => {
                                     const accName = getAccountName(accId);
                                     return (
-                                        <TouchableOpacity 
+                                        <TouchableOpacity
                                             key={`acc-${accId}`}
                                             style={[styles.activeFilterChip, { backgroundColor: Colors.income + '15', borderColor: Colors.income + '30' }]}
                                             onPress={() => setSelectedAccounts(selectedAccounts.filter(a => a !== accId))}
@@ -386,11 +426,17 @@ export default function TransactionsHistory() {
                             </>
                         )}
                     </ScrollView>
-                    <TouchableOpacity 
-                        style={[styles.filterIconButton, { backgroundColor: Colors.surface, borderColor: Colors.border }]} 
+                    <TouchableOpacity
+                        style={[styles.filterIconButton, { backgroundColor: Colors.surface, borderColor: Colors.border }]}
                         onPress={openModal}
                     >
                         <SlidersHorizontal color={Colors.primary} size={20} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.filterIconButton, { backgroundColor: Colors.surface, borderColor: Colors.border, marginLeft: 8 }]}
+                        onPress={handleExportCSV}
+                    >
+                        <Download color={Colors.primary} size={20} />
                     </TouchableOpacity>
                 </View>
                 <View style={styles.filterRow}>
@@ -415,7 +461,7 @@ export default function TransactionsHistory() {
                     ))}
                 </View>
                 {historyRetention ? (
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         style={[styles.infoBanner, { backgroundColor: Colors.primary + '10', borderColor: Colors.primary + '20' }]}
                         onPress={() => router.push('/settings')}
                     >
@@ -437,7 +483,7 @@ export default function TransactionsHistory() {
                     </View>
                 }
             />
-            
+
             {/* Modal filter overlay */}
             <Modal
                 visible={isFilterModalOpen}
@@ -517,14 +563,14 @@ export default function TransactionsHistory() {
 
                         {/* Modal Footer */}
                         <View style={[styles.modalFooter, { borderTopColor: Colors.border }]}>
-                            <TouchableOpacity 
-                                style={[styles.modalResetButton, { borderColor: Colors.border }]} 
+                            <TouchableOpacity
+                                style={[styles.modalResetButton, { borderColor: Colors.border }]}
                                 onPress={handleReset}
                             >
                                 <Text style={[styles.modalResetButtonText, { color: Colors.textMuted }]}>Reset All</Text>
                             </TouchableOpacity>
-                            <TouchableOpacity 
-                                style={[styles.modalApplyButton, { backgroundColor: Colors.primary }]} 
+                            <TouchableOpacity
+                                style={[styles.modalApplyButton, { backgroundColor: Colors.primary }]}
                                 onPress={handleApply}
                             >
                                 <Text style={styles.modalApplyButtonText}>Apply Filters</Text>

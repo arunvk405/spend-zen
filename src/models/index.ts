@@ -1,6 +1,26 @@
 export type TransactionType = 'INCOME' | 'EXPENSE';
 export type HistoryRetentionType = '3months' | '6months' | 'all';
 
+export interface RecurringBill {
+    id: string;
+    name: string;
+    amount: number;
+    category: string;
+    dueDate: number; // day of month (1-31)
+    accountId: string; // 'cash' or bank/card id
+    period: 'monthly' | 'yearly';
+    lastPaidMonth?: string; // e.g. "2026-07"
+}
+
+export interface SavingsGoal {
+    id: string;
+    name: string;
+    targetAmount: number;
+    currentAmount: number;
+    color: string;
+    createdAt: string;
+}
+
 export interface UserProfile {
     uid: string;
     email: string;
@@ -10,6 +30,9 @@ export interface UserProfile {
     historyRetention?: HistoryRetentionType;
     monthlySalary?: number;
     customCategories?: any[];
+    categoryBudgets?: Record<string, number>;
+    recurringBills?: RecurringBill[];
+    savingsGoals?: SavingsGoal[];
 }
 
 

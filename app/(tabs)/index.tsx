@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
     View, Text, StyleSheet, ScrollView, TouchableOpacity,
-    Platform, Modal, Pressable, ActivityIndicator, Animated
+    Platform, Modal, Pressable, ActivityIndicator, Animated, TextInput
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { useFinance } from '../../src/context/FinanceContext';
@@ -9,7 +9,8 @@ import { useThemeColors } from '../../src/theme/colors';
 import {
     Wallet, Landmark, CreditCard, TrendingUp, TrendingDown,
     ArrowRight, Briefcase, RotateCcw, Plus, AlertCircle, Pencil, Shield, X,
-    PiggyBank, Gift, Laptop, Package, Utensils, Activity, Home, Car, User, PawPrint, FileText, Film
+    PiggyBank, Gift, Laptop, Package, Utensils, Activity, Home, Car, User, PawPrint, FileText, Film,
+    Trash2, CheckCircle, ChevronDown
 } from 'lucide-react-native';
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from '../../src/models';
 import { format, isSameMonth, isSameYear, parseISO } from 'date-fns';
@@ -89,13 +90,38 @@ export default function HomeDashboard() {
         creditCards, totalCreditDue,
         transactions, loading, hasFetchedOnce, hasError, refreshData, clearAccountData, addTransaction,
         cashAccountName, renameCashAccount,
-        historyRetention, updateHistoryRetention
+        historyRetention, updateHistoryRetention,
+        categoryBudgets, customCategories,
+        recurringBills, addRecurringBill, deleteRecurringBill, payRecurringBill,
+        savingsGoals, addSavingsGoal, deleteSavingsGoal, allocateToGoal
     } = useFinance();
 
     const [fadeAnim] = useState(new Animated.Value(1));
     const [currentQuoteIndex, setCurrentQuoteIndex] = useState(() => {
         return new Date().getDate() % MOTIVATIONAL_QUOTES.length;
     });
+
+    // Modal states for Savings Goals
+    const [isCreateGoalOpen, setIsCreateGoalOpen] = useState(false);
+    const [showBillCategoryDropdown, setShowBillCategoryDropdown] = useState(false);
+    const [showBillAccountDropdown, setShowBillAccountDropdown] = useState(false);
+    const [showAllocateAccountDropdown, setShowAllocateAccountDropdown] = useState(false);
+    const [newGoalName, setNewGoalName] = useState('');
+    const [newGoalTarget, setNewGoalTarget] = useState('');
+    const [newGoalColor, setNewGoalColor] = useState('#2196F3');
+
+    const [isAllocateOpen, setIsAllocateOpen] = useState(false);
+    const [selectedGoal, setSelectedGoal] = useState<any>(null);
+    const [allocateAmount, setAllocateAmount] = useState('');
+    const [allocateAccountId, setAllocateAccountId] = useState('cash');
+
+    // Modal states for Recurring Bills
+    const [isAddBillOpen, setIsAddBillOpen] = useState(false);
+    const [newBillName, setNewBillName] = useState('');
+    const [newBillAmount, setNewBillAmount] = useState('');
+    const [newBillCategory, setNewBillCategory] = useState('Utilities');
+    const [newBillDueDate, setNewBillDueDate] = useState('1');
+    const [newBillAccountId, setNewBillAccountId] = useState('cash');
 
     const triggerNewQuote = React.useCallback(() => {
         Animated.timing(fadeAnim, {
@@ -133,6 +159,46 @@ export default function HomeDashboard() {
         }, [triggerNewQuote])
     );
 
+    const currentMonthExpensesByCategory = useMemo(() => {
+        const now = new Date();
+        const expenses: Record<string, number> = {};
+        
+        transactions.forEach(t => {
+            if (t.type === 'EXPENSE') {
+                const txDate = parseISO(t.date);
+                if (isSameMonth(txDate, now) && isSameYear(txDate, now)) {
+                    expenses[t.category] = (expenses[t.category] || 0) + Number(t.amount);
+                }
+            }
+        });
+        return expenses;
+    }, [transactions]);
+
+    const expenseCategories = useMemo(() => {
+        const customExpense = customCategories ? customCategories.filter((c: any) => c.type === 'EXPENSE') : [];
+        return [...EXPENSE_CATEGORIES, ...customExpense];
+    }, [customCategories]);
+
+    const activeBudgets = useMemo(() => {
+        if (!categoryBudgets) return [];
+        return Object.entries(categoryBudgets)
+            .map(([name, limit]) => {
+                const spent = currentMonthExpensesByCategory[name] || 0;
+                const category = expenseCategories.find(c => c.name === name) || { icon: 'package', color: Colors.primary };
+                const ratio = spent / limit;
+                return {
+                    name,
+                    limit,
+                    spent,
+                    ratio,
+                    percent: Math.min(100, ratio * 100),
+                    icon: category.icon,
+                    color: category.color
+                };
+            })
+            .sort((a, b) => b.ratio - a.ratio); // Show highest spending ratio first!
+    }, [categoryBudgets, currentMonthExpensesByCategory, expenseCategories, Colors.primary]);
+
 
 
     const [confirmCardId, setConfirmCardId] = useState<string | null>(null);
@@ -152,7 +218,63 @@ export default function HomeDashboard() {
         if (bank) return bank.bankName;
         const card = creditCards.find(c => c.id === id);
         if (card) return card.cardName;
-        return id;
+        return 'Unknown';
+    };
+
+    const targetAccounts = useMemo(() => {
+        const list = [{ id: 'cash', name: cashAccountName }];
+        if (bankAccounts) bankAccounts.forEach(b => list.push({ id: b.id, name: b.bankName }));
+        if (creditCards) creditCards.forEach(c => list.push({ id: c.id, name: c.cardName }));
+        return list;
+    }, [bankAccounts, creditCards, cashAccountName]);
+
+    const handleCreateGoal = async () => {
+        if (!newGoalName || !newGoalTarget) return;
+        const target = parseFloat(newGoalTarget);
+        if (isNaN(target) || target <= 0) return;
+
+        await addSavingsGoal({
+            name: newGoalName,
+            targetAmount: target,
+            color: newGoalColor,
+        });
+
+        setNewGoalName('');
+        setNewGoalTarget('');
+        setIsCreateGoalOpen(false);
+    };
+
+    const handleAllocate = async () => {
+        if (!selectedGoal || !allocateAmount) return;
+        const amount = parseFloat(allocateAmount);
+        if (isNaN(amount) || amount <= 0) return;
+
+        await allocateToGoal(selectedGoal.id, amount, allocateAccountId);
+
+        setAllocateAmount('');
+        setIsAllocateOpen(false);
+        setSelectedGoal(null);
+    };
+
+    const handleCreateBill = async () => {
+        if (!newBillName || !newBillAmount || !newBillDueDate) return;
+        const amount = parseFloat(newBillAmount);
+        const due = parseInt(newBillDueDate);
+        if (isNaN(amount) || amount <= 0 || isNaN(due) || due < 1 || due > 31) return;
+
+        await addRecurringBill({
+            name: newBillName,
+            amount: amount,
+            category: newBillCategory,
+            dueDate: due,
+            accountId: newBillAccountId,
+            period: 'monthly',
+        });
+
+        setNewBillName('');
+        setNewBillAmount('');
+        setNewBillDueDate('1');
+        setIsAddBillOpen(false);
     };
 
     const currentMonthTransactions = useMemo(() => {
@@ -518,6 +640,202 @@ export default function HomeDashboard() {
                 </Animated.View>
             </Pressable>
 
+            {/* ── Category Budgets ─────────────────────────────────── */}
+            <View style={s.sectionHeader}>
+                <Text style={[s.sectionTitle, { color: Colors.text }]}>Category Budgets</Text>
+                <TouchableOpacity 
+                    onPress={() => router.push('/set-budgets')}
+                    style={[s.addAccountBtn, { backgroundColor: Colors.primary }]}
+                >
+                    <Pencil size={14} color="#fff" />
+                </TouchableOpacity>
+            </View>
+
+            {activeBudgets.length === 0 ? (
+                <TouchableOpacity 
+                    onPress={() => router.push('/set-budgets')}
+                    style={[s.emptyCard, { borderColor: Colors.border }]}
+                >
+                    <Plus size={16} color={Colors.textMuted} />
+                    <Text style={[s.emptyText, { color: Colors.textMuted }]}>Set your monthly budgets</Text>
+                </TouchableOpacity>
+            ) : (
+                <HoverCard disabled={true} style={[s.budgetContainerCard, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+                    <View style={{ gap: 16 }}>
+                        {activeBudgets.map(budget => {
+                            const isExceeded = budget.ratio >= 1.0;
+                            const isWarning = budget.ratio >= 0.8 && budget.ratio < 1.0;
+                            
+                            let barColor = budget.color;
+                            if (isExceeded) barColor = Colors.expense;
+                            else if (isWarning) barColor = '#FF9800';
+
+                            return (
+                                <View key={budget.name} style={s.budgetRow}>
+                                    {/* Category Title & Info */}
+                                    <View style={s.budgetInfoRow}>
+                                        <View style={s.budgetLabelCol}>
+                                            <View style={[s.budgetIconBg, { backgroundColor: budget.color + '15' }]}>
+                                                <IconRenderer name={budget.icon} color={budget.color} size={16} />
+                                            </View>
+                                            <Text style={[s.budgetName, { color: Colors.text }]}>{budget.name}</Text>
+                                        </View>
+                                        <View style={{ alignItems: 'flex-end' }}>
+                                            <Text style={[s.budgetAmountText, { color: Colors.text }]}>
+                                                ₹{budget.spent.toLocaleString()} <Text style={{ color: Colors.textMuted, fontSize: 11, fontWeight: 'normal' }}>of ₹{budget.limit.toLocaleString()}</Text>
+                                            </Text>
+                                            {isExceeded && (
+                                                <Text style={{ fontSize: 10, color: Colors.expense, fontWeight: '700', marginTop: 2 }}>
+                                                    Over by ₹{(budget.spent - budget.limit).toLocaleString()}
+                                                </Text>
+                                            )}
+                                        </View>
+                                    </View>
+
+                                    {/* Progress Bar Track */}
+                                    <View style={[s.budgetBarTrack, { backgroundColor: Colors.border + '30' }]}>
+                                        <View style={[s.budgetBarFill, { width: `${budget.percent}%`, backgroundColor: barColor }]} />
+                                    </View>
+                                </View>
+                            );
+                        })}
+                    </View>
+                </HoverCard>
+            )}
+
+            {/* ── Savings Goals ────────────────────────────────────── */}
+            <View style={s.sectionHeader}>
+                <Text style={[s.sectionTitle, { color: Colors.text }]}>Savings Goals</Text>
+                <TouchableOpacity 
+                    onPress={() => setIsCreateGoalOpen(true)}
+                    style={[s.addAccountBtn, { backgroundColor: Colors.primary }]}
+                >
+                    <Plus size={14} color="#fff" />
+                </TouchableOpacity>
+            </View>
+
+            {savingsGoals.length === 0 ? (
+                <TouchableOpacity 
+                    onPress={() => setIsCreateGoalOpen(true)}
+                    style={[s.emptyCard, { borderColor: Colors.border }]}
+                >
+                    <Plus size={16} color={Colors.textMuted} />
+                    <Text style={[s.emptyText, { color: Colors.textMuted }]}>Create your first savings goal</Text>
+                </TouchableOpacity>
+            ) : (
+                <View style={{ gap: 12, marginBottom: 16 }}>
+                    {savingsGoals.map(goal => {
+                        const progress = goal.targetAmount > 0 ? goal.currentAmount / goal.targetAmount : 0;
+                        const percent = Math.min(100, Math.round(progress * 100));
+                        return (
+                            <HoverCard key={goal.id} disabled={true} style={[s.goalCard, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+                                <View style={s.goalHeader}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                        <View style={[s.goalColorDot, { backgroundColor: goal.color }]} />
+                                        <Text style={[s.goalName, { color: Colors.text }]}>{goal.name}</Text>
+                                    </View>
+                                    <TouchableOpacity onPress={() => deleteSavingsGoal(goal.id)} style={{ padding: 4 }}>
+                                        <Trash2 size={14} color={Colors.expense} />
+                                    </TouchableOpacity>
+                                </View>
+
+                                <View style={s.goalDetails}>
+                                    <Text style={[s.goalAmountText, { color: Colors.text }]}>
+                                        ₹{goal.currentAmount.toLocaleString()} <Text style={{ color: Colors.textMuted, fontSize: 11, fontWeight: 'normal' }}>of ₹{goal.targetAmount.toLocaleString()}</Text>
+                                    </Text>
+                                    <Text style={[s.goalPercent, { color: goal.color, fontWeight: '700' }]}>{percent}%</Text>
+                                </View>
+
+                                <View style={[s.goalTrack, { backgroundColor: Colors.border + '30' }]}>
+                                    <View style={[s.goalFill, { width: `${percent}%`, backgroundColor: goal.color }]} />
+                                </View>
+
+                                <TouchableOpacity 
+                                    style={[s.allocateBtn, { borderColor: goal.color + '40', backgroundColor: goal.color + '10' }]}
+                                    onPress={() => {
+                                        setSelectedGoal(goal);
+                                        setAllocateAmount('');
+                                        setAllocateAccountId('cash');
+                                        setIsAllocateOpen(true);
+                                    }}
+                                >
+                                    <Plus size={12} color={goal.color} style={{ marginRight: 4 }} />
+                                    <Text style={[s.allocateBtnText, { color: goal.color }]}>Allocate Funds</Text>
+                                </TouchableOpacity>
+                            </HoverCard>
+                        );
+                    })}
+                </View>
+            )}
+
+            {/* ── Subscriptions & Recurring Bills ───────────────────── */}
+            <View style={s.sectionHeader}>
+                <Text style={[s.sectionTitle, { color: Colors.text }]}>Recurring Bills & Subs</Text>
+                <TouchableOpacity 
+                    onPress={() => setIsAddBillOpen(true)}
+                    style={[s.addAccountBtn, { backgroundColor: Colors.primary }]}
+                >
+                    <Plus size={14} color="#fff" />
+                </TouchableOpacity>
+            </View>
+
+            {recurringBills.length === 0 ? (
+                <TouchableOpacity 
+                    onPress={() => setIsAddBillOpen(true)}
+                    style={[s.emptyCard, { borderColor: Colors.border }]}
+                >
+                    <Plus size={16} color={Colors.textMuted} />
+                    <Text style={[s.emptyText, { color: Colors.textMuted }]}>Add your first subscription or bill</Text>
+                </TouchableOpacity>
+            ) : (
+                <View style={{ gap: 12, marginBottom: 24 }}>
+                    {recurringBills.map(bill => {
+                        const currentMonthStr = format(new Date(), 'yyyy-MM');
+                        const isPaid = bill.lastPaidMonth === currentMonthStr;
+                        const accountName = getAccountName(bill.accountId);
+
+                        return (
+                            <HoverCard key={bill.id} disabled={true} style={[s.billCard, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+                                <View style={s.billInfo}>
+                                    <View style={{ flex: 1 }}>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                            <Text style={[s.billName, { color: Colors.text }]} numberOfLines={1}>{bill.name}</Text>
+                                            <View style={[s.billCategoryTag, { backgroundColor: Colors.border + '40' }]}>
+                                                <Text style={[s.billCategoryTagText, { color: Colors.textMuted }]}>{bill.category}</Text>
+                                            </View>
+                                        </View>
+                                        <Text style={{ fontSize: 11, color: Colors.textMuted, marginTop: 4 }}>
+                                            Due day {bill.dueDate} • Paid via {accountName}
+                                        </Text>
+                                    </View>
+                                    
+                                    <View style={{ alignItems: 'center', flexDirection: 'row', gap: 12 }}>
+                                        <Text style={[s.billAmount, { color: Colors.text }]}>₹{bill.amount.toLocaleString()}</Text>
+                                        
+                                        {isPaid ? (
+                                            <View style={s.paidStatusBadge}>
+                                                <CheckCircle size={16} color="#4CAF50" />
+                                            </View>
+                                        ) : (
+                                            <TouchableOpacity 
+                                                style={[s.payBillBtn, { backgroundColor: Colors.primary }]}
+                                                onPress={() => payRecurringBill(bill)}
+                                            >
+                                                <Text style={s.payBillBtnText}>Pay</Text>
+                                            </TouchableOpacity>
+                                        )}
+                                        
+                                        <TouchableOpacity onPress={() => deleteRecurringBill(bill.id)} style={{ padding: 4 }}>
+                                            <Trash2 size={14} color={Colors.expense} />
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            </HoverCard>
+                        );
+                    })}
+                </View>
+            )}
+
             {/* ── Cash ─────────────────────────────────────────────── */}
             <View style={[s.sectionHeader]}>
                 <Text style={[s.sectionTitle, { color: Colors.text }]}>{cashAccountName}</Text>
@@ -717,6 +1035,274 @@ export default function HomeDashboard() {
                 </View>
             )}
         </ScrollView>
+
+        {/* Create Goal Modal */}
+        <Modal
+            visible={isCreateGoalOpen}
+            transparent={true}
+            animationType="slide"
+            onRequestClose={() => setIsCreateGoalOpen(false)}
+        >
+            <View style={s.modalOverlay}>
+                <View style={[s.modalBox, { backgroundColor: Colors.surface }]}>
+                    <Text style={[s.modalTitle, { color: Colors.text }]}>New Savings Goal</Text>
+                    
+                    <Text style={{ fontSize: 12, color: Colors.textMuted, marginBottom: 4 }}>Goal Name</Text>
+                    <TextInput 
+                        style={[s.modalInput, { color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.background }]}
+                        placeholder="e.g. Vacation Fund"
+                        placeholderTextColor={Colors.textMuted}
+                        value={newGoalName}
+                        onChangeText={setNewGoalName}
+                    />
+
+                    <Text style={{ fontSize: 12, color: Colors.textMuted, marginBottom: 4, marginTop: 12 }}>Target Amount (₹)</Text>
+                    <TextInput 
+                        style={[s.modalInput, { color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.background }]}
+                        placeholder="e.g. 50000"
+                        placeholderTextColor={Colors.textMuted}
+                        keyboardType="numeric"
+                        value={newGoalTarget}
+                        onChangeText={setNewGoalTarget}
+                    />
+
+                    <Text style={{ fontSize: 12, color: Colors.textMuted, marginBottom: 8, marginTop: 12 }}>Color Theme</Text>
+                    <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
+                        {['#2196F3', '#4CAF50', '#FF9800', '#E91E63', '#9C27B0', '#00BCD4'].map(cColor => (
+                            <TouchableOpacity 
+                                key={cColor}
+                                style={[
+                                    s.colorSelectCircle, 
+                                    { backgroundColor: cColor },
+                                    newGoalColor === cColor && { borderWidth: 2, borderColor: Colors.text }
+                                ]}
+                                onPress={() => setNewGoalColor(cColor)}
+                            />
+                        ))}
+                    </View>
+
+                    <View style={s.modalBtns}>
+                        <TouchableOpacity 
+                            style={[s.modalBtn, { borderWidth: 1, borderColor: Colors.border }]}
+                            onPress={() => setIsCreateGoalOpen(false)}
+                        >
+                            <Text style={{ color: Colors.textMuted, fontWeight: '700' }}>Cancel</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                            style={[s.modalBtn, { backgroundColor: Colors.primary }]}
+                            onPress={handleCreateGoal}
+                        >
+                            <Text style={{ color: '#fff', fontWeight: '700' }}>Create</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </View>
+        </Modal>
+
+        {/* Allocate Funds Modal */}
+        <Modal
+            visible={isAllocateOpen}
+            transparent={true}
+            animationType="slide"
+            onRequestClose={() => setIsAllocateOpen(false)}
+        >
+            <View style={s.modalOverlay}>
+                <View style={[s.modalBox, { backgroundColor: Colors.surface }]}>
+                    <Text style={[s.modalTitle, { color: Colors.text }]}>Allocate Funds</Text>
+                    <Text style={{ fontSize: 13, color: Colors.textMuted, marginBottom: 16 }}>
+                        Move money towards: <Text style={{ fontWeight: '700', color: Colors.text }}>{selectedGoal?.name}</Text>
+                    </Text>
+                    
+                    <Text style={{ fontSize: 12, color: Colors.textMuted, marginBottom: 4 }}>Amount (₹)</Text>
+                    <TextInput 
+                        style={[s.modalInput, { color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.background }]}
+                        placeholder="e.g. 5000"
+                        placeholderTextColor={Colors.textMuted}
+                        keyboardType="numeric"
+                        value={allocateAmount}
+                        onChangeText={setAllocateAmount}
+                    />
+
+                    <Text style={{ fontSize: 12, color: Colors.textMuted, marginBottom: 4, marginTop: 12 }}>Deduct From Account</Text>
+                    <View style={{ zIndex: 100 }}>
+                        <TouchableOpacity 
+                            style={[s.dropdownTrigger, { borderColor: Colors.border, backgroundColor: Colors.background }]}
+                            onPress={() => setShowAllocateAccountDropdown(!showAllocateAccountDropdown)}
+                        >
+                            <Text style={{ color: Colors.text, fontSize: 14 }}>
+                                {targetAccounts.find(a => a.id === allocateAccountId)?.name || 'Select Account'}
+                            </Text>
+                            <ChevronDown size={16} color={Colors.textMuted} />
+                        </TouchableOpacity>
+
+                        {showAllocateAccountDropdown && (
+                            <View style={[s.dropdownMenu, { borderColor: Colors.border, backgroundColor: Colors.surface }]}>
+                                <ScrollView style={{ maxHeight: 150 }} nestedScrollEnabled={true}>
+                                    {targetAccounts.map(acc => (
+                                        <TouchableOpacity 
+                                            key={acc.id} 
+                                            style={[s.dropdownItem, allocateAccountId === acc.id && { backgroundColor: Colors.primary + '15' }]}
+                                            onPress={() => {
+                                                setAllocateAccountId(acc.id);
+                                                setShowAllocateAccountDropdown(false);
+                                            }}
+                                        >
+                                            <Text style={{ color: Colors.text, fontSize: 13 }}>{acc.name}</Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </ScrollView>
+                            </View>
+                        )}
+                    </View>
+
+                    <View style={s.modalBtns}>
+                        <TouchableOpacity 
+                            style={[s.modalBtn, { borderWidth: 1, borderColor: Colors.border }]}
+                            onPress={() => setIsAllocateOpen(false)}
+                        >
+                            <Text style={{ color: Colors.textMuted, fontWeight: '700' }}>Cancel</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                            style={[s.modalBtn, { backgroundColor: Colors.primary }]}
+                            onPress={handleAllocate}
+                        >
+                            <Text style={{ color: '#fff', fontWeight: '700' }}>Confirm</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </View>
+        </Modal>
+
+        {/* Add Bill Modal */}
+        <Modal
+            visible={isAddBillOpen}
+            transparent={true}
+            animationType="slide"
+            onRequestClose={() => setIsAddBillOpen(false)}
+        >
+            <View style={s.modalOverlay}>
+                <View style={[s.modalBox, { backgroundColor: Colors.surface }]}>
+                    <Text style={[s.modalTitle, { color: Colors.text }]}>New Recurring Bill</Text>
+                    
+                    <Text style={{ fontSize: 12, color: Colors.textMuted, marginBottom: 4 }}>Bill Name</Text>
+                    <TextInput 
+                        style={[s.modalInput, { color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.background }]}
+                        placeholder="e.g. Netflix, Rent"
+                        placeholderTextColor={Colors.textMuted}
+                        value={newBillName}
+                        onChangeText={setNewBillName}
+                    />
+
+                    <View style={{ flexDirection: 'row', gap: 12, marginTop: 12 }}>
+                        <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 12, color: Colors.textMuted, marginBottom: 4 }}>Amount (₹)</Text>
+                            <TextInput 
+                                style={[s.modalInput, { color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.background }]}
+                                placeholder="199"
+                                placeholderTextColor={Colors.textMuted}
+                                keyboardType="numeric"
+                                value={newBillAmount}
+                                onChangeText={setNewBillAmount}
+                            />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 12, color: Colors.textMuted, marginBottom: 4 }}>Due Day (1-31)</Text>
+                            <TextInput 
+                                style={[s.modalInput, { color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.background }]}
+                                placeholder="16"
+                                placeholderTextColor={Colors.textMuted}
+                                keyboardType="numeric"
+                                value={newBillDueDate}
+                                onChangeText={setNewBillDueDate}
+                            />
+                        </View>
+                    </View>
+
+                    <Text style={{ fontSize: 12, color: Colors.textMuted, marginBottom: 4, marginTop: 12 }}>Category</Text>
+                    <View style={{ zIndex: 110, marginBottom: 12 }}>
+                        <TouchableOpacity 
+                            style={[s.dropdownTrigger, { borderColor: Colors.border, backgroundColor: Colors.background }]}
+                            onPress={() => {
+                                setShowBillCategoryDropdown(!showBillCategoryDropdown);
+                                setShowBillAccountDropdown(false);
+                            }}
+                        >
+                            <Text style={{ color: Colors.text, fontSize: 14 }}>{newBillCategory}</Text>
+                            <ChevronDown size={16} color={Colors.textMuted} />
+                        </TouchableOpacity>
+
+                        {showBillCategoryDropdown && (
+                            <View style={[s.dropdownMenu, { borderColor: Colors.border, backgroundColor: Colors.surface }]}>
+                                <ScrollView style={{ maxHeight: 150 }} nestedScrollEnabled={true}>
+                                    {expenseCategories.map(cat => (
+                                        <TouchableOpacity 
+                                            key={cat.name} 
+                                            style={[s.dropdownItem, newBillCategory === cat.name && { backgroundColor: Colors.primary + '15' }]}
+                                            onPress={() => {
+                                                setNewBillCategory(cat.name);
+                                                setShowBillCategoryDropdown(false);
+                                            }}
+                                        >
+                                            <Text style={{ color: Colors.text, fontSize: 13 }}>{cat.name}</Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </ScrollView>
+                            </View>
+                        )}
+                    </View>
+
+                    <Text style={{ fontSize: 12, color: Colors.textMuted, marginBottom: 4 }}>Primary Payment Account</Text>
+                    <View style={{ zIndex: 100, marginBottom: 20 }}>
+                        <TouchableOpacity 
+                            style={[s.dropdownTrigger, { borderColor: Colors.border, backgroundColor: Colors.background }]}
+                            onPress={() => {
+                                setShowBillAccountDropdown(!showBillAccountDropdown);
+                                setShowBillCategoryDropdown(false);
+                            }}
+                        >
+                            <Text style={{ color: Colors.text, fontSize: 14 }}>
+                                {targetAccounts.find(a => a.id === newBillAccountId)?.name || 'Select Account'}
+                            </Text>
+                            <ChevronDown size={16} color={Colors.textMuted} />
+                        </TouchableOpacity>
+
+                        {showBillAccountDropdown && (
+                            <View style={[s.dropdownMenu, { borderColor: Colors.border, backgroundColor: Colors.surface }]}>
+                                <ScrollView style={{ maxHeight: 150 }} nestedScrollEnabled={true}>
+                                    {targetAccounts.map(acc => (
+                                        <TouchableOpacity 
+                                            key={acc.id} 
+                                            style={[s.dropdownItem, newBillAccountId === acc.id && { backgroundColor: Colors.primary + '15' }]}
+                                            onPress={() => {
+                                                setNewBillAccountId(acc.id);
+                                                setShowBillAccountDropdown(false);
+                                            }}
+                                        >
+                                            <Text style={{ color: Colors.text, fontSize: 13 }}>{acc.name}</Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </ScrollView>
+                            </View>
+                        )}
+                    </View>
+
+                    <View style={s.modalBtns}>
+                        <TouchableOpacity 
+                            style={[s.modalBtn, { borderWidth: 1, borderColor: Colors.border }]}
+                            onPress={() => setIsAddBillOpen(false)}
+                        >
+                            <Text style={{ color: Colors.textMuted, fontWeight: '700' }}>Cancel</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                            style={[s.modalBtn, { backgroundColor: Colors.primary }]}
+                            onPress={handleCreateBill}
+                        >
+                            <Text style={{ color: '#fff', fontWeight: '700' }}>Add Bill</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </View>
+        </Modal>
         </>
     );
 }
@@ -815,5 +1401,225 @@ const s = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         zIndex: 1000,
-    }
+    },
+    // Budget Styles
+    budgetContainerCard: {
+        borderRadius: 20,
+        borderWidth: 1,
+        padding: 16,
+        marginBottom: 16,
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+    },
+    budgetRow: {
+        width: '100%',
+    },
+    budgetInfoRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 6,
+    },
+    budgetLabelCol: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    budgetIconBg: {
+        width: 30,
+        height: 30,
+        borderRadius: 15,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    budgetName: {
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    budgetAmountText: {
+        fontSize: 13,
+        fontWeight: '700',
+    },
+    budgetBarTrack: {
+        height: 8,
+        borderRadius: 4,
+        width: '100%',
+        overflow: 'hidden',
+    },
+    budgetBarFill: {
+        height: 8,
+        borderRadius: 4,
+    },
+    // Savings Goals Styles
+    goalCard: {
+        borderRadius: 16,
+        borderWidth: 1,
+        padding: 16,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 2,
+    },
+    goalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    goalColorDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+    },
+    goalName: {
+        fontSize: 14,
+        fontWeight: '700',
+    },
+    goalDetails: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    goalAmountText: {
+        fontSize: 13,
+        fontWeight: '700',
+    },
+    goalPercent: {
+        fontSize: 13,
+    },
+    goalTrack: {
+        height: 6,
+        borderRadius: 3,
+        width: '100%',
+        overflow: 'hidden',
+        marginBottom: 12,
+    },
+    goalFill: {
+        height: 6,
+        borderRadius: 3,
+    },
+    allocateBtn: {
+        height: 32,
+        borderRadius: 8,
+        borderWidth: 1,
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    allocateBtnText: {
+        fontSize: 12,
+        fontWeight: '700',
+    },
+    // Recurring Bills Styles
+    billCard: {
+        borderRadius: 16,
+        borderWidth: 1,
+        padding: 14,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 2,
+    },
+    billInfo: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    billName: {
+        fontSize: 14,
+        fontWeight: '700',
+        maxWidth: 120,
+    },
+    billCategoryTag: {
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 4,
+    },
+    billCategoryTagText: {
+        fontSize: 9,
+        fontWeight: '700',
+    },
+    billAmount: {
+        fontSize: 14,
+        fontWeight: '700',
+    },
+    payBillBtn: {
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 8,
+    },
+    payBillBtnText: {
+        color: '#fff',
+        fontSize: 12,
+        fontWeight: '700',
+    },
+    paidStatusBadge: {
+        padding: 4,
+    },
+    modalInput: {
+        borderWidth: 1,
+        borderRadius: 10,
+        height: 40,
+        paddingHorizontal: 12,
+        fontSize: 14,
+        ...Platform.select({
+            web: { outlineStyle: 'none' },
+            default: {}
+        })
+    } as any,
+    colorSelectCircle: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+    },
+    accountSelectRow: {
+        borderWidth: 1,
+        borderRadius: 10,
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+    },
+    categorySelectTag: {
+        borderWidth: 1,
+        borderRadius: 8,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+    },
+    categorySelectTagText: {
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    dropdownTrigger: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderRadius: 10,
+        height: 42,
+        paddingHorizontal: 12,
+    },
+    dropdownMenu: {
+        position: 'absolute',
+        top: 46,
+        left: 0,
+        right: 0,
+        borderRadius: 10,
+        borderWidth: 1,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+        elevation: 5,
+        zIndex: 9999,
+        overflow: 'hidden',
+    },
+    dropdownItem: {
+        paddingVertical: 12,
+        paddingHorizontal: 14,
+    },
 });
