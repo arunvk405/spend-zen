@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
     View, Text, StyleSheet, ScrollView, TouchableOpacity,
-    Platform, Modal, Pressable, ActivityIndicator, Animated, TextInput
+    Platform, Modal, Pressable, ActivityIndicator, Animated, TextInput, Alert
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { useFinance } from '../../src/context/FinanceContext';
@@ -204,6 +204,7 @@ export default function HomeDashboard() {
     const [confirmCardId, setConfirmCardId] = useState<string | null>(null);
     const [selectedSourceAccountId, setSelectedSourceAccountId] = useState<string | null>(null);
     const [clearing, setClearing] = useState(false);
+    const [paymentAmount, setPaymentAmount] = useState('');
 
     const handleRenameCash = () => {
         const newName = window.prompt("Rename Cash Account:", cashAccountName);
@@ -291,6 +292,7 @@ export default function HomeDashboard() {
 
         // Default to cash or first bank account
         setSelectedSourceAccountId('cash');
+        setPaymentAmount(card.dueAmount.toString());
         setConfirmCardId(cardId);
     };
 
@@ -299,13 +301,23 @@ export default function HomeDashboard() {
         const card = creditCards.find(c => c.id === confirmCardId);
         if (!card) return;
         
+        const payAmt = parseFloat(paymentAmount);
+        if (isNaN(payAmt) || payAmt <= 0) {
+            if (Platform.OS === 'web') {
+                window.alert("Please enter a valid payment amount.");
+            } else {
+                Alert.alert("Invalid Amount", "Please enter a valid payment amount.");
+            }
+            return;
+        }
+
         setConfirmCardId(null);
         setClearing(true);
         try {
             // 1. If a funding source is chosen (e.g. Bank or Cash), record the EXPENSE transaction first
             if (selectedSourceAccountId) {
                 await addTransaction({
-                    amount: card.dueAmount,
+                    amount: payAmt,
                     type: 'EXPENSE',
                     category: 'Credit Card Payment',
                     date: new Date().toISOString(),
@@ -320,7 +332,7 @@ export default function HomeDashboard() {
                 : 'Direct Reset';
 
             await addTransaction({
-                amount: card.dueAmount,
+                amount: payAmt,
                 type: 'INCOME',
                 category: 'Credit Card Payment',
                 date: new Date().toISOString(),
@@ -338,6 +350,7 @@ export default function HomeDashboard() {
         } finally {
             setClearing(false);
             setSelectedSourceAccountId(null);
+            setPaymentAmount('');
         }
     };
 
@@ -353,9 +366,21 @@ export default function HomeDashboard() {
                         if (!card) return null;
                         return (
                             <>
-                                <Text style={[s.modalMsg, { color: Colors.textMuted, marginBottom: 14 }]}>
-                                    Select the funding source to settle <Text style={{ color: Colors.primary, fontWeight: '700' }}>₹{card.dueAmount.toLocaleString()}</Text> due on <Text style={{ color: Colors.text, fontWeight: '700' }}>{card.cardName}</Text>:
+                                <Text style={[s.modalMsg, { color: Colors.textMuted, marginBottom: 12 }]}>
+                                    Settle due on <Text style={{ color: Colors.text, fontWeight: '700' }}>{card.cardName}</Text> (Total Due: <Text style={{ color: Colors.expense, fontWeight: '700' }}>₹{card.dueAmount.toLocaleString()}</Text>):
                                 </Text>
+
+                                <Text style={{ fontSize: 12, fontWeight: '600', color: Colors.textMuted, marginBottom: 4 }}>Payment Amount (₹)</Text>
+                                <TextInput 
+                                    style={[s.modalInput, { color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.background, marginBottom: 14 }]}
+                                    placeholder="e.g. 5000"
+                                    placeholderTextColor={Colors.textMuted}
+                                    keyboardType="numeric"
+                                    value={paymentAmount}
+                                    onChangeText={setPaymentAmount}
+                                />
+                                
+                                <Text style={{ fontSize: 12, fontWeight: '600', color: Colors.textMuted, marginBottom: 6 }}>Select Funding Source</Text>
 
                                 <ScrollView style={{ maxHeight: 180, marginBottom: 16 }} showsVerticalScrollIndicator={false}>
                                     {/* Cash Account Option */}
