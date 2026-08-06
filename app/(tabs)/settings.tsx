@@ -42,7 +42,9 @@ import { Image } from 'react-native';
 import { useFinance } from '../../src/context/FinanceContext';
 import { useAuth } from '../../src/context/AuthContext';
 import { useRouter } from 'expo-router';
-const SettingsItem = ({ icon: Icon, label, onPress, color, value = undefined, toggle = false }: any) => {
+import { NewTag } from '../../src/components/NewTag';
+import { FEATURE_TIMESTAMPS } from '../../src/utils/newFeatureUtils';
+const SettingsItem = ({ icon: Icon, label, onPress, color, value = undefined, toggle = false, newTag = false }: any) => {
     const Colors = useThemeColors();
     const [isHovered, setIsHovered] = useState(false);
     return (
@@ -73,6 +75,7 @@ const SettingsItem = ({ icon: Icon, label, onPress, color, value = undefined, to
                     <Icon size={20} color={color} />
                 </View>
                 <Text style={[styles.itemLabel, { color: Colors.text }]}>{label}</Text>
+                {newTag && <NewTag featureTimestamp={newTag} />}
             </View>
             {toggle ? (
                 <Switch
@@ -711,7 +714,10 @@ export default function Settings() {
                                 <Zap size={20} color={Colors.primary} />
                             </View>
                             <View>
-                                <Text style={[styles.itemLabel, { color: Colors.text }]}>1-Tap App Speed Optimizer</Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                    <Text style={[styles.itemLabel, { color: Colors.text }]}>1-Tap App Speed Optimizer</Text>
+                                    <NewTag featureTimestamp={FEATURE_TIMESTAMPS.performanceOptimizer} />
+                                </View>
                                 <Text style={{ fontSize: 12, color: Colors.textMuted }}>Compacts local storage & purges search index</Text>
                             </View>
                         </View>
@@ -735,7 +741,10 @@ export default function Settings() {
                                 <Download size={20} color={Colors.income} />
                             </View>
                             <View>
-                                <Text style={[styles.itemLabel, { color: Colors.text }]}>Export Full Backup (.JSON)</Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                    <Text style={[styles.itemLabel, { color: Colors.text }]}>Export Full Backup (.JSON)</Text>
+                                    <NewTag featureTimestamp={FEATURE_TIMESTAMPS.jsonBackup} />
+                                </View>
                                 <Text style={{ fontSize: 12, color: Colors.textMuted }}>Save all transactions & accounts offline</Text>
                             </View>
                         </View>
@@ -754,7 +763,10 @@ export default function Settings() {
                                 <Upload size={20} color="#F59E0B" />
                             </View>
                             <View>
-                                <Text style={[styles.itemLabel, { color: Colors.text }]}>Restore Backup (.JSON)</Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                    <Text style={[styles.itemLabel, { color: Colors.text }]}>Restore Backup (.JSON)</Text>
+                                    <NewTag featureTimestamp={FEATURE_TIMESTAMPS.jsonBackup} />
+                                </View>
                                 <Text style={{ fontSize: 12, color: Colors.textMuted }}>1-click restore transactions from file</Text>
                             </View>
                         </View>
@@ -777,12 +789,14 @@ export default function Settings() {
                         label="Frequently Asked Questions (FAQ)"
                         color={Colors.primary}
                         onPress={() => setShowFaqModal(true)}
+                        newTag={FEATURE_TIMESTAMPS.faqSection}
                     />
                     <SettingsItem
                         icon={FileText}
                         label="Terms & Conditions"
                         color={Colors.primary}
                         onPress={() => setShowTermsModal(true)}
+                        newTag={FEATURE_TIMESTAMPS.termsAndConditions}
                     />
                 </View>
             </View>
