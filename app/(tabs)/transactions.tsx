@@ -483,12 +483,19 @@ export default function TransactionsHistory() {
 
 
 
-    const allCategories = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES, ...TRANSFER_CATEGORIES];
+    const categoryMap = useMemo(() => {
+        const map = new Map<string, any>();
+        [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES, ...TRANSFER_CATEGORIES].forEach(c => {
+            map.set(`${c.type}_${c.name}`, c);
+            if (!map.has(c.name)) map.set(c.name, c);
+        });
+        return map;
+    }, []);
 
     const renderItem = ({ item }: { item: any }) => {
         const isTransfer = item.type === 'TRANSFER';
-        const categoryData = allCategories.find(c => c.name === item.category && c.type === item.type) ||
-            allCategories.find(c => c.name === item.category) ||
+        const categoryData = categoryMap.get(`${item.type}_${item.category}`) ||
+            categoryMap.get(item.category) ||
             { icon: isTransfer ? 'rotate-ccw' : 'package', color: isTransfer ? Colors.primary : Colors.textMuted };
 
         const fromAccName = getAccountName(item.accountId);
@@ -858,6 +865,10 @@ export default function TransactionsHistory() {
                 keyExtractor={(item) => item.id.toString()}
                 renderItem={renderItem}
                 contentContainerStyle={styles.listContent}
+                initialNumToRender={12}
+                maxToRenderPerBatch={10}
+                windowSize={7}
+                removeClippedSubviews={Platform.OS !== 'web'}
                 ListEmptyComponent={
                     <View style={styles.emptyState}>
                         <Text style={[styles.emptyText, { color: Colors.textMuted }]}>No matching transactions found.</Text>

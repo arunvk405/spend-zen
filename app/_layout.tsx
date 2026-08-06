@@ -15,13 +15,18 @@ function RootLayoutNav() {
             <FinanceProvider>
                 {Platform.OS === 'web' && (
                     <Head>
-                        <title>Spend Zen</title>
-                        <meta name="description" content="Financial mindfulness at your fingertips" />
+                        <title>Spend Zen - Personal Finance & AI Expense Tracker</title>
+                        <meta name="description" content="Master your personal finances with Spend Zen: track transactions, manage category budgets, and leverage smart AI financial planning." />
+                        <meta name="keywords" content="expense tracker, personal finance, budget planner, AI financial advisor, money manager" />
+                        <meta name="robots" content="index, follow" />
                         <meta name="apple-mobile-web-app-capable" content="yes" />
                         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
                         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
                         <meta name="theme-color" content={Colors.background} />
                         <meta name="mobile-web-app-capable" content="yes" />
+                        <meta property="og:title" content="Spend Zen - Personal Finance & AI Expense Tracker" />
+                        <meta property="og:description" content="Master your personal finances with Spend Zen: track transactions, manage category budgets, and leverage smart AI financial planning." />
+                        <meta property="og:type" content="website" />
                         <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
                     </Head>
                 )}

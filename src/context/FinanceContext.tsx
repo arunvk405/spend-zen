@@ -264,6 +264,12 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
             let income = 0;
             let expense = 0;
 
+            // ── Single-pass Linear Accumulator Maps (O(M) for peak speed)
+            const bankOutgoingMap: Record<string, number> = {};
+            const bankIncomingMap: Record<string, number> = {};
+            const creditOutgoingMap: Record<string, number> = {};
+            const creditIncomingMap: Record<string, number> = {};
+
             txs.forEach(t => {
                 const amount = Number(t.amount);
                 
@@ -272,6 +278,20 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 }
                 if (t.toAccountId === 'cash' && t.type === 'TRANSFER') {
                     cash += amount;
+                }
+
+                if (t.accountId) {
+                    bankOutgoingMap[t.accountId] = (bankOutgoingMap[t.accountId] || 0) + (t.type === 'INCOME' ? amount : -amount);
+                }
+                if (t.toAccountId && t.type === 'TRANSFER') {
+                    bankIncomingMap[t.toAccountId] = (bankIncomingMap[t.toAccountId] || 0) + amount;
+                }
+
+                if (t.accountId) {
+                    creditOutgoingMap[t.accountId] = (creditOutgoingMap[t.accountId] || 0) + (t.type === 'EXPENSE' || t.type === 'TRANSFER' ? amount : -amount);
+                }
+                if (t.toAccountId && t.type === 'TRANSFER') {
+                    creditIncomingMap[t.toAccountId] = (creditIncomingMap[t.toAccountId] || 0) + amount;
                 }
 
                 // Skip credit card transactions for net balance & monthly totals
@@ -286,26 +306,18 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 }
             });
 
-            // ── Bank account balances (initialBalance + transactions)
+            // ── Bank account balances (linear O(1) per bank)
             const bankAccountsWithBalance: BankAccountWithBalance[] = bankAccts.map(acc => {
-                const outgoingTxBalance = txs
-                    .filter(t => t.accountId === acc.id)
-                    .reduce((sum, t) => t.type === 'INCOME' ? sum + Number(t.amount) : sum - Number(t.amount), 0);
-                const incomingTxBalance = txs
-                    .filter(t => t.toAccountId === acc.id && t.type === 'TRANSFER')
-                    .reduce((sum, t) => sum + Number(t.amount), 0);
-                return { ...acc, computedBalance: acc.initialBalance + outgoingTxBalance + incomingTxBalance };
+                const outgoing = bankOutgoingMap[acc.id] || 0;
+                const incoming = bankIncomingMap[acc.id] || 0;
+                return { ...acc, computedBalance: acc.initialBalance + outgoing + incoming };
             });
 
-            // ── Credit card balances (from transactions on each card)
+            // ── Credit card balances (linear O(1) per card)
             const creditCardsWithBalance: CreditCardWithBalance[] = creditCrds.map(card => {
-                const outgoing = txs
-                    .filter(t => t.accountId === card.id)
-                    .reduce((sum, t) => t.type === 'EXPENSE' || t.type === 'TRANSFER' ? sum + Number(t.amount) : sum - Number(t.amount), 0);
-                const incomingTransfer = txs
-                    .filter(t => t.toAccountId === card.id && t.type === 'TRANSFER')
-                    .reduce((sum, t) => sum + Number(t.amount), 0);
-                const usedAmount = outgoing - incomingTransfer;
+                const outgoing = creditOutgoingMap[card.id] || 0;
+                const incoming = creditIncomingMap[card.id] || 0;
+                const usedAmount = outgoing - incoming;
                 const due = Math.max(0, usedAmount);
                 const available = Math.max(0, card.creditLimit - due);
                 return { ...card, usedAmount: due, dueAmount: due, availableBalance: available };
