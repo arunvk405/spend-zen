@@ -1,18 +1,26 @@
 import React, { useState, useMemo } from 'react';
 import {
     View, Text, StyleSheet, ScrollView, TouchableOpacity,
-    TextInput, ActivityIndicator, Platform, useWindowDimensions
+    TextInput, ActivityIndicator, Platform, useWindowDimensions, Linking
 } from 'react-native';
 import { useFinance } from '../../src/context/FinanceContext';
 import { useThemeColors } from '../../src/theme/colors';
 import {
     Sparkles, Target, AlertTriangle, ShieldCheck,
-    Calculator, MessageSquare, Send, Key, ChevronDown, TrendingUp
+    Calculator, MessageSquare, Send, Key, ChevronDown, TrendingUp,
+    Check, Trash2, Eye, EyeOff, ExternalLink, RotateCcw
 } from 'lucide-react-native';
 import {
     generateLocalAIPlan, evaluateLocalAffordability, fetchGeminiAIPlan, fetchGeminiAIChatResponse,
-    FinancialContext, AIPlanResult, AffordabilityResult
+    FinancialContext, AIPlanResult, AffordabilityResult, ChatHistoryItem
 } from '../../src/services/aiService';
+
+export interface ChatMessage {
+    id: string;
+    sender: 'user' | 'ai';
+    text: string;
+    timestamp: string;
+}
 
 export default function AIPlannerScreen() {
     const Colors = useThemeColors();
@@ -24,20 +32,46 @@ export default function AIPlannerScreen() {
         cashBalance, totalCreditDue, transactions
     } = useFinance();
 
-    // Gemini API Key State
-    const [geminiApiKey, setGeminiApiKey] = useState(() => {
+    // Gemini API Key State (Supports standard AIzaSy and new Google Auth Keys starting with AQ.)
+    const [geminiApiKey, setGeminiApiKey] = useState<string>(() => {
         if (Platform.OS === 'web') {
-            return localStorage.getItem('spendzen_gemini_api_key') || '';
+            return (localStorage.getItem('spendzen_gemini_api_key') || '').trim();
         }
         return '';
     });
-    const [showKeyInput, setShowKeyInput] = useState(false);
-
-    const handleSaveApiKey = (key: string) => {
-        setGeminiApiKey(key);
+    const [tempKey, setTempKey] = useState<string>(() => {
         if (Platform.OS === 'web') {
-            localStorage.setItem('spendzen_gemini_api_key', key.trim());
+            return (localStorage.getItem('spendzen_gemini_api_key') || '').trim();
         }
+        return '';
+    });
+
+    const [showKeyInput, setShowKeyInput] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
+    const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
+
+    const handleSaveApiKey = () => {
+        const trimmed = tempKey.trim();
+        setGeminiApiKey(trimmed);
+        if (Platform.OS === 'web') {
+            localStorage.setItem('spendzen_gemini_api_key', trimmed);
+        }
+        setSaveFeedback(trimmed ? '✅ Gemini Auth Key Saved & Active!' : 'Key Removed');
+        setTimeout(() => setSaveFeedback(null), 3000);
+    };
+
+    const handleClearApiKey = () => {
+        setTempKey('');
+        setGeminiApiKey('');
+        if (Platform.OS === 'web') {
+            localStorage.removeItem('spendzen_gemini_api_key');
+        }
+        setSaveFeedback('⚪ Key Removed. Reverted to Offline AI.');
+        setTimeout(() => setSaveFeedback(null), 3000);
+    };
+
+    const handleOpenAIStudio = () => {
+        Linking.openURL('https://aistudio.google.com/app/apikey');
     };
 
     // Top categories computation
@@ -71,10 +105,17 @@ export default function AIPlannerScreen() {
     const [purchaseCost, setPurchaseCost] = useState('');
     const [affordabilityResult, setAffordabilityResult] = useState<AffordabilityResult | null>(null);
 
-    // AI Chat Prompt Assistant State
+    // Interactive AI Chat History State
     const [userQuestion, setUserQuestion] = useState('');
-    const [chatAnswer, setChatAnswer] = useState<string | null>(null);
     const [isAsking, setIsAsking] = useState(false);
+    const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
+        {
+            id: 'welcome',
+            sender: 'ai',
+            text: "Hello! 👋 I'm your SpendZen AI Financial Advisor. Ask me anything about your budget, savings targets, credit card dues, or spending habits!",
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        }
+    ]);
 
     const handleCalculateAffordability = () => {
         const cost = parseFloat(purchaseCost);
@@ -83,19 +124,48 @@ export default function AIPlannerScreen() {
         setAffordabilityResult(result);
     };
 
-    const handleAskQuestion = async (promptText?: string) => {
-        const query = promptText || userQuestion;
-        if (!query.trim()) return;
+    const handleClearChat = () => {
+        setChatMessages([
+            {
+                id: 'welcome-' + Date.now(),
+                sender: 'ai',
+                text: "Chat history cleared! 👋 How else can I assist with your financial goals today?",
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            }
+        ]);
+    };
 
+    const handleAskQuestion = async (promptText?: string) => {
+        const query = (promptText || userQuestion).trim();
+        if (!query || isAsking) return;
+
+        const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const userMsg: ChatMessage = {
+            id: Date.now().toString(),
+            sender: 'user',
+            text: query,
+            timestamp: timeNow
+        };
+
+        const updatedHistory = [...chatMessages, userMsg];
+        setChatMessages(updatedHistory);
+        setUserQuestion('');
         setIsAsking(true);
-        setChatAnswer(null);
 
         if (geminiApiKey.trim()) {
-            const liveResponse = await fetchGeminiAIChatResponse(geminiApiKey.trim(), query, financialContext);
+            const historyPayload: ChatHistoryItem[] = updatedHistory
+                .filter(m => m.id !== 'welcome')
+                .map(m => ({ sender: m.sender, text: m.text }));
+            const liveResponse = await fetchGeminiAIChatResponse(geminiApiKey.trim(), query, financialContext, historyPayload);
             if (liveResponse) {
-                setChatAnswer(liveResponse);
+                const aiMsg: ChatMessage = {
+                    id: (Date.now() + 1).toString(),
+                    sender: 'ai',
+                    text: liveResponse,
+                    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                };
+                setChatMessages(prev => [...prev, aiMsg]);
                 setIsAsking(false);
-                if (!promptText) setUserQuestion('');
                 return;
             }
         }
@@ -128,9 +198,14 @@ export default function AIPlannerScreen() {
                 answer = `Personalized Financial Analysis:\n• Monthly Income: ₹${monthlyIncome.toLocaleString()}\n• Monthly Expenses: ₹${monthlyExpenses.toLocaleString()}\n• Net Cashflow: ${netSavings >= 0 ? '+' : ''}₹${netSavings.toLocaleString()}\n• Top Recommendation: ${netSavings > 0 ? `Invest your ₹${netSavings.toLocaleString()} monthly surplus into diversified index funds & emergency buffer.` : 'Expenses exceed income! Review category limits immediately.'}`;
             }
 
-            setChatAnswer(answer);
+            const aiMsg: ChatMessage = {
+                id: (Date.now() + 1).toString(),
+                sender: 'ai',
+                text: answer,
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            };
+            setChatMessages(prev => [...prev, aiMsg]);
             setIsAsking(false);
-            if (!promptText) setUserQuestion('');
         }, 400);
     };
 
@@ -156,7 +231,7 @@ export default function AIPlannerScreen() {
                 {/* Centered content wrapper for web */}
                 <View style={styles.contentWrapper}>
 
-                    {/* Google Gemini API Key Banner */}
+                    {/* SpendZen AI Engine & Optional Key Banner */}
                     <View style={[styles.card, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
                         <TouchableOpacity
                             style={styles.keyRow}
@@ -164,29 +239,89 @@ export default function AIPlannerScreen() {
                             activeOpacity={0.7}
                         >
                             <View style={styles.keyLeft}>
-                                <Key size={15} color={Colors.primary} />
+                                <Sparkles size={15} color={Colors.primary} />
                                 <Text style={[styles.keyLabel, { color: Colors.text }]} numberOfLines={1}>
-                                    Gemini Live AI {geminiApiKey ? '🟢 Active' : '⚪ Connect Key'}
+                                    SpendZen AI Engine {geminiApiKey ? '🟢 Gemini Live Active' : '🟢 Built-In Smart AI Active'}
                                 </Text>
                             </View>
-                            <ChevronDown size={16} color={Colors.textMuted} />
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                <View style={{ backgroundColor: Colors.income + '20', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
+                                    <Text style={{ fontSize: 10, fontWeight: '700', color: Colors.income }}>
+                                        {geminiApiKey ? 'CUSTOM KEY' : 'FREE BUILT-IN'}
+                                    </Text>
+                                </View>
+                                <ChevronDown size={16} color={Colors.textMuted} />
+                            </View>
                         </TouchableOpacity>
 
                         {showKeyInput && (
-                            <View style={{ marginTop: 12 }}>
+                            <View style={{ marginTop: 12, gap: 10 }}>
                                 <Text style={[styles.hint, { color: Colors.textMuted }]}>
-                                    Paste your free Google Gemini API key from AI Studio to unlock live, dynamic AI responses:
+                                    ✨ <Text style={{ fontWeight: '700', color: Colors.text }}>SpendZen Smart AI Engine</Text> is active out-of-the-box with free, unlimited financial calculations!
+                                    {"\n"}Optional: Connect a personal Google AI Studio API key (starts with <Text style={{ fontWeight: '700' }}>AIzaSy...</Text>) to use external Gemini REST models.
                                 </Text>
-                                <TextInput
-                                    style={[styles.input, { backgroundColor: Colors.background, borderColor: Colors.border, color: Colors.text }]}
-                                    placeholder="Paste Gemini API Key (AIzaSy...)"
-                                    placeholderTextColor={Colors.textMuted}
-                                    value={geminiApiKey}
-                                    onChangeText={handleSaveApiKey}
-                                    secureTextEntry
-                                    autoCapitalize="none"
-                                    autoCorrect={false}
-                                />
+
+                                <View style={styles.inputRow}>
+                                    <TextInput
+                                        style={[styles.input, { backgroundColor: Colors.background, borderColor: Colors.border, color: Colors.text }]}
+                                        placeholder="Paste Gemini API Key (AIzaSy...)"
+                                        placeholderTextColor={Colors.textMuted}
+                                        value={tempKey}
+                                        onChangeText={setTempKey}
+                                        secureTextEntry={!showPassword}
+                                        autoCapitalize="none"
+                                        autoCorrect={false}
+                                    />
+                                    <TouchableOpacity
+                                        style={[styles.sendBtn, { backgroundColor: Colors.background, borderColor: Colors.border, borderWidth: 1 }]}
+                                        onPress={() => setShowPassword(!showPassword)}
+                                        activeOpacity={0.7}
+                                    >
+                                        {showPassword ? <EyeOff size={16} color={Colors.textMuted} /> : <Eye size={16} color={Colors.textMuted} />}
+                                    </TouchableOpacity>
+                                </View>
+
+                                {/* Action Buttons: Save Key, Clear Key & Get Key Link */}
+                                <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                                    <TouchableOpacity
+                                        style={[styles.actionBtn, { backgroundColor: Colors.primary, flexDirection: 'row', gap: 6 }]}
+                                        onPress={handleSaveApiKey}
+                                        activeOpacity={0.8}
+                                    >
+                                        <Check size={14} color="#fff" />
+                                        <Text style={styles.actionBtnText}>Save Key</Text>
+                                    </TouchableOpacity>
+
+                                    {geminiApiKey ? (
+                                        <TouchableOpacity
+                                            style={[styles.actionBtn, { backgroundColor: Colors.surface, borderColor: Colors.border, borderWidth: 1, flexDirection: 'row', gap: 6 }]}
+                                            onPress={handleClearApiKey}
+                                            activeOpacity={0.8}
+                                        >
+                                            <Trash2 size={14} color="#EF4444" />
+                                            <Text style={{ color: '#EF4444', fontWeight: '700', fontSize: 13 }}>Remove Key</Text>
+                                        </TouchableOpacity>
+                                    ) : null}
+
+                                    <TouchableOpacity
+                                        style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 'auto', paddingVertical: 6 }}
+                                        onPress={handleOpenAIStudio}
+                                        activeOpacity={0.7}
+                                    >
+                                        <Text style={{ fontSize: 11, color: Colors.primary, fontWeight: '600', textDecorationLine: 'underline' }}>
+                                            Get Free Key (Google AI Studio)
+                                        </Text>
+                                        <ExternalLink size={12} color={Colors.primary} />
+                                    </TouchableOpacity>
+                                </View>
+
+                                {saveFeedback && (
+                                    <View style={{ backgroundColor: saveFeedback.includes('Active') ? Colors.income + '18' : Colors.border + '40', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, marginTop: 2 }}>
+                                        <Text style={{ fontSize: 11, fontWeight: '700', color: saveFeedback.includes('Active') ? Colors.income : Colors.textMuted }}>
+                                            {saveFeedback}
+                                        </Text>
+                                    </View>
+                                )}
                             </View>
                         )}
                     </View>
@@ -328,12 +463,29 @@ export default function AIPlannerScreen() {
 
                     {/* Interactive AI Chat Coach */}
                     <View style={[styles.card, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
-                        <View style={styles.cardTitleRow}>
-                            <MessageSquare size={17} color={Colors.primary} />
-                            <Text style={[styles.cardTitle, { color: Colors.text }]}>Ask SpendZen AI Coach</Text>
+                        <View style={[styles.cardTitleRow, { justifyContent: 'space-between' }]}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                <MessageSquare size={17} color={Colors.primary} />
+                                <Text style={[styles.cardTitle, { color: Colors.text }]}>Ask SpendZen AI Coach</Text>
+                                <View style={{ backgroundColor: Colors.primary + '20', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10 }}>
+                                    <Text style={{ fontSize: 10, fontWeight: '700', color: Colors.primary }}>
+                                        {chatMessages.length} msgs
+                                    </Text>
+                                </View>
+                            </View>
+                            {chatMessages.length > 1 && (
+                                <TouchableOpacity
+                                    onPress={handleClearChat}
+                                    style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4 }}
+                                    activeOpacity={0.7}
+                                >
+                                    <RotateCcw size={13} color={Colors.textMuted} />
+                                    <Text style={{ fontSize: 11, color: Colors.textMuted, fontWeight: '600' }}>Clear</Text>
+                                </TouchableOpacity>
+                            )}
                         </View>
 
-                        {/* Preset chips — wraps to 2 per row on mobile */}
+                        {/* Preset chips */}
                         <View style={styles.chipsRow}>
                             {[
                                 "How to cut expenses by 15%?",
@@ -346,11 +498,77 @@ export default function AIPlannerScreen() {
                                     onPress={() => handleAskQuestion(q)}
                                     activeOpacity={0.7}
                                 >
-                                    <Text style={[styles.chipText, { color: Colors.primary }]} numberOfLines={2}>{q}</Text>
+                                    <Text style={[styles.chipText, { color: Colors.primary }]} numberOfLines={1}>{q}</Text>
                                 </TouchableOpacity>
                             ))}
                         </View>
 
+                        {/* Real Interactive Chat History Thread */}
+                        <View style={[styles.chatContainer, { backgroundColor: Colors.background, borderColor: Colors.border }]}>
+                            <ScrollView
+                                style={styles.chatScroll}
+                                contentContainerStyle={{ paddingVertical: 12, paddingHorizontal: 10, gap: 10 }}
+                                nestedScrollEnabled={true}
+                                showsVerticalScrollIndicator={true}
+                            >
+                                {chatMessages.map(msg => (
+                                    <View
+                                        key={msg.id}
+                                        style={[
+                                            styles.messageWrapper,
+                                            msg.sender === 'user' ? styles.userMessageWrapper : styles.aiMessageWrapper
+                                        ]}
+                                    >
+                                        {msg.sender === 'ai' && (
+                                            <View style={[styles.avatarBadge, { backgroundColor: Colors.primary + '20' }]}>
+                                                <Sparkles size={12} color={Colors.primary} />
+                                            </View>
+                                        )}
+                                        <View
+                                            style={[
+                                                styles.messageBubble,
+                                                msg.sender === 'user'
+                                                    ? [styles.userBubble, { backgroundColor: Colors.primary }]
+                                                    : [styles.aiBubble, { backgroundColor: Colors.surface, borderColor: Colors.border }]
+                                            ]}
+                                        >
+                                            <Text
+                                                style={[
+                                                    styles.messageText,
+                                                    { color: msg.sender === 'user' ? '#FFFFFF' : Colors.text }
+                                                ]}
+                                            >
+                                                {msg.text}
+                                            </Text>
+                                            <Text
+                                                style={[
+                                                    styles.messageTime,
+                                                    { color: msg.sender === 'user' ? 'rgba(255,255,255,0.7)' : Colors.textMuted }
+                                                ]}
+                                            >
+                                                {msg.timestamp}
+                                            </Text>
+                                        </View>
+                                    </View>
+                                ))}
+
+                                {isAsking && (
+                                    <View style={[styles.messageWrapper, styles.aiMessageWrapper]}>
+                                        <View style={[styles.avatarBadge, { backgroundColor: Colors.primary + '20' }]}>
+                                            <Sparkles size={12} color={Colors.primary} />
+                                        </View>
+                                        <View style={[styles.messageBubble, styles.aiBubble, { backgroundColor: Colors.surface, borderColor: Colors.border, flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
+                                            <ActivityIndicator size="small" color={Colors.primary} />
+                                            <Text style={{ fontSize: 12, color: Colors.textMuted, fontStyle: 'italic' }}>
+                                                SpendZen AI is thinking...
+                                            </Text>
+                                        </View>
+                                    </View>
+                                )}
+                            </ScrollView>
+                        </View>
+
+                        {/* Sticky Input Bar */}
                         <View style={styles.inputRow}>
                             <TextInput
                                 style={[styles.input, { backgroundColor: Colors.background, borderColor: Colors.border, color: Colors.text }]}
@@ -363,7 +581,7 @@ export default function AIPlannerScreen() {
                                 multiline={false}
                             />
                             <TouchableOpacity
-                                style={[styles.sendBtn, { backgroundColor: Colors.primary }]}
+                                style={[styles.sendBtn, { backgroundColor: Colors.primary, opacity: isAsking ? 0.6 : 1 }]}
                                 onPress={() => handleAskQuestion()}
                                 disabled={isAsking}
                                 activeOpacity={0.8}
@@ -374,14 +592,6 @@ export default function AIPlannerScreen() {
                                 }
                             </TouchableOpacity>
                         </View>
-
-                        {chatAnswer && (
-                            <View style={[styles.resultCard, { backgroundColor: Colors.primary + '10', borderColor: Colors.primary + '30', marginTop: 12 }]}>
-                                <Text style={[styles.infoText, { color: Colors.text }]}>
-                                    {chatAnswer}
-                                </Text>
-                            </View>
-                        )}
                     </View>
 
                 </View>
@@ -620,5 +830,57 @@ const styles = StyleSheet.create({
         fontSize: 13,
         fontWeight: '700',
         flex: 1,
+    },
+    chatContainer: {
+        height: 280,
+        borderRadius: 14,
+        borderWidth: 1,
+        marginBottom: 12,
+        overflow: 'hidden',
+    },
+    chatScroll: {
+        flex: 1,
+    },
+    messageWrapper: {
+        flexDirection: 'row',
+        alignItems: 'flex-end',
+        gap: 6,
+        marginVertical: 2,
+    },
+    userMessageWrapper: {
+        justifyContent: 'flex-end',
+    },
+    aiMessageWrapper: {
+        justifyContent: 'flex-start',
+    },
+    avatarBadge: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 4,
+    },
+    messageBubble: {
+        borderRadius: 16,
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        maxWidth: '85%',
+    },
+    userBubble: {
+        borderBottomRightRadius: 4,
+    },
+    aiBubble: {
+        borderBottomLeftRadius: 4,
+        borderWidth: 1,
+    },
+    messageText: {
+        fontSize: 13,
+        lineHeight: 19,
+    },
+    messageTime: {
+        fontSize: 10,
+        marginTop: 4,
+        alignSelf: 'flex-end',
     },
 });

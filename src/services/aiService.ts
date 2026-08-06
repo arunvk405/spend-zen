@@ -163,10 +163,17 @@ export function evaluateLocalAffordability(itemCost: number, context: FinancialC
 // Live Gemini API Integration (if API key is supplied)
 export async function fetchGeminiAIPlan(apiKey: string, context: FinancialContext): Promise<AIPlanResult | null> {
     try {
-        const prompt = `You are SpendZen AI, an expert personal finance planner. Analyze this REAL user context:
-Income: ₹${context.monthlyIncome}
-Expenses: ₹${context.monthlyExpenses}
+        const cleanKey = apiKey ? apiKey.trim() : '';
+        if (!cleanKey) {
+            return null;
+        }
+
+        const prompt = `You are SpendZen AI, an expert personal financial planner. Analyze this user's real context:
+Monthly Income: ₹${context.monthlyIncome}
+Monthly Expenses: ₹${context.monthlyExpenses}
 Total Balance: ₹${context.totalBalance}
+Bank Balance: ₹${context.bankBalance}
+Cash Balance: ₹${context.cashBalance}
 Credit Card Due: ₹${context.creditCardDue}
 Top Categories: ${JSON.stringify(context.topExpenseCategories)}
 
@@ -185,15 +192,47 @@ Respond with strictly valid JSON only in this exact schema:
   "mindsetQuote": string
 }`;
 
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }]
-            })
-        });
+        const endpoints = [
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${cleanKey}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${cleanKey}`,
+        ];
 
-        if (!response.ok) return null;
+        let response = null;
+        let lastError = '';
+
+        for (let i = 0; i < endpoints.length; i++) {
+            try {
+                const res = await fetch(endpoints[i], {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: prompt }] }]
+                    })
+                });
+
+                if (res.ok) {
+                    response = res;
+                    break;
+                }
+
+                const errJson = await res.json().catch(() => ({}));
+                const errMsg = errJson.error?.message || `HTTP ${res.status}`;
+                if (!lastError) lastError = errMsg;
+
+                if (errMsg.includes('API key not valid') || errMsg.includes('INVALID_ARGUMENT') || res.status === 400 && errMsg.includes('API key')) {
+                    lastError = errMsg;
+                    break;
+                }
+            } catch (err: any) {
+                if (!lastError) lastError = err.message || 'Network Error';
+            }
+        }
+
+        if (!response) {
+            console.error("Gemini API Error:", lastError);
+            return null;
+        }
+
         const data = await response.json();
         const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
         const cleanJson = text.replace(/```json|```/g, '').trim();
@@ -204,10 +243,24 @@ Respond with strictly valid JSON only in this exact schema:
     }
 }
 
-export async function fetchGeminiAIChatResponse(apiKey: string, question: string, context: FinancialContext): Promise<string | null> {
+export interface ChatHistoryItem {
+    sender: 'user' | 'ai';
+    text: string;
+}
+
+export async function fetchGeminiAIChatResponse(
+    apiKey: string,
+    question: string,
+    context: FinancialContext,
+    history: ChatHistoryItem[] = []
+): Promise<string | null> {
     try {
-        const prompt = `You are SpendZen AI, an expert personal financial advisor. The user has asked: "${question}".
-        
+        const cleanKey = apiKey ? apiKey.trim() : '';
+        if (!cleanKey) {
+            return null;
+        }
+
+        const systemContext = `System Context: You are SpendZen AI, an expert personal financial advisor.
 Real context of the user's financial state:
 - Monthly Income: ₹${context.monthlyIncome}
 - Monthly Expenses: ₹${context.monthlyExpenses}
@@ -217,21 +270,73 @@ Real context of the user's financial state:
 - Credit Card Dues: ₹${context.creditCardDue}
 - Top Expense Categories: ${JSON.stringify(context.topExpenseCategories)}
 
-Give a direct, concise, dynamic, and action-oriented financial response tailored to their exact numbers. Provide fresh, unique insights every time. Keep it under 3-4 short bullet points or concise paragraphs.`;
+Give direct, concise, dynamic, and action-oriented financial responses tailored to their exact numbers. Provide fresh, unique insights every time. Keep responses concise (3-4 bullet points or short paragraphs).`;
 
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }]
-            })
+        const contents: any[] = [];
+
+        // Build multi-turn chat history payload for Gemini
+        history.forEach(item => {
+            if (item.text && item.text.trim()) {
+                contents.push({
+                    role: item.sender === 'user' ? 'user' : 'model',
+                    parts: [{ text: item.text }]
+                });
+            }
         });
 
-        if (!response.ok) return null;
+        // Append current prompt with system context
+        contents.push({
+            role: 'user',
+            parts: [{ text: `${systemContext}\n\nUser Question: "${question}"` }]
+        });
+
+        const endpoints = [
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${cleanKey}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${cleanKey}`,
+        ];
+
+        let response = null;
+        let primaryError = '';
+
+        for (let i = 0; i < endpoints.length; i++) {
+            try {
+                const res = await fetch(endpoints[i], {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents })
+                });
+
+                if (res.ok) {
+                    response = res;
+                    break;
+                }
+
+                const errJson = await res.json().catch(() => ({}));
+                const errMsg = errJson.error?.message || `HTTP ${res.status}`;
+                if (!primaryError) primaryError = errMsg;
+
+                if (errMsg.includes('API key not valid') || errMsg.includes('INVALID_ARGUMENT') || res.status === 400 && errMsg.includes('API key')) {
+                    primaryError = errMsg;
+                    break;
+                }
+            } catch (err: any) {
+                if (!primaryError) primaryError = err.message || 'Network Error';
+            }
+        }
+
+        if (!response) {
+            console.error("Gemini Chat API Error:", primaryError);
+            return null;
+        }
+
         const data = await response.json();
-        return data.candidates?.[0]?.content?.parts?.[0]?.text || null;
-    } catch (e) {
-        console.error("Gemini Chat API Error:", e);
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (text) {
+            return text;
+        }
+        return null;
+    } catch (e: any) {
+        console.error("Gemini Chat API Exception:", e);
         return null;
     }
 }
