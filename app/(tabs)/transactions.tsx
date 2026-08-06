@@ -73,7 +73,7 @@ export default function TransactionsHistory() {
     const Colors = useThemeColors();
     const router = useRouter();
     const insets = useSafeAreaInsets();
-    const topMargin = Math.max(insets.top + 16, Platform.OS === 'ios' || Platform.OS === 'web' ? 62 : 16);
+    const topMargin = Math.max(insets.top, Platform.OS === 'web' ? 12 : 8);
     const bottomPadding = Math.max(insets.bottom + 85, 105);
 
     const { transactions, deleteTransaction, bankAccounts, creditCards, cashAccountName, historyRetention } = useFinance();
@@ -506,61 +506,70 @@ export default function TransactionsHistory() {
         const fromAccName = getAccountName(item.accountId);
         const toAccName = item.toAccountId ? getAccountName(item.toAccountId) : '';
         const accountDisplay = isTransfer && toAccName ? `${fromAccName} ➔ ${toAccName}` : fromAccName;
+        const formattedDate = format(new Date(item.date), 'dd MMM');
 
         return (
-            <View style={[styles.transactionItem, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
-                <View style={[styles.cardHeader, {
-                    borderBottomColor: Colors.border + '30',
-                    backgroundColor: Colors.isDark ? '#ffffff05' : '#00000003'
-                }]}>
-                    <Text style={[styles.txCategory, { color: Colors.text }]}>{item.category || (isTransfer ? 'Self Transfer' : '')}</Text>
-                    {item.note ? (
-                        <Text style={[styles.txNote, { color: Colors.textMuted }]} numberOfLines={1}>
-                            • {item.note}
-                        </Text>
-                    ) : null}
-                </View>
-                <View style={styles.cardBody}>
-                    <View style={[styles.dateBlock, { borderRightColor: Colors.border }]}>
-                        <Text style={[styles.dateDay, { color: Colors.text }]}>{format(new Date(item.date), 'dd')}</Text>
-                        <Text style={[styles.dateMonth, { color: Colors.textMuted }]}>{format(new Date(item.date), 'MMM')}</Text>
+            <TouchableOpacity
+                activeOpacity={0.8}
+                style={[styles.transactionItem, { backgroundColor: Colors.surface, borderColor: Colors.border }]}
+                onPress={() => router.push({ pathname: '/add', params: { id: item.id } })}
+            >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 12 }}>
+                    {/* Category Icon */}
+                    <View style={{
+                        width: 44,
+                        height: 44,
+                        borderRadius: 14,
+                        backgroundColor: (categoryData.color || Colors.primary) + '15',
+                        justifyContent: 'center',
+                        alignItems: 'center'
+                    }}>
+                        <IconRenderer name={categoryData.icon} color={categoryData.color || Colors.primary} size={20} />
                     </View>
-                    <View style={styles.iconContainer}>
-                        <View style={[styles.iconCircle, { backgroundColor: (categoryData.color || Colors.primary) + '15' }]}>
-                            <IconRenderer name={categoryData.icon} color={categoryData.color || Colors.primary} size={22} />
+
+                    {/* Transaction Info */}
+                    <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 14, fontWeight: '700', color: Colors.text }} numberOfLines={1}>
+                            {item.category || (isTransfer ? 'Self Transfer' : 'Expense')}
+                        </Text>
+                        <Text style={{ fontSize: 11, color: Colors.textMuted, marginTop: 2 }} numberOfLines={1}>
+                            {formattedDate} • {accountDisplay}{item.note ? ` • ${item.note}` : ''}
+                        </Text>
+                    </View>
+
+                    {/* Amount & Actions */}
+                    <View style={{ alignItems: 'flex-end' }}>
+                        <Text style={{
+                            fontSize: 15,
+                            fontWeight: '700',
+                            color: item.type === 'INCOME' ? Colors.income : item.type === 'EXPENSE' ? Colors.expense : Colors.primary
+                        }}>
+                            {item.type === 'INCOME' ? '+' : item.type === 'EXPENSE' ? '-' : '⇄ '}₹{item.amount.toLocaleString('en-IN')}
+                        </Text>
+
+                        <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
+                            <TouchableOpacity
+                                style={{ padding: 2 }}
+                                onPress={(e: any) => { e?.stopPropagation?.(); handleDuplicate(item); }}
+                            >
+                                <Copy color={Colors.textMuted} size={14} />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={{ padding: 2 }}
+                                onPress={(e: any) => { e?.stopPropagation?.(); router.push({ pathname: '/add', params: { id: item.id } }); }}
+                            >
+                                <Pencil color={Colors.primary} size={14} />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={{ padding: 2 }}
+                                onPress={(e: any) => { e?.stopPropagation?.(); handleDelete(item); }}
+                            >
+                                <Trash2 color={Colors.expense} size={14} />
+                            </TouchableOpacity>
                         </View>
                     </View>
-                    <View style={styles.amountBlock}>
-                        <Text style={[
-                            styles.txAmount,
-                            { color: item.type === 'INCOME' ? Colors.income : item.type === 'EXPENSE' ? Colors.expense : Colors.primary }
-                        ]}>
-                            {item.type === 'INCOME' ? '+' : item.type === 'EXPENSE' ? '-' : '⇄ '}₹{item.amount.toLocaleString()}
-                        </Text>
-                        <Text style={[styles.accountId, { color: Colors.textMuted }]} numberOfLines={1}>{accountDisplay}</Text>
-                    </View>
-                    <View style={styles.actionBlock}>
-                        <TouchableOpacity
-                            style={[styles.actionIconButton, { borderColor: Colors.border, backgroundColor: Colors.surface }]}
-                            onPress={() => handleDuplicate(item)}
-                        >
-                            <Copy color={Colors.primary} size={15} />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={[styles.actionIconButton, { borderColor: Colors.border, backgroundColor: Colors.surface }]}
-                            onPress={() => router.push({ pathname: '/add', params: { id: item.id } })}
-                        >
-                            <Pencil color={Colors.primary} size={15} />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={[styles.actionIconButton, { borderColor: Colors.border, backgroundColor: Colors.surface }]}
-                            onPress={() => handleDelete(item)}
-                        >
-                            <Trash2 color={Colors.expense} size={15} />
-                        </TouchableOpacity>
-                    </View>
                 </View>
-            </View>
+            </TouchableOpacity>
         );
     };
 

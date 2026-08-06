@@ -27,9 +27,21 @@ export default function Root({ children }: PropsWithChildren) {
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="Spend Zen" />
         <meta name="mobile-web-app-capable" content="yes" />
-        <meta name="theme-color" content="#064e3b" />
-
         <ScrollViewStyleReset />
+        <style dangerouslySetInnerHTML={{ __html: `
+          html, body, #root {
+            background-color: #f8fafc;
+            min-height: 100vh;
+            min-height: -webkit-fill-available;
+            margin: 0;
+            padding: 0;
+          }
+          @media (prefers-color-scheme: dark) {
+            html, body, #root {
+              background-color: #0f172a;
+            }
+          }
+        ` }} />
       </head>
       <body>{children}</body>
     </html>

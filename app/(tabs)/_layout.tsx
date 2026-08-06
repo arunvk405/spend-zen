@@ -12,8 +12,8 @@ export default function TabLayout() {
     const { user, loading } = useAuth();
     const insets = useSafeAreaInsets();
 
-    const tabHeight = 65 + (insets.bottom > 0 ? insets.bottom - 10 : 0);
-    const tabPaddingBottom = Math.max(insets.bottom, 10);
+    const tabHeight = Platform.OS === 'web' ? 64 : 58 + (insets.bottom > 0 ? Math.min(insets.bottom, 16) : 0);
+    const tabPaddingBottom = Platform.OS === 'web' ? 8 : (insets.bottom > 0 ? Math.min(insets.bottom, 12) : 8);
 
     if (loading) {
         return (
@@ -37,12 +37,20 @@ export default function TabLayout() {
                     borderTopColor: Colors.border,
                     height: tabHeight,
                     paddingBottom: tabPaddingBottom,
-                    paddingTop: 4,
+                    paddingTop: 6,
                     position: 'absolute',
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
                     borderTopWidth: 1,
                     elevation: 0,
                     ...Platform.select({
-                        ios: { shadowOpacity: 0 },
+                        ios: {
+                            shadowColor: '#000',
+                            shadowOffset: { width: 0, height: -3 },
+                            shadowOpacity: 0.04,
+                            shadowRadius: 6,
+                        },
                         default: {}
                     }),
                 },
