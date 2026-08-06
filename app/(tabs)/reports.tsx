@@ -6,8 +6,8 @@ import { useThemeColors, Typography } from '../../src/theme/colors';
 import { PieChart } from 'react-native-chart-kit';
 import InteractiveDonut from '../../src/components/InteractiveDonut';
 import { useFinance } from '../../src/context/FinanceContext';
-import { startOfMonth, endOfMonth, isWithinInterval, parseISO, isSameMonth, isSameYear, format } from 'date-fns';
-import { ChevronLeft, ChevronRight, ArrowUpCircle, ArrowDownCircle, Wallet, Info, Tag } from 'lucide-react-native';
+import { startOfMonth, endOfMonth, isWithinInterval, parseISO, isSameMonth, isSameYear, format, subMonths, getDaysInMonth, getDate, getDay } from 'date-fns';
+import { ChevronLeft, ChevronRight, ArrowUpCircle, ArrowDownCircle, Wallet, Info, Tag, TrendingUp, TrendingDown, Activity, Zap, Award, Target, Calendar, ShoppingBag } from 'lucide-react-native';
 
 const HoverCard = ({ children, style, onPress, disabled = false }: any) => {
     const [isHovered, setIsHovered] = useState(false);
@@ -46,10 +46,11 @@ const getItemLayout = (data: any, index: number) => ({
 export default function Reports() {
     const Colors = useThemeColors();
     const router = useRouter();
-    const { transactions, bankAccounts, creditCards, cashAccountName } = useFinance();
+    const { transactions, bankAccounts, creditCards, cashAccountName, categoryBudgets } = useFinance();
     
     const [selectedExpenseCat, setSelectedExpenseCat] = useState<string | null>(null);
     const [selectedIncomeCat, setSelectedIncomeCat] = useState<string | null>(null);
+    const [selectedDayInfo, setSelectedDayInfo] = useState<{ day: number; amount: number } | null>(null);
 
     const getAccountName = (id: string) => {
         if (id === 'cash') return cashAccountName;
@@ -63,15 +64,29 @@ export default function Reports() {
     const [selectedAccount, setSelectedAccount] = useState((params.accountId as string) || 'all');
     const [selectedDate, setSelectedDate] = useState(new Date());
 
-    const navigateToHistory = (category: string, type: 'EXPENSE' | 'INCOME') => {
-        router.push({
-            pathname: '/transactions',
-            params: {
-                category,
-                type,
-                date: selectedDate.toISOString()
-            }
-        });
+    const navigateToHistory = (item: string | { name: string; accountId?: string }, type: 'EXPENSE' | 'INCOME') => {
+        const itemName = typeof item === 'string' ? item : item.name;
+        const accountId = typeof item === 'object' ? item.accountId : undefined;
+
+        if (type === 'INCOME' && accountId) {
+            router.push({
+                pathname: '/transactions',
+                params: {
+                    accountId,
+                    type,
+                    date: selectedDate.toISOString()
+                }
+            });
+        } else {
+            router.push({
+                pathname: '/transactions',
+                params: {
+                    category: itemName,
+                    type,
+                    date: selectedDate.toISOString()
+                }
+            });
+        }
     };
     const monthListRef = useRef<FlatList>(null);
 
@@ -92,6 +107,7 @@ export default function Reports() {
     React.useEffect(() => {
         if (params.accountId) {
             setSelectedAccount(params.accountId as string);
+            router.setParams({ accountId: '' });
         }
     }, [params.accountId]);
 
@@ -112,21 +128,32 @@ export default function Reports() {
 
     const filteredTransactions = useMemo(() => {
         if (selectedAccount === 'all') return filteredTransactionsByDate;
-        return filteredTransactionsByDate.filter(t => t.accountId === selectedAccount);
+        return filteredTransactionsByDate.filter(t => t.accountId === selectedAccount || (t.type === 'TRANSFER' && t.toAccountId === selectedAccount));
     }, [filteredTransactionsByDate, selectedAccount]);
 
     const stats = useMemo(() => {
         let income = 0;
         let expense = 0;
         filteredTransactions.forEach(t => {
-            // Skip credit card payment resetting transactions from actual income totals
             if (t.category === 'Credit Card Payment') return;
 
-            if (t.type === 'INCOME') income += t.amount;
-            else expense += t.amount;
+            if (selectedAccount === 'all') {
+                // For ALL accounts view: ignore self transfers completely to keep overall totals untouched
+                if (t.type === 'TRANSFER' || t.category === 'Self Transfer') return;
+
+                if (t.type === 'INCOME') income += Number(t.amount);
+                else if (t.type === 'EXPENSE') expense += Number(t.amount);
+            } else {
+                // For a SPECIFIC bank account: calculate inflows & outflows for this bank
+                if (t.type === 'INCOME' || (t.type === 'TRANSFER' && t.toAccountId === selectedAccount)) {
+                    income += Number(t.amount);
+                } else if (t.type === 'EXPENSE' || (t.type === 'TRANSFER' && t.accountId === selectedAccount)) {
+                    expense += Number(t.amount);
+                }
+            }
         });
         return { income, expense, net: income - expense };
-    }, [filteredTransactions]);
+    }, [filteredTransactions, selectedAccount]);
 
     const changeYear = (delta: number) => {
         const newDate = new Date(selectedDate);
@@ -151,14 +178,27 @@ export default function Reports() {
     };
 
     const expenseBreakdown = useMemo(() => {
-        const expenses = filteredTransactions.filter(t => t.type === 'EXPENSE' && t.category !== 'Credit Card Payment');
+        const expenses = filteredTransactions.filter(t => {
+            if (t.category === 'Credit Card Payment') return false;
+            if (selectedAccount === 'all') {
+                return t.type === 'EXPENSE';
+            } else {
+                return t.type === 'EXPENSE' || (t.type === 'TRANSFER' && t.accountId === selectedAccount);
+            }
+        });
+
         const breakdown: Record<string, { amount: number, color: string }> = {};
         
         expenses.forEach(t => {
-            if (!breakdown[t.category]) {
-                breakdown[t.category] = { amount: 0, color: Colors.charts.pie[Object.keys(breakdown).length % Colors.charts.pie.length] };
+            const catName = (t.type === 'TRANSFER' || t.category === 'Self Transfer') ? 'Self Transfer (Out)' : t.category;
+            if (!breakdown[catName]) {
+                const isTransferCat = catName.includes('Self Transfer');
+                breakdown[catName] = {
+                    amount: 0,
+                    color: isTransferCat ? Colors.primary : Colors.charts.pie[Object.keys(breakdown).length % Colors.charts.pie.length]
+                };
             }
-            breakdown[t.category].amount += t.amount;
+            breakdown[catName].amount += Number(t.amount);
         });
 
         const total = Object.values(breakdown).reduce((sum, item) => sum + item.amount, 0);
@@ -171,18 +211,44 @@ export default function Reports() {
                 percent: total > 0 ? (breakdown[key].amount / total) * 100 : 0
             }))
             .sort((a, b) => b.amount - a.amount);
-    }, [filteredTransactions, Colors]);
+    }, [filteredTransactions, selectedAccount, Colors]);
 
     const incomeBreakdown = useMemo(() => {
-        const incomes = filteredTransactions.filter(t => t.type === 'INCOME' && t.category !== 'Credit Card Payment');
-        const breakdown: Record<string, { amount: number, color: string }> = {};
+        const incomes = filteredTransactions.filter(t => {
+            if (t.category === 'Credit Card Payment') return false;
+            if (selectedAccount === 'all') {
+                return t.type === 'INCOME';
+            } else {
+                return t.type === 'INCOME' || (t.type === 'TRANSFER' && t.toAccountId === selectedAccount);
+            }
+        });
+
+        const breakdown: Record<string, { accountId?: string; amount: number; color: string }> = {};
         
         incomes.forEach(t => {
-            const label = getAccountName(t.accountId);
-            if (!breakdown[label]) {
-                breakdown[label] = { amount: 0, color: Object.keys(breakdown).length === 0 ? Colors.primary : Colors.income };
+            let label = '';
+            let accountId: string | undefined = undefined;
+
+            if (selectedAccount === 'all') {
+                label = getAccountName(t.accountId);
+                accountId = t.accountId;
+            } else {
+                if (t.type === 'TRANSFER' || t.category === 'Self Transfer') {
+                    label = `Self Transfer (From ${getAccountName(t.accountId)})`;
+                } else {
+                    label = t.category;
+                }
+                accountId = t.accountId;
             }
-            breakdown[label].amount += t.amount;
+
+            if (!breakdown[label]) {
+                breakdown[label] = {
+                    accountId,
+                    amount: 0,
+                    color: label.includes('Self Transfer') ? Colors.primary : (Object.keys(breakdown).length === 0 ? Colors.primary : Colors.income)
+                };
+            }
+            breakdown[label].amount += Number(t.amount);
         });
 
         const total = Object.values(breakdown).reduce((sum, item) => sum + item.amount, 0);
@@ -190,12 +256,154 @@ export default function Reports() {
         return Object.keys(breakdown)
             .map((key) => ({
                 name: key,
+                accountId: breakdown[key].accountId,
                 amount: breakdown[key].amount,
                 color: breakdown[key].color,
                 percent: total > 0 ? (breakdown[key].amount / total) * 100 : 0
             }))
             .sort((a, b) => b.amount - a.amount);
-    }, [filteredTransactions, Colors]);
+    }, [filteredTransactions, selectedAccount, Colors, cashAccountName, bankAccounts, creditCards]);
+
+    const previousMonthStats = useMemo(() => {
+        const prevDate = subMonths(selectedDate, 1);
+        const prevTxns = transactions.filter(t => {
+            const txDate = parseISO(t.date);
+            return isSameMonth(txDate, prevDate) && isSameYear(txDate, prevDate);
+        });
+
+        const filteredPrev = selectedAccount === 'all'
+            ? prevTxns
+            : prevTxns.filter(t => t.accountId === selectedAccount || (t.type === 'TRANSFER' && t.toAccountId === selectedAccount));
+
+        let income = 0;
+        let expense = 0;
+
+        filteredPrev.forEach(t => {
+            if (t.category === 'Credit Card Payment') return;
+            if (selectedAccount === 'all') {
+                if (t.type === 'TRANSFER' || t.category === 'Self Transfer') return;
+                if (t.type === 'INCOME') income += Number(t.amount);
+                else if (t.type === 'EXPENSE') expense += Number(t.amount);
+            } else {
+                if (t.type === 'INCOME' || (t.type === 'TRANSFER' && t.toAccountId === selectedAccount)) {
+                    income += Number(t.amount);
+                } else if (t.type === 'EXPENSE' || (t.type === 'TRANSFER' && t.accountId === selectedAccount)) {
+                    expense += Number(t.amount);
+                }
+            }
+        });
+
+        return { income, expense };
+    }, [transactions, selectedDate, selectedAccount]);
+
+    const dailySpendingData = useMemo(() => {
+        const daysInMonth = getDaysInMonth(selectedDate);
+        const dailyTotals = new Array(daysInMonth).fill(0);
+
+        filteredTransactions.forEach(t => {
+            if (t.category === 'Credit Card Payment') return;
+            const isExpenseItem = selectedAccount === 'all'
+                ? (t.type === 'EXPENSE' && t.category !== 'Self Transfer')
+                : (t.type === 'EXPENSE' || (t.type === 'TRANSFER' && t.accountId === selectedAccount));
+
+            if (isExpenseItem) {
+                const dayNum = getDate(parseISO(t.date));
+                if (dayNum >= 1 && dayNum <= daysInMonth) {
+                    dailyTotals[dayNum - 1] += Number(t.amount);
+                }
+            }
+        });
+
+        let maxSpending = 0;
+        let peakDay = 0;
+        dailyTotals.forEach((amt, idx) => {
+            if (amt > maxSpending) {
+                maxSpending = amt;
+                peakDay = idx + 1;
+            }
+        });
+
+        const activeDaysCount = dailyTotals.filter(a => a > 0).length || 1;
+        const avgDaily = Math.round(stats.expense / activeDaysCount);
+
+        return { dailyTotals, maxSpending, peakDay, avgDaily, daysInMonth };
+    }, [filteredTransactions, selectedAccount, selectedDate, stats.expense]);
+
+    const financialHealth = useMemo(() => {
+        if (stats.income <= 0) return { label: 'No Income Recorded', rate: 0, color: Colors.textMuted };
+        const rate = (stats.net / stats.income) * 100;
+        if (rate >= 30) return { label: 'Excellent Health 🌟', rate: Math.round(rate), color: Colors.income };
+        if (rate >= 10) return { label: 'Good Savings Pace 🚀', rate: Math.round(rate), color: Colors.primary };
+        if (rate >= 0) return { label: 'Tight Budget Warning ⚠️', rate: Math.round(rate), color: '#F59E0B' };
+        return { label: 'Deficit Warning 🚨', rate: Math.round(rate), color: Colors.expense };
+    }, [stats, Colors]);
+
+    const expDiffPct = useMemo(() => {
+        if (previousMonthStats.expense <= 0) return 0;
+        const diff = ((stats.expense - previousMonthStats.expense) / previousMonthStats.expense) * 100;
+        return Math.round(diff * 10) / 10;
+    }, [stats.expense, previousMonthStats.expense]);
+
+    const topPurchases = useMemo(() => {
+        const expensesOnly = filteredTransactions.filter(t => {
+            if (t.category === 'Credit Card Payment') return false;
+            if (selectedAccount === 'all') {
+                return t.type === 'EXPENSE' && t.category !== 'Self Transfer';
+            } else {
+                return t.type === 'EXPENSE' || (t.type === 'TRANSFER' && t.accountId === selectedAccount);
+            }
+        });
+
+        return [...expensesOnly]
+            .sort((a, b) => Number(b.amount) - Number(a.amount))
+            .slice(0, 3);
+    }, [filteredTransactions, selectedAccount]);
+
+    const weekdayWeekendStats = useMemo(() => {
+        let weekday = 0;
+        let weekend = 0;
+
+        filteredTransactions.forEach(t => {
+            if (t.category === 'Credit Card Payment') return;
+            const isExpenseItem = selectedAccount === 'all'
+                ? (t.type === 'EXPENSE' && t.category !== 'Self Transfer')
+                : (t.type === 'EXPENSE' || (t.type === 'TRANSFER' && t.accountId === selectedAccount));
+
+            if (isExpenseItem) {
+                const dateObj = parseISO(t.date);
+                const dayOfWeek = getDay(dateObj); // 0 = Sunday, 6 = Saturday
+                if (dayOfWeek === 0 || dayOfWeek === 6) {
+                    weekend += Number(t.amount);
+                } else {
+                    weekday += Number(t.amount);
+                }
+            }
+        });
+
+        const total = weekday + weekend;
+        const weekdayPct = total > 0 ? Math.round((weekday / total) * 100) : 0;
+        const weekendPct = total > 0 ? Math.round((weekend / total) * 100) : 0;
+
+        return { weekday, weekend, weekdayPct, weekendPct, total };
+    }, [filteredTransactions, selectedAccount]);
+
+    const budgetProgressList = useMemo(() => {
+        if (!categoryBudgets) return [];
+        return expenseBreakdown
+            .filter(item => categoryBudgets[item.name] && categoryBudgets[item.name] > 0)
+            .map(item => {
+                const budget = categoryBudgets[item.name];
+                const pct = Math.round((item.amount / budget) * 100);
+                return {
+                    category: item.name,
+                    spent: item.amount,
+                    budget,
+                    pct,
+                    color: pct > 100 ? Colors.expense : pct >= 80 ? '#F59E0B' : Colors.income
+                };
+            })
+            .sort((a, b) => b.pct - a.pct);
+    }, [expenseBreakdown, categoryBudgets, Colors]);
 
     const activeExpenseData = expenseBreakdown.find(b => b.name === selectedExpenseCat) || expenseBreakdown[0];
     const activeIncomeData = incomeBreakdown.find(b => b.name === selectedIncomeCat) || incomeBreakdown[0];
@@ -312,12 +520,222 @@ export default function Reports() {
                     <Text 
                         numberOfLines={1} 
                         adjustsFontSizeToFit 
-                        style={[styles.summaryValue, { color: stats.net >= 0 ? Colors.primary : Colors.expense }]}
+                        style={[styles.summaryValue, { color: Colors.primary }]}
                     >
                         ₹{stats.net.toLocaleString()}
                     </Text>
                 </View>
             </View>
+
+            {/* Visual Analytics: Financial Health & Month-over-Month Comparison */}
+            <HoverCard disabled={true} style={[styles.card, { backgroundColor: Colors.surface }]}>
+                <View style={styles.cardHeader}>
+                    <View>
+                        <Text style={[styles.cardTitle, { color: Colors.text }]}>Financial Performance & Trends</Text>
+                        <Text style={{ fontSize: 12, color: Colors.textMuted, marginTop: 2 }}>
+                            vs {format(subMonths(selectedDate, 1), 'MMMM yyyy')}
+                        </Text>
+                    </View>
+                    <Activity size={18} color={Colors.primary} />
+                </View>
+
+                {/* Health Badge & Savings Rate Bar */}
+                <View style={{ marginBottom: 16, backgroundColor: Colors.background, padding: 12, borderRadius: 16 }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <Award size={16} color={financialHealth.color} />
+                            <Text style={{ fontSize: 13, fontWeight: '700', color: Colors.text }}>{financialHealth.label}</Text>
+                        </View>
+                        <Text style={{ fontSize: 13, fontWeight: 'bold', color: financialHealth.color }}>
+                            {financialHealth.rate}% Savings Rate
+                        </Text>
+                    </View>
+                    <View style={{ height: 8, backgroundColor: Colors.border + '40', borderRadius: 4, overflow: 'hidden' }}>
+                        <View style={{ height: '100%', width: `${Math.min(100, Math.max(0, financialHealth.rate))}%`, backgroundColor: financialHealth.color, borderRadius: 4 }} />
+                    </View>
+                </View>
+
+                {/* MoM Comparison Pills */}
+                <View style={{ flexDirection: 'row', gap: 10 }}>
+                    <View style={{ flex: 1, backgroundColor: Colors.background, padding: 12, borderRadius: 16 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+                            {expDiffPct > 0 ? (
+                                <TrendingUp size={14} color={Colors.expense} />
+                            ) : (
+                                <TrendingDown size={14} color={Colors.income} />
+                            )}
+                            <Text style={{ fontSize: 11, fontWeight: '600', color: Colors.textMuted }}>Expense Trend</Text>
+                        </View>
+                        <Text style={{ fontSize: 15, fontWeight: 'bold', color: expDiffPct > 0 ? Colors.expense : Colors.income }}>
+                            {expDiffPct > 0 ? `+${expDiffPct}%` : `${expDiffPct}%`}
+                        </Text>
+                        <Text style={{ fontSize: 10, color: Colors.textMuted, marginTop: 2 }}>
+                            Last Mo: ₹{previousMonthStats.expense.toLocaleString()}
+                        </Text>
+                    </View>
+
+                    <View style={{ flex: 1, backgroundColor: Colors.background, padding: 12, borderRadius: 16 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+                            <Zap size={14} color={Colors.primary} />
+                            <Text style={{ fontSize: 11, fontWeight: '600', color: Colors.textMuted }}>Daily Avg Burn</Text>
+                        </View>
+                        <Text style={{ fontSize: 15, fontWeight: 'bold', color: Colors.text }}>
+                            ₹{dailySpendingData.avgDaily.toLocaleString()}/day
+                        </Text>
+                        <Text style={{ fontSize: 10, color: Colors.textMuted, marginTop: 2 }}>
+                            Peak: {dailySpendingData.peakDay ? `Day ${dailySpendingData.peakDay} (₹${dailySpendingData.maxSpending.toLocaleString()})` : 'None'}
+                        </Text>
+                    </View>
+                </View>
+
+                {/* Daily Spending Bar Chart with Clear Legend & Interactive Inspector */}
+                <View style={{ marginTop: 16 }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: Colors.text }}>
+                            Daily Expense Activity
+                        </Text>
+                        <View style={{ backgroundColor: Colors.background, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }}>
+                            <Text style={{ fontSize: 11, fontWeight: '600', color: selectedDayInfo ? Colors.primary : Colors.textMuted }}>
+                                {selectedDayInfo
+                                    ? `Day ${selectedDayInfo.day}: ₹${selectedDayInfo.amount.toLocaleString()}`
+                                    : dailySpendingData.peakDay > 0
+                                        ? `Peak: Day ${dailySpendingData.peakDay} (₹${dailySpendingData.maxSpending.toLocaleString()})`
+                                        : 'Tap any bar to inspect'}
+                            </Text>
+                        </View>
+                    </View>
+
+                    {/* Color Legend so customers immediately understand the bars */}
+                    <View style={{ flexDirection: 'row', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                            <View style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: Colors.primary }} />
+                            <Text style={{ fontSize: 10, color: Colors.textMuted }}>Daily Expense</Text>
+                        </View>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                            <View style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: Colors.expense }} />
+                            <Text style={{ fontSize: 10, color: Colors.textMuted }}>Highest Spending Day (Peak)</Text>
+                        </View>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                            <View style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: Colors.border + '60' }} />
+                            <Text style={{ fontSize: 10, color: Colors.textMuted }}>No Expense</Text>
+                        </View>
+                    </View>
+
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: 60, gap: 2 }}>
+                        {dailySpendingData.dailyTotals.map((amt, idx) => {
+                            const barHeight = dailySpendingData.maxSpending > 0 ? Math.max(4, (amt / dailySpendingData.maxSpending) * 56) : 4;
+                            const isPeak = idx + 1 === dailySpendingData.peakDay && amt > 0;
+                            const isSelected = selectedDayInfo && selectedDayInfo.day === idx + 1;
+                            return (
+                                <TouchableOpacity
+                                    key={`day-${idx}`}
+                                    onPress={() => setSelectedDayInfo({ day: idx + 1, amount: amt })}
+                                    style={{
+                                        flex: 1,
+                                        height: barHeight,
+                                        backgroundColor: isPeak ? Colors.expense : (amt > 0 ? Colors.primary : Colors.border + '50'),
+                                        borderRadius: 2,
+                                        opacity: selectedDayInfo ? (isSelected ? 1 : 0.4) : 1
+                                    }}
+                                />
+                            );
+                        })}
+                    </View>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
+                        <Text style={{ fontSize: 9, color: Colors.textMuted }}>Day 1</Text>
+                        <Text style={{ fontSize: 9, color: Colors.textMuted }}>Day 15</Text>
+                        <Text style={{ fontSize: 9, color: Colors.textMuted }}>Day {dailySpendingData.daysInMonth}</Text>
+                    </View>
+                </View>
+            </HoverCard>
+
+            {/* 🏆 Top 3 Purchases of the Month & 📅 Weekday vs Weekend Analysis */}
+            <View style={{ flexDirection: 'row', gap: 10, marginHorizontal: 16, marginTop: 4, marginBottom: 8 }}>
+                {/* Top Purchases Card */}
+                <View style={{ flex: 1, backgroundColor: Colors.surface, borderRadius: 20, padding: 14, borderColor: Colors.border, borderWidth: 1 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                        <ShoppingBag size={16} color={Colors.primary} />
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: Colors.text }}>Top Purchases</Text>
+                    </View>
+                    {topPurchases.length > 0 ? (
+                        topPurchases.map((tx, idx) => (
+                            <View key={`top-${tx.id || idx}`} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                                <View style={{ flex: 1, marginRight: 6 }}>
+                                    <Text style={{ fontSize: 11, fontWeight: '700', color: Colors.text }} numberOfLines={1}>
+                                        #{idx + 1} {tx.category}
+                                    </Text>
+                                    <Text style={{ fontSize: 9, color: Colors.textMuted }} numberOfLines={1}>
+                                        {format(parseISO(tx.date), 'MMM dd')} {tx.note ? `• ${tx.note}` : ''}
+                                    </Text>
+                                </View>
+                                <Text style={{ fontSize: 11, fontWeight: 'bold', color: Colors.expense }}>
+                                    ₹{Number(tx.amount).toLocaleString()}
+                                </Text>
+                            </View>
+                        ))
+                    ) : (
+                        <Text style={{ fontSize: 10, color: Colors.textMuted, marginTop: 4 }}>No major purchases recorded</Text>
+                    )}
+                </View>
+
+                {/* Weekday vs Weekend Card */}
+                <View style={{ flex: 1, backgroundColor: Colors.surface, borderRadius: 20, padding: 14, borderColor: Colors.border, borderWidth: 1 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                        <Calendar size={16} color={Colors.primary} />
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: Colors.text }}>Day Split</Text>
+                    </View>
+                    <View style={{ gap: 8 }}>
+                        <View>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 }}>
+                                <Text style={{ fontSize: 10, color: Colors.textMuted }}>Mon-Fri (Weekdays)</Text>
+                                <Text style={{ fontSize: 10, fontWeight: '700', color: Colors.text }}>{weekdayWeekendStats.weekdayPct}%</Text>
+                            </View>
+                            <View style={{ height: 6, backgroundColor: Colors.border + '40', borderRadius: 3, overflow: 'hidden' }}>
+                                <View style={{ height: '100%', width: `${weekdayWeekendStats.weekdayPct}%`, backgroundColor: Colors.primary, borderRadius: 3 }} />
+                            </View>
+                            <Text style={{ fontSize: 9, color: Colors.textMuted, marginTop: 2 }}>₹{weekdayWeekendStats.weekday.toLocaleString()}</Text>
+                        </View>
+
+                        <View>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 }}>
+                                <Text style={{ fontSize: 10, color: Colors.textMuted }}>Sat-Sun (Weekends)</Text>
+                                <Text style={{ fontSize: 10, fontWeight: '700', color: Colors.text }}>{weekdayWeekendStats.weekendPct}%</Text>
+                            </View>
+                            <View style={{ height: 6, backgroundColor: Colors.border + '40', borderRadius: 3, overflow: 'hidden' }}>
+                                <View style={{ height: '100%', width: `${weekdayWeekendStats.weekendPct}%`, backgroundColor: '#F59E0B', borderRadius: 3 }} />
+                            </View>
+                            <Text style={{ fontSize: 9, color: Colors.textMuted, marginTop: 2 }}>₹{weekdayWeekendStats.weekend.toLocaleString()}</Text>
+                        </View>
+                    </View>
+                </View>
+            </View>
+
+            {/* 🎯 Category Budget Tracker (if budgets are set) */}
+            {budgetProgressList.length > 0 && (
+                <HoverCard disabled={true} style={[styles.card, { backgroundColor: Colors.surface, marginTop: 4 }]}>
+                    <View style={styles.cardHeader}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <Target size={18} color={Colors.primary} />
+                            <Text style={[styles.cardTitle, { color: Colors.text }]}>Category Budget Tracker</Text>
+                        </View>
+                    </View>
+                    <View style={{ gap: 12 }}>
+                        {budgetProgressList.map(item => (
+                            <View key={`bgt-${item.category}`}>
+                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                                    <Text style={{ fontSize: 12, fontWeight: '700', color: Colors.text }}>{item.category}</Text>
+                                    <Text style={{ fontSize: 11, fontWeight: 'bold', color: item.color }}>
+                                        ₹{item.spent.toLocaleString()} / ₹{item.budget.toLocaleString()} ({item.pct}%)
+                                    </Text>
+                                </View>
+                                <View style={{ height: 8, backgroundColor: Colors.border + '40', borderRadius: 4, overflow: 'hidden' }}>
+                                    <View style={{ height: '100%', width: `${Math.min(100, item.pct)}%`, backgroundColor: item.color, borderRadius: 4 }} />
+                                </View>
+                            </View>
+                        ))}
+                    </View>
+                </HoverCard>
+            )}
 
             {/* Context-Aware Financial Mindset Recommendation */}
             <View style={{
@@ -405,7 +823,7 @@ export default function Reports() {
                                         styles.breakdownItem, 
                                         selectedExpenseCat === item.name && { backgroundColor: item.color + '10', borderRadius: 12, padding: 8, marginHorizontal: -8 }
                                     ]}
-                                    onPress={() => navigateToHistory(item.name, 'EXPENSE')}
+                                    onPress={() => navigateToHistory({ name: item.name }, 'EXPENSE')}
                                 >
                                     <View style={styles.itemHeader}>
                                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -452,7 +870,7 @@ export default function Reports() {
                                 onSelect={setSelectedIncomeCat as any}
                                 selectedItem={incomeBreakdown.find(b => b.name === selectedIncomeCat) || null}
                                 colors={Colors}
-                                onCenterPress={(item) => navigateToHistory(item.name, 'INCOME')}
+                                onCenterPress={(item) => navigateToHistory({ name: item.name, accountId: (item as any).accountId }, 'INCOME')}
                             />
                         </View>
 
@@ -464,7 +882,7 @@ export default function Reports() {
                                         styles.breakdownItem,
                                         selectedIncomeCat === item.name && { backgroundColor: item.color + '10', borderRadius: 12, padding: 8, marginHorizontal: -8 }
                                     ]}
-                                    onPress={() => navigateToHistory(item.name, 'INCOME')}
+                                    onPress={() => navigateToHistory({ name: item.name, accountId: item.accountId }, 'INCOME')}
                                 >
                                     <View style={styles.itemHeader}>
                                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>

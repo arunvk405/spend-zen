@@ -258,44 +258,53 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
             const now = new Date();
             const creditCardIds = new Set(creditCrds.map(c => c.id));
 
-            // ── Cash balance (from transactions with accountId === 'cash')
+            // ── Cash balance (from transactions with accountId === 'cash' or toAccountId === 'cash')
             let cash = 0;
             let income = 0;
             let expense = 0;
 
             txs.forEach(t => {
                 const amount = Number(t.amount);
-                // Skip credit card transactions for net balance & monthly totals
-                if (creditCardIds.has(t.accountId) || t.accountId === 'credit') return;
-
+                
                 if (t.accountId === 'cash') {
                     cash += t.type === 'INCOME' ? amount : -amount;
                 }
+                if (t.toAccountId === 'cash' && t.type === 'TRANSFER') {
+                    cash += amount;
+                }
 
-                // Monthly income/expense (non-credit)
+                // Skip credit card transactions for net balance & monthly totals
+                if (creditCardIds.has(t.accountId) || t.accountId === 'credit') return;
+
+                // Monthly income/expense (non-credit, excluding transfers)
                 if (isSameMonth(parseISO(t.date), now) && isSameYear(parseISO(t.date), now)) {
-                    if (t.category !== 'Credit Card Payment') {
+                    if (t.type !== 'TRANSFER' && t.category !== 'Credit Card Payment' && t.category !== 'Self Transfer') {
                         if (t.type === 'INCOME') income += amount;
-                        else expense += amount;
+                        else if (t.type === 'EXPENSE') expense += amount;
                     }
                 }
             });
 
             // ── Bank account balances (initialBalance + transactions)
             const bankAccountsWithBalance: BankAccountWithBalance[] = bankAccts.map(acc => {
-                const accTxBalance = txs
+                const outgoingTxBalance = txs
                     .filter(t => t.accountId === acc.id)
                     .reduce((sum, t) => t.type === 'INCOME' ? sum + Number(t.amount) : sum - Number(t.amount), 0);
-                return { ...acc, computedBalance: acc.initialBalance + accTxBalance };
+                const incomingTxBalance = txs
+                    .filter(t => t.toAccountId === acc.id && t.type === 'TRANSFER')
+                    .reduce((sum, t) => sum + Number(t.amount), 0);
+                return { ...acc, computedBalance: acc.initialBalance + outgoingTxBalance + incomingTxBalance };
             });
 
             // ── Credit card balances (from transactions on each card)
             const creditCardsWithBalance: CreditCardWithBalance[] = creditCrds.map(card => {
-                const cardTxns = txs.filter(t => t.accountId === card.id);
-                // Expenses = purchases, Income = payments
-                const usedAmount = cardTxns.reduce((sum, t) => {
-                    return t.type === 'EXPENSE' ? sum + Number(t.amount) : sum - Number(t.amount);
-                }, 0);
+                const outgoing = txs
+                    .filter(t => t.accountId === card.id)
+                    .reduce((sum, t) => t.type === 'EXPENSE' || t.type === 'TRANSFER' ? sum + Number(t.amount) : sum - Number(t.amount), 0);
+                const incomingTransfer = txs
+                    .filter(t => t.toAccountId === card.id && t.type === 'TRANSFER')
+                    .reduce((sum, t) => sum + Number(t.amount), 0);
+                const usedAmount = outgoing - incomingTransfer;
                 const due = Math.max(0, usedAmount);
                 const available = Math.max(0, card.creditLimit - due);
                 return { ...card, usedAmount: due, dueAmount: due, availableBalance: available };

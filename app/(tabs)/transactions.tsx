@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, ScrollView, Pressable, Platform, Modal } from 'react-native';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useFinance } from '../../src/context/FinanceContext';
@@ -6,11 +6,12 @@ import { useThemeColors, Typography } from '../../src/theme/colors';
 import {
     Search, Trash2, Calendar, ChevronLeft, ChevronRight, Pencil, Info,
     Briefcase, PiggyBank, Gift, TrendingUp, Laptop, Package,
-    Utensils, Activity, Home, Car, User, PawPrint, FileText, Film, CreditCard, Wallet, Landmark,
-    SlidersHorizontal, X, Download
+    Utensils, Activity, Home, Car, User, PawPrint, Film, CreditCard, Wallet, Landmark,
+    SlidersHorizontal, X, Download, Copy, FileText
 } from 'lucide-react-native';
-import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from '../../src/models';
-import { format, startOfMonth, endOfMonth, isWithinInterval, parseISO, isSameMonth, isSameYear } from 'date-fns';
+import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, TRANSFER_CATEGORIES } from '../../src/models';
+import { format, startOfMonth, endOfMonth, isWithinInterval, parseISO, isSameMonth, isSameYear, isToday, isSameWeek } from 'date-fns';
+import ReportsView from './reports';
 
 const MONTHS = [
     'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -71,7 +72,8 @@ export default function TransactionsHistory() {
     const Colors = useThemeColors();
     const router = useRouter();
     const { transactions, deleteTransaction, bankAccounts, creditCards, cashAccountName, historyRetention } = useFinance();
-    const params = useLocalSearchParams<{ category?: string; date?: string; type?: string }>();
+    const params = useLocalSearchParams<{ category?: string; accountId?: string; account?: string; date?: string; type?: string; mode?: string }>();
+    const [activeSubTab, setActiveSubTab] = useState<'HISTORY' | 'REPORTS'>('HISTORY');
     const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
     const [selectedAccounts, setSelectedAccounts] = useState<string[]>([]);
     const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
@@ -80,33 +82,70 @@ export default function TransactionsHistory() {
     const [tempCategories, setTempCategories] = useState<string[]>([]);
     const [tempAccounts, setTempAccounts] = useState<string[]>([]);
 
-    const [filterType, setFilterType] = useState<'ALL' | 'INCOME' | 'EXPENSE'>('ALL');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [filterType, setFilterType] = useState<'ALL' | 'INCOME' | 'EXPENSE' | 'TRANSFER'>('ALL');
+    const [datePreset, setDatePreset] = useState<'THIS_MONTH' | 'TODAY' | 'THIS_WEEK' | 'ALL_TIME'>('THIS_MONTH');
+
+    const getAccountName = useCallback((id: string) => {
+        if (id === 'cash') return cashAccountName;
+        const bank = bankAccounts.find(b => b.id === id);
+        if (bank) return bank.bankName;
+        const card = creditCards.find(c => c.id === id);
+        if (card) return card.cardName;
+        return id;
+    }, [cashAccountName, bankAccounts, creditCards]);
 
     // Month/Year filter state
     const [selectedDate, setSelectedDate] = useState(new Date());
     const monthListRef = useRef<FlatList>(null);
 
     useEffect(() => {
-        if (params.category || params.date || params.type) {
+        if (params.mode === 'reports') {
+            setActiveSubTab('REPORTS');
+        }
+        if (params.category || params.accountId || params.account || params.date || params.type) {
             const hasCategory = typeof params.category === 'string' && params.category.length > 0;
+            const hasAccountId = (typeof params.accountId === 'string' && params.accountId.length > 0) || (typeof params.account === 'string' && params.account.length > 0);
             const hasDate = typeof params.date === 'string' && params.date.length > 0;
             const hasType = typeof params.type === 'string' && params.type.length > 0;
 
-            if (hasCategory || hasDate || hasType) {
+            if (hasCategory || hasAccountId || hasDate || hasType) {
                 if (hasCategory) {
-                    setSelectedCategories([params.category as string]);
+                    // Check if passed category string is actually an Account Name or Account ID
+                    const matchingAccount = bankAccounts.find(b => b.bankName === params.category || b.id === params.category) ||
+                        creditCards.find(c => c.cardName === params.category || c.id === params.category) ||
+                        (params.category === cashAccountName || params.category === 'cash' ? { id: 'cash' } : null);
+
+                    if (matchingAccount) {
+                        setSelectedAccounts([matchingAccount.id]);
+                        setSelectedCategories([]);
+                    } else {
+                        setSelectedCategories([params.category as string]);
+                    }
+                }
+                if (hasAccountId) {
+                    const rawAcc = params.accountId || params.account;
+                    const accObj = bankAccounts.find(b => b.id === rawAcc || b.bankName === rawAcc) ||
+                        creditCards.find(c => c.id === rawAcc || c.cardName === rawAcc) ||
+                        (rawAcc === 'cash' || rawAcc === cashAccountName ? { id: 'cash' } : null);
+
+                    if (accObj) {
+                        setSelectedAccounts([accObj.id]);
+                    } else if (rawAcc) {
+                        setSelectedAccounts([rawAcc as string]);
+                    }
                 }
                 if (hasType) {
-                    setFilterType(params.type as 'ALL' | 'INCOME' | 'EXPENSE');
+                    setFilterType(params.type as 'ALL' | 'INCOME' | 'EXPENSE' | 'TRANSFER');
                 }
                 if (hasDate) {
                     setSelectedDate(new Date(params.date as string));
                 }
                 // Clear the params from the router so they don't lock the state when tab changes
-                router.setParams({ category: '', date: '', type: '' });
+                router.setParams({ category: '', accountId: '', account: '', date: '', type: '' });
             }
         }
-    }, [params.category, params.date, params.type]);
+    }, [params.category, params.accountId, params.account, params.date, params.type, bankAccounts, creditCards, cashAccountName]);
 
     useFocusEffect(
         React.useCallback(() => {
@@ -122,25 +161,98 @@ export default function TransactionsHistory() {
     );
 
     const filteredTransactions = useMemo(() => {
+        const now = new Date();
         return transactions.filter(tx => {
             const txDate = parseISO(tx.date);
-            const matchesDate = isSameMonth(txDate, selectedDate) && isSameYear(txDate, selectedDate);
+
+            let matchesDate = true;
+            if (datePreset === 'THIS_MONTH') {
+                matchesDate = isSameMonth(txDate, selectedDate) && isSameYear(txDate, selectedDate);
+            } else if (datePreset === 'TODAY') {
+                matchesDate = isToday(txDate);
+            } else if (datePreset === 'THIS_WEEK') {
+                matchesDate = isSameWeek(txDate, now, { weekStartsOn: 1 });
+            } else if (datePreset === 'ALL_TIME') {
+                matchesDate = true;
+            }
+
             const matchesType = filterType === 'ALL' || tx.type === filterType;
             const matchesCategory = selectedCategories.length === 0 || selectedCategories.includes(tx.category);
             const matchesAccount = selectedAccounts.length === 0 || selectedAccounts.includes(tx.accountId);
 
-            return matchesDate && matchesType && matchesCategory && matchesAccount;
+            let matchesSearch = true;
+            if (searchQuery.trim()) {
+                const query = searchQuery.toLowerCase().trim();
+                const noteText = (tx.note || '').toLowerCase();
+                const categoryText = (tx.category || '').toLowerCase();
+                const accountName = getAccountName(tx.accountId).toLowerCase();
+                const toAccountName = tx.toAccountId ? getAccountName(tx.toAccountId).toLowerCase() : '';
+                const amountText = tx.amount.toString();
+
+                matchesSearch = noteText.includes(query) ||
+                    categoryText.includes(query) ||
+                    accountName.includes(query) ||
+                    toAccountName.includes(query) ||
+                    amountText.includes(query);
+            }
+
+            return matchesDate && matchesType && matchesCategory && matchesAccount && matchesSearch;
         });
-    }, [transactions, filterType, selectedDate, selectedCategories, selectedAccounts]);
+    }, [transactions, filterType, selectedDate, selectedCategories, selectedAccounts, searchQuery, datePreset, cashAccountName, bankAccounts, creditCards]);
+
+    const totals = useMemo(() => {
+        let income = 0;
+        let expense = 0;
+        let transfer = 0;
+
+        filteredTransactions.forEach(tx => {
+            const amt = Number(tx.amount) || 0;
+            if (tx.type === 'INCOME') {
+                income += amt;
+            } else if (tx.type === 'EXPENSE') {
+                expense += amt;
+            } else if (tx.type === 'TRANSFER') {
+                transfer += amt;
+            }
+        });
+
+        income = Math.round(income * 100) / 100;
+        expense = Math.round(expense * 100) / 100;
+        transfer = Math.round(transfer * 100) / 100;
+        const net = Math.round((income - expense) * 100) / 100;
+
+        return {
+            income,
+            expense,
+            transfer,
+            net,
+            count: filteredTransactions.length
+        };
+    }, [filteredTransactions]);
+
+    const hasActiveFilters = selectedCategories.length > 0 || selectedAccounts.length > 0 || filterType !== 'ALL' || searchQuery.trim().length > 0 || datePreset !== 'THIS_MONTH';
+
+    const formatAmount = (num: number) => {
+        return num.toLocaleString('en-IN', {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 2,
+        });
+    };
 
     const categoriesToSelect = useMemo(() => {
         if (filterType === 'INCOME') return INCOME_CATEGORIES;
         if (filterType === 'EXPENSE') return EXPENSE_CATEGORIES;
+        if (filterType === 'TRANSFER') return TRANSFER_CATEGORIES;
 
         const combined = [...INCOME_CATEGORIES];
         EXPENSE_CATEGORIES.forEach(exp => {
             if (!combined.some(inc => inc.name === exp.name)) {
                 combined.push(exp);
+            }
+        });
+        TRANSFER_CATEGORIES.forEach(tr => {
+            if (!combined.some(c => c.name === tr.name)) {
+                combined.push(tr);
             }
         });
         return combined;
@@ -200,6 +312,105 @@ export default function TransactionsHistory() {
                 message: csv,
                 title: 'Spend Zen Transactions Export'
             }).catch((err: any) => console.error(err));
+        }
+    };
+
+    const handleDuplicate = (item: any) => {
+        router.push({
+            pathname: '/add',
+            params: {
+                type: item.type,
+                amount: item.amount.toString(),
+                category: item.category,
+                accountId: item.accountId,
+                toAccountId: item.toAccountId || '',
+                note: item.note || ''
+            }
+        });
+    };
+
+    const handleExportPDF = () => {
+        if (filteredTransactions.length === 0) {
+            if (Platform.OS === 'web') {
+                window.alert("No transactions to export");
+            }
+            return;
+        }
+
+        if (Platform.OS === 'web') {
+            const monthTitle = format(selectedDate, 'MMMM yyyy');
+            const printWindow = window.open('', '_blank');
+            if (!printWindow) return;
+
+            let rowsHtml = '';
+            filteredTransactions.forEach(t => {
+                const accName = getAccountName(t.accountId);
+                const toAcc = t.toAccountId ? ` ➔ ${getAccountName(t.toAccountId)}` : '';
+                const color = t.type === 'INCOME' ? '#10B981' : t.type === 'EXPENSE' ? '#EF4444' : '#6366F1';
+                const sign = t.type === 'INCOME' ? '+' : t.type === 'EXPENSE' ? '-' : '⇄ ';
+                rowsHtml += `
+                    <tr>
+                        <td>${format(new Date(t.date), 'dd MMM yyyy')}</td>
+                        <td>${t.category}</td>
+                        <td>${t.type}</td>
+                        <td>${accName}${toAcc}</td>
+                        <td style="color: ${color}; font-weight: bold;">${sign}₹${Number(t.amount).toLocaleString()}</td>
+                        <td>${t.note || '-'}</td>
+                    </tr>
+                `;
+            });
+
+            const htmlContent = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>SpendZen Statement - ${monthTitle}</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; padding: 24px; color: #1e293b; }
+                        h1 { margin-bottom: 4px; color: #4f46e5; font-size: 22px; }
+                        p { font-size: 13px; color: #64748b; margin-top: 0; }
+                        .summary { display: flex; gap: 16px; margin: 20px 0; background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0; }
+                        .stat { flex: 1; }
+                        .stat-label { font-size: 11px; color: #64748b; text-transform: uppercase; font-weight: 600; }
+                        .stat-val { font-size: 18px; font-weight: bold; margin-top: 4px; }
+                        table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+                        th, td { padding: 10px 12px; border-bottom: 1px solid #e2e8f0; text-align: left; font-size: 13px; }
+                        th { background: #f1f5f9; font-weight: 700; color: #334155; }
+                    </style>
+                </head>
+                <body>
+                    <h1>SpendZen Monthly Statement</h1>
+                    <p>Period: <strong>${monthTitle}</strong> | Generated on: ${format(new Date(), 'dd MMM yyyy')}</p>
+                    <div class="summary">
+                        <div class="stat"><div class="stat-label">Total Income</div><div class="stat-val" style="color:#10B981;">+₹${totals.income.toLocaleString()}</div></div>
+                        <div class="stat"><div class="stat-label">Total Expense</div><div class="stat-val" style="color:#EF4444;">-₹${totals.expense.toLocaleString()}</div></div>
+                        <div class="stat"><div class="stat-label">Net Balance</div><div class="stat-val">₹${totals.net.toLocaleString()}</div></div>
+                        <div class="stat"><div class="stat-label">Total Txns</div><div class="stat-val">${totals.count}</div></div>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Category</th>
+                                <th>Type</th>
+                                <th>Account</th>
+                                <th>Amount</th>
+                                <th>Note</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rowsHtml}
+                        </tbody>
+                    </table>
+                    <script>
+                        window.onload = function() { window.print(); }
+                    </script>
+                </body>
+                </html>
+            `;
+
+            printWindow.document.write(htmlContent);
+            printWindow.document.close();
         }
     };
 
@@ -270,21 +481,19 @@ export default function TransactionsHistory() {
         }
     };
 
-    const getAccountName = (id: string) => {
-        if (id === 'cash') return cashAccountName;
-        const bank = bankAccounts.find(b => b.id === id);
-        if (bank) return bank.bankName;
-        const card = creditCards.find(c => c.id === id);
-        if (card) return card.cardName;
-        return id;
-    };
 
-    const allCategories = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES];
+
+    const allCategories = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES, ...TRANSFER_CATEGORIES];
 
     const renderItem = ({ item }: { item: any }) => {
+        const isTransfer = item.type === 'TRANSFER';
         const categoryData = allCategories.find(c => c.name === item.category && c.type === item.type) ||
             allCategories.find(c => c.name === item.category) ||
-            { icon: 'package', color: Colors.textMuted };
+            { icon: isTransfer ? 'rotate-ccw' : 'package', color: isTransfer ? Colors.primary : Colors.textMuted };
+
+        const fromAccName = getAccountName(item.accountId);
+        const toAccName = item.toAccountId ? getAccountName(item.toAccountId) : '';
+        const accountDisplay = isTransfer && toAccName ? `${fromAccName} ➔ ${toAccName}` : fromAccName;
 
         return (
             <View style={[styles.transactionItem, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
@@ -292,7 +501,7 @@ export default function TransactionsHistory() {
                     borderBottomColor: Colors.border + '30',
                     backgroundColor: Colors.isDark ? '#ffffff05' : '#00000003'
                 }]}>
-                    <Text style={[styles.txCategory, { color: Colors.text }]}>{item.category}</Text>
+                    <Text style={[styles.txCategory, { color: Colors.text }]}>{item.category || (isTransfer ? 'Self Transfer' : '')}</Text>
                     {item.note ? (
                         <Text style={[styles.txNote, { color: Colors.textMuted }]} numberOfLines={1}>
                             • {item.note}
@@ -305,31 +514,37 @@ export default function TransactionsHistory() {
                         <Text style={[styles.dateMonth, { color: Colors.textMuted }]}>{format(new Date(item.date), 'MMM')}</Text>
                     </View>
                     <View style={styles.iconContainer}>
-                        <View style={[styles.iconCircle, { backgroundColor: categoryData.color + '15' }]}>
-                            <IconRenderer name={categoryData.icon} color={categoryData.color} size={22} />
+                        <View style={[styles.iconCircle, { backgroundColor: (categoryData.color || Colors.primary) + '15' }]}>
+                            <IconRenderer name={categoryData.icon} color={categoryData.color || Colors.primary} size={22} />
                         </View>
                     </View>
                     <View style={styles.amountBlock}>
                         <Text style={[
                             styles.txAmount,
-                            { color: item.type === 'INCOME' ? Colors.income : Colors.expense }
+                            { color: item.type === 'INCOME' ? Colors.income : item.type === 'EXPENSE' ? Colors.expense : Colors.primary }
                         ]}>
-                            {item.type === 'INCOME' ? '+' : '-'}₹{item.amount.toLocaleString()}
+                            {item.type === 'INCOME' ? '+' : item.type === 'EXPENSE' ? '-' : '⇄ '}₹{item.amount.toLocaleString()}
                         </Text>
-                        <Text style={[styles.accountId, { color: Colors.textMuted }]}>{getAccountName(item.accountId)}</Text>
+                        <Text style={[styles.accountId, { color: Colors.textMuted }]} numberOfLines={1}>{accountDisplay}</Text>
                     </View>
                     <View style={styles.actionBlock}>
                         <TouchableOpacity
-                            style={[styles.editButton, { borderColor: Colors.border, backgroundColor: Colors.surface }]}
-                            onPress={() => router.push({ pathname: '/add', params: { id: item.id } })}
+                            style={[styles.actionIconButton, { borderColor: Colors.border, backgroundColor: Colors.surface }]}
+                            onPress={() => handleDuplicate(item)}
                         >
-                            <Pencil color={Colors.primary} size={16} />
+                            <Copy color={Colors.primary} size={15} />
                         </TouchableOpacity>
                         <TouchableOpacity
-                            style={[styles.deleteButton, { borderColor: Colors.border, backgroundColor: Colors.surface }]}
+                            style={[styles.actionIconButton, { borderColor: Colors.border, backgroundColor: Colors.surface }]}
+                            onPress={() => router.push({ pathname: '/add', params: { id: item.id } })}
+                        >
+                            <Pencil color={Colors.primary} size={15} />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.actionIconButton, { borderColor: Colors.border, backgroundColor: Colors.surface }]}
                             onPress={() => handleDelete(item)}
                         >
-                            <Trash2 color={Colors.expense} size={16} />
+                            <Trash2 color={Colors.expense} size={15} />
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -339,7 +554,54 @@ export default function TransactionsHistory() {
 
     return (
         <View style={[styles.container, { backgroundColor: Colors.background }]}>
-            <View style={[styles.header, { backgroundColor: Colors.background, borderBottomColor: Colors.border }]}>
+            {/* Top Sub-tab Segmented Control */}
+            <View style={{
+                flexDirection: 'row',
+                backgroundColor: Colors.surface,
+                borderRadius: 14,
+                padding: 4,
+                marginHorizontal: 16,
+                marginTop: Platform.OS === 'ios' ? 44 : 12,
+                marginBottom: 8,
+                borderWidth: 1,
+                borderColor: Colors.border
+            }}>
+                <TouchableOpacity
+                    style={{
+                        flex: 1,
+                        paddingVertical: 8,
+                        alignItems: 'center',
+                        borderRadius: 10,
+                        backgroundColor: activeSubTab === 'HISTORY' ? Colors.primary : 'transparent'
+                    }}
+                    onPress={() => setActiveSubTab('HISTORY')}
+                >
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: activeSubTab === 'HISTORY' ? '#fff' : Colors.textMuted }}>
+                        📜 History
+                    </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    style={{
+                        flex: 1,
+                        paddingVertical: 8,
+                        alignItems: 'center',
+                        borderRadius: 10,
+                        backgroundColor: activeSubTab === 'REPORTS' ? Colors.primary : 'transparent'
+                    }}
+                    onPress={() => setActiveSubTab('REPORTS')}
+                >
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: activeSubTab === 'REPORTS' ? '#fff' : Colors.textMuted }}>
+                        📊 Analytics & Reports
+                    </Text>
+                </TouchableOpacity>
+            </View>
+
+            {activeSubTab === 'REPORTS' ? (
+                <ReportsView />
+            ) : (
+                <>
+                    <View style={[styles.header, { backgroundColor: Colors.background, borderBottomColor: Colors.border }]}>
                 <View style={styles.yearRow}>
                     <TouchableOpacity onPress={() => changeYear(-1)} style={styles.arrowBtn}>
                         <ChevronLeft color={Colors.textMuted} size={20} />
@@ -387,6 +649,24 @@ export default function TransactionsHistory() {
                         );
                     }}
                 />
+
+                {/* Real-time Search Input Bar */}
+                <View style={[styles.searchBar, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+                    <Search color={Colors.textMuted} size={18} />
+                    <TextInput
+                        style={[styles.searchInput, { color: Colors.text }]}
+                        placeholder="Search notes, categories, accounts or amounts..."
+                        placeholderTextColor={Colors.textMuted}
+                        value={searchQuery}
+                        onChangeText={setSearchQuery}
+                    />
+                    {searchQuery.length > 0 && (
+                        <TouchableOpacity onPress={() => setSearchQuery('')} style={{ padding: 4 }}>
+                            <X color={Colors.textMuted} size={16} />
+                        </TouchableOpacity>
+                    )}
+                </View>
+
                 <View style={styles.filterHeaderRow}>
                     <ScrollView
                         horizontal
@@ -438,9 +718,42 @@ export default function TransactionsHistory() {
                     >
                         <Download color={Colors.primary} size={20} />
                     </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.filterIconButton, { backgroundColor: Colors.surface, borderColor: Colors.border, marginLeft: 8 }]}
+                        onPress={handleExportPDF}
+                    >
+                        <FileText color={Colors.primary} size={20} />
+                    </TouchableOpacity>
                 </View>
+
+                {/* Quick Time Presets Bar */}
+                <View style={{ flexDirection: 'row', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+                    {[
+                        { id: 'THIS_MONTH', label: 'This Month' },
+                        { id: 'TODAY', label: 'Today' },
+                        { id: 'THIS_WEEK', label: 'This Week' },
+                        { id: 'ALL_TIME', label: 'All Time' }
+                    ].map((preset) => (
+                        <TouchableOpacity
+                            key={preset.id}
+                            style={[
+                                { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.surface },
+                                datePreset === preset.id && { backgroundColor: Colors.primary + '15', borderColor: Colors.primary }
+                            ]}
+                            onPress={() => setDatePreset(preset.id as any)}
+                        >
+                            <Text style={[
+                                { fontSize: 12, fontWeight: '500', color: Colors.textMuted },
+                                datePreset === preset.id && { color: Colors.primary, fontWeight: '700' }
+                            ]}>
+                                {preset.label}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                </View>
+
                 <View style={styles.filterRow}>
-                    {['ALL', 'INCOME', 'EXPENSE'].map((t) => (
+                    {['ALL', 'INCOME', 'EXPENSE', 'TRANSFER'].map((t) => (
                         <TouchableOpacity
                             key={t}
                             style={[
@@ -455,7 +768,7 @@ export default function TransactionsHistory() {
                                 { color: Colors.textMuted },
                                 filterType === t && { color: Colors.white }
                             ]}>
-                                {t.charAt(0) + t.slice(1).toLowerCase()}
+                                {t === 'TRANSFER' ? 'Transfer' : t.charAt(0) + t.slice(1).toLowerCase()}
                             </Text>
                         </TouchableOpacity>
                     ))}
@@ -471,6 +784,74 @@ export default function TransactionsHistory() {
                         </Text>
                     </TouchableOpacity>
                 ) : null}
+
+                {/* Month & Filter Total Summary Card */}
+                <View style={[styles.summaryCard, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+                    <View style={styles.summaryCardHeader}>
+                        <View style={styles.summaryTitleGroup}>
+                            <Text style={[styles.summaryMonthTitle, { color: Colors.text }]}>
+                                {format(selectedDate, 'MMMM yyyy')} Summary
+                            </Text>
+                            {hasActiveFilters && (
+                                <View style={[styles.filteredBadge, { backgroundColor: Colors.primary + '15', borderColor: Colors.primary + '30' }]}>
+                                    <Text style={[styles.filteredBadgeText, { color: Colors.primary }]}>Filtered</Text>
+                                </View>
+                            )}
+                        </View>
+                        <Text style={[styles.summaryCountText, { color: Colors.textMuted }]}>
+                            {totals.count} {totals.count === 1 ? 'transaction' : 'transactions'}
+                        </Text>
+                    </View>
+
+                    {filterType === 'EXPENSE' ? (
+                        <View style={styles.singleStatContainer}>
+                            <Text style={[styles.singleStatLabel, { color: Colors.textMuted }]}>Total Filtered Expense</Text>
+                            <Text style={[styles.singleStatAmount, { color: Colors.expense }]}>
+                                -₹{formatAmount(totals.expense)}
+                            </Text>
+                        </View>
+                    ) : filterType === 'INCOME' ? (
+                        <View style={styles.singleStatContainer}>
+                            <Text style={[styles.singleStatLabel, { color: Colors.textMuted }]}>Total Filtered Income</Text>
+                            <Text style={[styles.singleStatAmount, { color: Colors.income }]}>
+                                +₹{formatAmount(totals.income)}
+                            </Text>
+                        </View>
+                    ) : filterType === 'TRANSFER' ? (
+                        <View style={styles.singleStatContainer}>
+                            <Text style={[styles.singleStatLabel, { color: Colors.textMuted }]}>Total Filtered Transfers</Text>
+                            <Text style={[styles.singleStatAmount, { color: Colors.primary }]}>
+                                ₹{formatAmount(totals.transfer)}
+                            </Text>
+                        </View>
+                    ) : (
+                        <View style={styles.multiStatGrid}>
+                            <View style={styles.multiStatBox}>
+                                <Text style={[styles.multiStatLabel, { color: Colors.textMuted }]}>Income</Text>
+                                <Text style={[styles.multiStatAmount, { color: Colors.income }]}>
+                                    +₹{formatAmount(totals.income)}
+                                </Text>
+                            </View>
+                            <View style={[styles.statDividerVertical, { backgroundColor: Colors.border }]} />
+                            <View style={styles.multiStatBox}>
+                                <Text style={[styles.multiStatLabel, { color: Colors.textMuted }]}>Expense</Text>
+                                <Text style={[styles.multiStatAmount, { color: Colors.expense }]}>
+                                    -₹{formatAmount(totals.expense)}
+                                </Text>
+                            </View>
+                            <View style={[styles.statDividerVertical, { backgroundColor: Colors.border }]} />
+                            <View style={styles.multiStatBox}>
+                                <Text style={[styles.multiStatLabel, { color: Colors.textMuted }]}>Net Total</Text>
+                                <Text style={[
+                                    styles.multiStatAmount,
+                                    { color: totals.net >= 0 ? Colors.income : Colors.expense }
+                                ]}>
+                                    {totals.net >= 0 ? '+' : ''}₹{formatAmount(totals.net)}
+                                </Text>
+                            </View>
+                        </View>
+                    )}
+                </View>
             </View>
             <FlatList
                 data={filteredTransactions}
@@ -579,6 +960,8 @@ export default function TransactionsHistory() {
                     </View>
                 </View>
             </Modal>
+                </>
+            )}
         </View>
     );
 }
@@ -698,7 +1081,16 @@ const styles = StyleSheet.create({
     actionBlock: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginLeft: 'auto', // Push to the right
+        marginLeft: 'auto',
+        gap: 8,
+    },
+    actionIconButton: {
+        width: 36,
+        height: 36,
+        borderRadius: 10,
+        borderWidth: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     dateBlock: {
         alignItems: 'center',
@@ -908,5 +1300,79 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontSize: 15,
         fontWeight: '700',
+    },
+    // Summary Card Styles
+    summaryCard: {
+        marginTop: 12,
+        padding: 14,
+        borderRadius: 14,
+        borderWidth: 1,
+    },
+    summaryCardHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 10,
+    },
+    summaryTitleGroup: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    summaryMonthTitle: {
+        fontSize: 14,
+        fontWeight: '700',
+    },
+    filteredBadge: {
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 10,
+        borderWidth: 1,
+    },
+    filteredBadgeText: {
+        fontSize: 11,
+        fontWeight: '700',
+    },
+    summaryCountText: {
+        fontSize: 12,
+        fontWeight: '500',
+    },
+    singleStatContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingTop: 4,
+    },
+    singleStatLabel: {
+        fontSize: 13,
+        fontWeight: '500',
+    },
+    singleStatAmount: {
+        fontSize: 20,
+        fontWeight: '800',
+    },
+    multiStatGrid: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-around',
+        paddingTop: 4,
+    },
+    multiStatBox: {
+        flex: 1,
+        alignItems: 'center',
+    },
+    multiStatLabel: {
+        fontSize: 11,
+        fontWeight: '500',
+        marginBottom: 2,
+    },
+    multiStatAmount: {
+        fontSize: 14,
+        fontWeight: '700',
+    },
+    statDividerVertical: {
+        width: 1,
+        height: 24,
+        marginHorizontal: 4,
     },
 });

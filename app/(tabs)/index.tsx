@@ -10,10 +10,10 @@ import {
     Wallet, Landmark, CreditCard, TrendingUp, TrendingDown,
     ArrowRight, Briefcase, RotateCcw, Plus, AlertCircle, Pencil, Shield, X,
     PiggyBank, Gift, Laptop, Package, Utensils, Activity, Home, Car, User, PawPrint, FileText, Film,
-    Trash2, CheckCircle, ChevronDown
+    Trash2, CheckCircle, ChevronDown, Bell, Sparkles
 } from 'lucide-react-native';
-import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from '../../src/models';
-import { format, isSameMonth, isSameYear, parseISO } from 'date-fns';
+import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, TRANSFER_CATEGORIES } from '../../src/models';
+import { format, isSameMonth, isSameYear, parseISO, subWeeks, isSameWeek } from 'date-fns';
 import { useRouter, useFocusEffect } from 'expo-router';
 
 const MOTIVATIONAL_QUOTES = [
@@ -198,6 +198,102 @@ export default function HomeDashboard() {
             })
             .sort((a, b) => b.ratio - a.ratio); // Show highest spending ratio first!
     }, [categoryBudgets, currentMonthExpensesByCategory, expenseCategories, Colors.primary]);
+
+    const totalMasterBudget = useMemo(() => {
+        if (!categoryBudgets) return 0;
+        return Object.values(categoryBudgets).reduce((sum, limit) => sum + Number(limit), 0);
+    }, [categoryBudgets]);
+
+    const masterBudgetRatio = useMemo(() => {
+        if (totalMasterBudget <= 0) return 0;
+        return monthlyExpenses / totalMasterBudget;
+    }, [monthlyExpenses, totalMasterBudget]);
+
+    const upcomingBillsDue = useMemo(() => {
+        const today = new Date().getDate();
+        const currentMonthStr = format(new Date(), 'yyyy-MM');
+
+        return recurringBills.filter(bill => {
+            if (bill.lastPaidMonth === currentMonthStr) return false;
+            const dueDay = Number(bill.dueDate);
+            const daysLeft = dueDay - today;
+            return daysLeft <= 7;
+        }).map(bill => {
+            const dueDay = Number(bill.dueDate);
+            const daysLeft = dueDay - today;
+            let badgeText = '';
+            let isUrgent = false;
+
+            if (daysLeft === 0) {
+                badgeText = 'Due Today';
+                isUrgent = true;
+            } else if (daysLeft > 0) {
+                badgeText = `Due in ${daysLeft} ${daysLeft === 1 ? 'day' : 'days'}`;
+                isUrgent = daysLeft <= 2;
+            } else {
+                badgeText = `Overdue (${Math.abs(daysLeft)}d ago)`;
+                isUrgent = true;
+            }
+
+            return { ...bill, daysLeft, badgeText, isUrgent };
+        });
+    }, [recurringBills]);
+
+    const aiFinancialTip = useMemo(() => {
+        const now = new Date();
+        const lastWeek = subWeeks(now, 1);
+
+        let thisWeekExp = 0;
+        let lastWeekExp = 0;
+
+        transactions.forEach(t => {
+            if (t.type === 'EXPENSE' && t.category !== 'Self Transfer' && t.category !== 'Credit Card Payment') {
+                const dateObj = parseISO(t.date);
+                if (isSameWeek(dateObj, now, { weekStartsOn: 1 })) {
+                    thisWeekExp += Number(t.amount);
+                } else if (isSameWeek(dateObj, lastWeek, { weekStartsOn: 1 })) {
+                    lastWeekExp += Number(t.amount);
+                }
+            }
+        });
+
+        const netSavings = monthlyIncome - monthlyExpenses;
+        const savingsRate = monthlyIncome > 0 ? Math.round((netSavings / monthlyIncome) * 100) : 0;
+
+        if (lastWeekExp > 0 && thisWeekExp < lastWeekExp) {
+            const pctLess = Math.round(((lastWeekExp - thisWeekExp) / lastWeekExp) * 100);
+            return {
+                title: "Spending Velocity Down! 🚀",
+                message: `You spent ${pctLess}% less this week compared to last week! On track to save ₹${netSavings > 0 ? netSavings.toLocaleString() : '0'} this month.`,
+                type: 'positive'
+            };
+        } else if (lastWeekExp > 0 && thisWeekExp > lastWeekExp) {
+            const pctMore = Math.round(((thisWeekExp - lastWeekExp) / lastWeekExp) * 100);
+            return {
+                title: "Weekly Spending Alert ⚠️",
+                message: `Weekly spending is up ${pctMore}% compared to last week (₹${thisWeekExp.toLocaleString()} vs ₹${lastWeekExp.toLocaleString()}). Pause non-essentials to preserve your budget.`,
+                type: 'warning'
+            };
+        } else if (savingsRate >= 30) {
+            return {
+                title: "High Savings Rate Achieved 🌟",
+                message: `Outstanding! Your savings rate is ${savingsRate}%. You are exceeding standard wealth-building benchmarks!`,
+                type: 'positive'
+            };
+        } else if (netSavings < 0) {
+            return {
+                title: "Budget Deficit Notice 🚨",
+                message: `Expenses exceed income by ₹${Math.abs(netSavings).toLocaleString()}. Review top spending categories to restore balance.`,
+                type: 'danger'
+            };
+        } else {
+            return {
+                title: "Financial AI Insight ✨",
+                message: `Log your daily expenses consistently to unlock real-time spending velocity and predictive savings trends.`,
+                type: 'info'
+            };
+        }
+    }, [transactions, monthlyIncome, monthlyExpenses]);
 
 
 
@@ -497,6 +593,148 @@ export default function HomeDashboard() {
 
         <ScrollView style={[s.container, { backgroundColor: Colors.background }]} contentContainerStyle={s.content}>
 
+            {/* ── Quick Action Speed Dial Bar ───────────────────────── */}
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16, marginTop: 4 }}>
+                <TouchableOpacity
+                    style={{
+                        flex: 1,
+                        backgroundColor: Colors.expense + '12',
+                        borderColor: Colors.expense + '30',
+                        borderWidth: 1,
+                        borderRadius: 14,
+                        paddingVertical: 10,
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                    }}
+                    onPress={() => router.push({ pathname: '/add', params: { type: 'EXPENSE' } })}
+                >
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: Colors.expense }}>+ Expense</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    style={{
+                        flex: 1,
+                        backgroundColor: Colors.income + '12',
+                        borderColor: Colors.income + '30',
+                        borderWidth: 1,
+                        borderRadius: 14,
+                        paddingVertical: 10,
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                    }}
+                    onPress={() => router.push({ pathname: '/add', params: { type: 'INCOME' } })}
+                >
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: Colors.income }}>+ Income</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    style={{
+                        flex: 1,
+                        backgroundColor: Colors.primary + '12',
+                        borderColor: Colors.primary + '30',
+                        borderWidth: 1,
+                        borderRadius: 14,
+                        paddingVertical: 10,
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                    }}
+                    onPress={() => router.push({ pathname: '/add', params: { type: 'TRANSFER' } })}
+                >
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: Colors.primary }}>⇄ Transfer</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    style={{
+                        flex: 1,
+                        backgroundColor: Colors.primary + '18',
+                        borderColor: Colors.primary + '40',
+                        borderWidth: 1,
+                        borderRadius: 14,
+                        paddingVertical: 10,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexDirection: 'row',
+                        gap: 4
+                    }}
+                    onPress={() => router.push('/ai-planner')}
+                >
+                    <Sparkles size={12} color={Colors.primary} />
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: Colors.primary }}>AI Planner</Text>
+                </TouchableOpacity>
+            </View>
+
+            {/* ── Upcoming Bills Alert Banner (Next 7 Days) ─────────── */}
+            {upcomingBillsDue.length > 0 && (
+                <View style={{
+                    backgroundColor: Colors.surface,
+                    borderRadius: 16,
+                    padding: 14,
+                    marginBottom: 16,
+                    borderColor: '#F59E0B',
+                    borderWidth: 1,
+                    borderLeftWidth: 4,
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.05,
+                    shadowRadius: 6,
+                    elevation: 2
+                }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <Bell size={16} color="#F59E0B" />
+                            <Text style={{ fontSize: 13, fontWeight: '700', color: Colors.text }}>
+                                Upcoming Bill Reminders ({upcomingBillsDue.length})
+                            </Text>
+                        </View>
+                        <Text style={{ fontSize: 10, color: Colors.textMuted }}>Next 7 days</Text>
+                    </View>
+
+                    <View style={{ gap: 8 }}>
+                        {upcomingBillsDue.map(bill => (
+                            <View key={`alert-${bill.id}`} style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                backgroundColor: Colors.background,
+                                padding: 10,
+                                borderRadius: 12
+                            }}>
+                                <View style={{ flex: 1, marginRight: 8 }}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                        <Text style={{ fontSize: 12, fontWeight: '700', color: Colors.text }}>{bill.name}</Text>
+                                        <View style={{
+                                            backgroundColor: bill.isUrgent ? Colors.expense + '15' : '#F59E0B15',
+                                            paddingHorizontal: 6,
+                                            paddingVertical: 2,
+                                            borderRadius: 6
+                                        }}>
+                                            <Text style={{ fontSize: 9, fontWeight: '700', color: bill.isUrgent ? Colors.expense : '#F59E0B' }}>
+                                                {bill.badgeText}
+                                            </Text>
+                                        </View>
+                                    </View>
+                                    <Text style={{ fontSize: 10, color: Colors.textMuted, marginTop: 2 }}>
+                                        ₹{bill.amount.toLocaleString()} • {getAccountName(bill.accountId)}
+                                    </Text>
+                                </View>
+
+                                <TouchableOpacity
+                                    style={{
+                                        backgroundColor: Colors.primary,
+                                        paddingHorizontal: 12,
+                                        paddingVertical: 6,
+                                        borderRadius: 8
+                                    }}
+                                    onPress={() => payRecurringBill(bill)}
+                                >
+                                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#fff' }}>Mark Paid</Text>
+                                </TouchableOpacity>
+                            </View>
+                        ))}
+                    </View>
+                </View>
+            )}
+
             {/* ── Net Balance Summary Card ─────────────────────────── */}
             <HoverCard disabled={true} style={[s.summaryCard, { backgroundColor: Colors.surface, borderColor: Colors.border, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 4 }]}>
                 <Text style={[s.summaryLabel, { color: Colors.textMuted }]}>AVAILABLE BALANCE</Text>
@@ -574,6 +812,32 @@ export default function HomeDashboard() {
                         </View>
                     </View>
                 </View>
+
+                {totalMasterBudget > 0 && (
+                    <View style={{
+                        marginTop: 12,
+                        backgroundColor: Colors.isDark ? '#ffffff05' : '#00000002',
+                        borderRadius: 12,
+                        padding: 10,
+                        borderWidth: 1,
+                        borderColor: Colors.border
+                    }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                            <Text style={{ fontSize: 11, fontWeight: '700', color: Colors.text }}>Monthly Budget Used</Text>
+                            <Text style={{ fontSize: 11, fontWeight: 'bold', color: masterBudgetRatio >= 1 ? Colors.expense : masterBudgetRatio >= 0.8 ? '#F59E0B' : Colors.income }}>
+                                ₹{monthlyExpenses.toLocaleString()} / ₹{totalMasterBudget.toLocaleString()} ({Math.round(masterBudgetRatio * 100)}%)
+                            </Text>
+                        </View>
+                        <View style={{ height: 6, backgroundColor: Colors.border + '40', borderRadius: 3, overflow: 'hidden' }}>
+                            <View style={{
+                                height: '100%',
+                                width: `${Math.min(100, Math.round(masterBudgetRatio * 100))}%`,
+                                backgroundColor: masterBudgetRatio >= 1 ? Colors.expense : masterBudgetRatio >= 0.8 ? '#F59E0B' : Colors.income,
+                                borderRadius: 3
+                            }} />
+                        </View>
+                    </View>
+                )}
 
                 {totalCreditDue > 0 && (
                     <View style={[s.dueAlert, { backgroundColor: Colors.expense + '15', borderColor: Colors.expense + '30', marginTop: 10 }]}>
@@ -664,6 +928,40 @@ export default function HomeDashboard() {
                     </Text>
                 </Animated.View>
             </Pressable>
+
+            {/* ── Dynamic AI Financial Tip of the Day Card ─────────── */}
+            <View style={{
+                backgroundColor: Colors.surface,
+                borderRadius: 16,
+                padding: 16,
+                borderWidth: 1,
+                borderColor: Colors.border,
+                borderLeftWidth: 4,
+                borderLeftColor: aiFinancialTip.type === 'positive' ? Colors.income : aiFinancialTip.type === 'warning' ? '#F59E0B' : aiFinancialTip.type === 'danger' ? Colors.expense : Colors.primary,
+                marginTop: 8,
+                marginBottom: 16,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.04,
+                shadowRadius: 6,
+                elevation: 2
+            }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                    <View style={{
+                        backgroundColor: (aiFinancialTip.type === 'positive' ? Colors.income : aiFinancialTip.type === 'warning' ? '#F59E0B' : aiFinancialTip.type === 'danger' ? Colors.expense : Colors.primary) + '15',
+                        padding: 6,
+                        borderRadius: 8
+                    }}>
+                        <Sparkles size={16} color={aiFinancialTip.type === 'positive' ? Colors.income : aiFinancialTip.type === 'warning' ? '#F59E0B' : aiFinancialTip.type === 'danger' ? Colors.expense : Colors.primary} />
+                    </View>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: Colors.text }}>
+                        {aiFinancialTip.title}
+                    </Text>
+                </View>
+                <Text style={{ fontSize: 12, color: Colors.textMuted, lineHeight: 18 }}>
+                    {aiFinancialTip.message}
+                </Text>
+            </View>
 
             {/* ── Category Budgets ─────────────────────────────────── */}
             <View style={s.sectionHeader}>
@@ -985,6 +1283,34 @@ export default function HomeDashboard() {
                                     <Text style={{ fontSize: 11, fontWeight: '700', color: card.dueAmount > 0 ? Colors.expense : Colors.text }}>₹{card.dueAmount.toLocaleString()}</Text>
                                 </View>
                             </View>
+
+                            {card.usedAmount > 0 && (
+                                <TouchableOpacity
+                                    style={{
+                                        marginTop: 8,
+                                        backgroundColor: Colors.primary + '15',
+                                        borderColor: Colors.primary + '30',
+                                        borderWidth: 1,
+                                        borderRadius: 8,
+                                        paddingVertical: 4,
+                                        alignItems: 'center'
+                                    }}
+                                    onPress={(e: any) => {
+                                        if (e && e.stopPropagation) e.stopPropagation();
+                                        router.push({
+                                            pathname: '/add',
+                                            params: {
+                                                type: 'TRANSFER',
+                                                toAccountId: card.id,
+                                                amount: card.usedAmount.toString(),
+                                                category: 'Credit Card Payment'
+                                            }
+                                        });
+                                    }}
+                                >
+                                    <Text style={{ fontSize: 10, fontWeight: '700', color: Colors.primary }}>Pay Card Bill</Text>
+                                </TouchableOpacity>
+                            )}
                         </HoverCard>
                     ))}
                     <HoverCard onPress={() => router.push('/manage-accounts?tab=credit')}
@@ -1012,19 +1338,24 @@ export default function HomeDashboard() {
                 </View>
             </View>
             {(() => {
-                const allCategories = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES];
+                const allCategories = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES, ...TRANSFER_CATEGORIES];
                 return currentMonthTransactions.slice(0, 5).map(tx => {
+                    const isTransfer = tx.type === 'TRANSFER';
                     const categoryData = allCategories.find(c => c.name === tx.category && c.type === tx.type) || 
                                        allCategories.find(c => c.name === tx.category) ||
-                                       { icon: 'package', color: Colors.textMuted };
+                                       { icon: isTransfer ? 'rotate-ccw' : 'package', color: isTransfer ? Colors.primary : Colors.textMuted };
                     
+                    const fromAccName = getAccountName(tx.accountId);
+                    const toAccName = tx.toAccountId ? getAccountName(tx.toAccountId) : '';
+                    const accountDisplay = isTransfer && toAccName ? `${fromAccName} ➔ ${toAccName}` : fromAccName;
+
                     return (
                         <HoverCard disabled={true} key={tx.id} style={[s.txItem, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
                             <View style={[s.txHeader, { 
                                 borderBottomColor: Colors.border + '30',
                                 backgroundColor: Colors.isDark ? '#ffffff05' : '#00000003' 
                             }]}>
-                                <Text style={[s.txCategory, { color: Colors.text }]}>{tx.category}</Text>
+                                <Text style={[s.txCategory, { color: Colors.text }]}>{tx.category || (isTransfer ? 'Self Transfer' : '')}</Text>
                                 {tx.note && (
                                     <Text style={[s.txNote, { color: Colors.textMuted }]} numberOfLines={1}>
                                         • {tx.note}
@@ -1033,19 +1364,19 @@ export default function HomeDashboard() {
                             </View>
 
                             <View style={s.txBody}>
-                                <View style={[s.txIcon, { backgroundColor: categoryData.color + '15', marginHorizontal: 0 }]}>
-                                    <IconRenderer name={categoryData.icon} color={categoryData.color} size={18} />
+                                <View style={[s.txIcon, { backgroundColor: (categoryData.color || Colors.primary) + '15', marginHorizontal: 0 }]}>
+                                    <IconRenderer name={categoryData.icon} color={categoryData.color || Colors.primary} size={18} />
                                 </View>
                                 
                                 <View style={{ marginLeft: 16, flex: 1 }}>
-                                    <Text style={[s.txAccountTag, { color: Colors.textMuted, marginTop: 0 }]}>
-                                        {getAccountName(tx.accountId)} • {format(new Date(tx.date), 'MMM d')}
+                                    <Text style={[s.txAccountTag, { color: Colors.textMuted, marginTop: 0 }]} numberOfLines={1}>
+                                        {accountDisplay} • {format(new Date(tx.date), 'MMM d')}
                                     </Text>
                                 </View>
 
                                 <View style={{ alignItems: 'flex-end' }}>
-                                    <Text style={[s.txAmount, { color: tx.type === 'INCOME' ? Colors.income : Colors.expense }]}>
-                                        {tx.type === 'INCOME' ? '+' : '-'}₹{tx.amount.toLocaleString()}
+                                    <Text style={[s.txAmount, { color: tx.type === 'INCOME' ? Colors.income : tx.type === 'EXPENSE' ? Colors.expense : Colors.primary }]}>
+                                        {tx.type === 'INCOME' ? '+' : tx.type === 'EXPENSE' ? '-' : '⇄ '}₹{tx.amount.toLocaleString()}
                                     </Text>
                                 </View>
                             </View>

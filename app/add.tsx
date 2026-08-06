@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Platform, ActivityIndicator, Alert, Pressable } from 'react-native';
 import { useFinance } from '../src/context/FinanceContext';
 import { useThemeColors, Typography } from '../src/theme/colors';
-import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, TransactionType } from '../src/models';
+import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, TRANSFER_CATEGORIES, TransactionType } from '../src/models';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { getTransaction } from '../src/database/db';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -86,6 +86,7 @@ export default function AddTransaction() {
     const [amount, setAmount] = useState('');
     const [category, setCategory] = useState('');
     const [accountId, setAccountId] = useState('cash');
+    const [toAccountId, setToAccountId] = useState('');
     const [note, setNote] = useState('');
     const [date, setDate] = useState(new Date().toISOString());
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -112,6 +113,7 @@ export default function AddTransaction() {
                         setAmount(existing.amount.toString());
                         setCategory(existing.category);
                         setAccountId(existing.accountId);
+                        setToAccountId(existing.toAccountId || '');
                         setNote(existing.note || '');
                         setDate(existing.date);
                     } else {
@@ -122,6 +124,7 @@ export default function AddTransaction() {
                             setAmount(tx.amount.toString());
                             setCategory(tx.category);
                             setAccountId(tx.accountId);
+                            setToAccountId(tx.toAccountId || '');
                             setNote(tx.note || '');
                             setDate(tx.date);
                         }
@@ -133,47 +136,73 @@ export default function AddTransaction() {
                 }
             };
             loadTransaction();
+        } else {
+            if (params.type) setType(params.type as TransactionType);
+            if (params.amount) setAmount(params.amount as string);
+            if (params.category) setCategory(params.category as string);
+            if (params.accountId) setAccountId(params.accountId as string);
+            if (params.toAccountId) setToAccountId(params.toAccountId as string);
         }
-    }, [editId, transactions]);
+    }, [editId, transactions, params.type, params.amount, params.category, params.accountId, params.toAccountId]);
 
     const categories = [
-        ...(type === 'INCOME' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES),
+        ...(type === 'INCOME' ? INCOME_CATEGORIES : type === 'EXPENSE' ? EXPENSE_CATEGORIES : TRANSFER_CATEGORIES),
         ...customCategories.filter(c => c.type === type)
     ];
 
     const handleAddCategory = () => {
+        if (type === 'TRANSFER') return;
+        const targetType = type as 'INCOME' | 'EXPENSE';
         if (Platform.OS === 'web') {
             const name = window.prompt("Enter category name:");
             if (name && name.trim()) {
-                addCustomCategory(name.trim(), type);
+                addCustomCategory(name.trim(), targetType);
             }
         } else {
-            // Mobile implementation would use a Modal or similar, but prompt is fine for web context
-            // Since we are running in 'npx expo export:web', we'll stick to web compatible flows where possible
             const name = window.prompt("Enter category name:");
             if (name && name.trim()) {
-                addCustomCategory(name.trim(), type);
+                addCustomCategory(name.trim(), targetType);
             }
         }
     };
 
     const handleEditCategory = (cat: any) => {
+        if (type === 'TRANSFER') return;
+        const targetType = type as 'INCOME' | 'EXPENSE';
         const newName = window.prompt("Enter new category name:", cat.name);
         if (newName && newName.trim() && newName !== cat.name) {
-            updateCustomCategory(cat.name, newName.trim(), type);
+            updateCustomCategory(cat.name, newName.trim(), targetType);
             if (category === cat.name) setCategory(newName.trim());
         }
     };
 
     const handleDeleteCategory = (cat: any) => {
+        if (type === 'TRANSFER') return;
+        const targetType = type as 'INCOME' | 'EXPENSE';
         if (window.confirm(`Are you sure you want to delete '${cat.name}'?`)) {
-            deleteCustomCategory(cat.name, type);
+            deleteCustomCategory(cat.name, targetType);
             if (category === cat.name) setCategory('');
         }
     };
 
     const handleSubmit = async () => {
-        if (!amount || !category || isSubmitting) return;
+        const activeCategory = category || (type === 'TRANSFER' ? 'Self Transfer' : '');
+        if (!amount || !activeCategory || isSubmitting) return;
+
+        if (type === 'TRANSFER') {
+            if (!toAccountId) {
+                const msg = "Please select a destination (To Account) for the transfer.";
+                if (Platform.OS === 'web') window.alert(msg);
+                else Alert.alert("Required", msg);
+                return;
+            }
+            if (toAccountId === accountId) {
+                const msg = "Source (From Account) and Destination (To Account) cannot be the same.";
+                if (Platform.OS === 'web') window.alert(msg);
+                else Alert.alert("Invalid Transfer", msg);
+                return;
+            }
+        }
 
         setIsSubmitting(true);
 
@@ -182,14 +211,18 @@ export default function AddTransaction() {
         }
 
         try {
-            const txData = {
+            const txData: any = {
                 amount: parseFloat(amount),
                 type,
-                category,
+                category: activeCategory,
                 date,
                 accountId,
                 note,
             };
+
+            if (type === 'TRANSFER') {
+                txData.toAccountId = toAccountId;
+            }
 
             if (editId) {
                 await updateTransaction(editId, txData);
@@ -226,6 +259,70 @@ export default function AddTransaction() {
             </View>
         );
     }
+
+    const renderAccountSelector = (selectedId: string, onSelect: (id: string) => void, disabledId?: string) => (
+        <View style={styles.chipScroll}>
+            {/* Cash */}
+            <TouchableOpacity
+                style={[
+                    styles.chip,
+                    { backgroundColor: Colors.surface, borderColor: Colors.border },
+                    selectedId === 'cash' && { backgroundColor: '#4CAF50', borderColor: '#4CAF50' },
+                    disabledId === 'cash' && { opacity: 0.3 }
+                ]}
+                disabled={disabledId === 'cash'}
+                onPress={() => onSelect('cash')}
+            >
+                <Text style={[
+                    styles.chipText,
+                    { color: Colors.text },
+                    selectedId === 'cash' && { color: Colors.white, fontWeight: 'bold' }
+                ]}>{cashAccountName}</Text>
+            </TouchableOpacity>
+
+            {/* Bank Accounts */}
+            {bankAccounts.map((acc) => (
+                <TouchableOpacity
+                    key={acc.id}
+                    style={[
+                        styles.chip,
+                        { backgroundColor: Colors.surface, borderColor: Colors.border },
+                        selectedId === acc.id && { backgroundColor: acc.color, borderColor: acc.color },
+                        disabledId === acc.id && { opacity: 0.3 }
+                    ]}
+                    disabled={disabledId === acc.id}
+                    onPress={() => onSelect(acc.id)}
+                >
+                    <Text style={[
+                        styles.chipText,
+                        { color: Colors.text },
+                        selectedId === acc.id && { color: Colors.white, fontWeight: 'bold' }
+                    ]}>{acc.bankName}</Text>
+                </TouchableOpacity>
+            ))}
+
+            {/* Credit Cards */}
+            {creditCards.map((card) => (
+                <TouchableOpacity
+                    key={card.id}
+                    style={[
+                        styles.chip,
+                        { backgroundColor: Colors.surface, borderColor: Colors.border },
+                        selectedId === card.id && { backgroundColor: card.color, borderColor: card.color },
+                        disabledId === card.id && { opacity: 0.3 }
+                    ]}
+                    disabled={disabledId === card.id}
+                    onPress={() => onSelect(card.id)}
+                >
+                    <Text style={[
+                        styles.chipText,
+                        { color: Colors.text },
+                        selectedId === card.id && { color: Colors.white, fontWeight: 'bold' }
+                    ]}>{card.cardName}</Text>
+                </TouchableOpacity>
+            ))}
+        </View>
+    );
 
     return (
         <View style={[styles.mainContainer, { backgroundColor: Colors.background }]}>
@@ -274,6 +371,26 @@ export default function AddTransaction() {
                                 type === 'INCOME' && { color: Colors.white, fontWeight: 'bold' }
                             ]}>Income</Text>
                         </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[
+                                styles.typeButton,
+                                type === 'TRANSFER' && { backgroundColor: Colors.primary }
+                            ]}
+                            onPress={() => {
+                                setType('TRANSFER');
+                                setCategory('Self Transfer');
+                                if (!toAccountId || toAccountId === accountId) {
+                                    const defaultTarget = bankAccounts.find(b => b.id !== accountId)?.id || (accountId === 'cash' ? bankAccounts[0]?.id || '' : 'cash');
+                                    setToAccountId(defaultTarget);
+                                }
+                            }}
+                        >
+                            <Text style={[
+                                styles.typeText,
+                                { color: Colors.textMuted },
+                                type === 'TRANSFER' && { color: Colors.white, fontWeight: 'bold' }
+                            ]}>Self Transfer</Text>
+                        </TouchableOpacity>
                     </View>
                 </View>
 
@@ -295,64 +412,26 @@ export default function AddTransaction() {
                 </View>
 
                 {/* Account Selector */}
-                <View style={styles.card}>
-                    <Text style={[styles.label, { color: Colors.textMuted }]}>Account</Text>
-                    <View style={styles.chipScroll}>
-                        {/* Cash */}
-                        <TouchableOpacity
-                            style={[
-                                styles.chip,
-                                { backgroundColor: Colors.surface, borderColor: Colors.border },
-                                accountId === 'cash' && { backgroundColor: '#4CAF50', borderColor: '#4CAF50' }
-                            ]}
-                            onPress={() => setAccountId('cash')}
-                        >
-                            <Text style={[
-                                styles.chipText,
-                                { color: Colors.text },
-                                accountId === 'cash' && { color: Colors.white, fontWeight: 'bold' }
-                            ]}>{cashAccountName}</Text>
-                        </TouchableOpacity>
-
-                        {/* Bank Accounts */}
-                        {bankAccounts.map((acc) => (
-                            <TouchableOpacity
-                                key={acc.id}
-                                style={[
-                                    styles.chip,
-                                    { backgroundColor: Colors.surface, borderColor: Colors.border },
-                                    accountId === acc.id && { backgroundColor: acc.color, borderColor: acc.color }
-                                ]}
-                                onPress={() => setAccountId(acc.id)}
-                            >
-                                <Text style={[
-                                    styles.chipText,
-                                    { color: Colors.text },
-                                    accountId === acc.id && { color: Colors.white, fontWeight: 'bold' }
-                                ]}>{acc.bankName}</Text>
-                            </TouchableOpacity>
-                        ))}
-
-                        {/* Credit Cards */}
-                        {creditCards.map((card) => (
-                            <TouchableOpacity
-                                key={card.id}
-                                style={[
-                                    styles.chip,
-                                    { backgroundColor: Colors.surface, borderColor: Colors.border },
-                                    accountId === card.id && { backgroundColor: card.color, borderColor: card.color }
-                                ]}
-                                onPress={() => setAccountId(card.id)}
-                            >
-                                <Text style={[
-                                    styles.chipText,
-                                    { color: Colors.text },
-                                    accountId === card.id && { color: Colors.white, fontWeight: 'bold' }
-                                ]}>{card.cardName}</Text>
-                            </TouchableOpacity>
-                        ))}
+                {type === 'TRANSFER' ? (
+                    <>
+                        <View style={styles.card}>
+                            <Text style={[styles.label, { color: Colors.textMuted }]}>From Account (Source)</Text>
+                            {renderAccountSelector(accountId, (id) => {
+                                setAccountId(id);
+                                if (toAccountId === id) setToAccountId('');
+                            })}
+                        </View>
+                        <View style={styles.card}>
+                            <Text style={[styles.label, { color: Colors.textMuted }]}>To Account (Destination)</Text>
+                            {renderAccountSelector(toAccountId, (id) => setToAccountId(id), accountId)}
+                        </View>
+                    </>
+                ) : (
+                    <View style={styles.card}>
+                        <Text style={[styles.label, { color: Colors.textMuted }]}>Account</Text>
+                        {renderAccountSelector(accountId, (id) => setAccountId(id))}
                     </View>
-                </View>
+                )}
 
                 {/* Category Grid */}
                 <View style={styles.card}>

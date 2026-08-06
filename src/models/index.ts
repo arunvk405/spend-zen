@@ -1,4 +1,4 @@
-export type TransactionType = 'INCOME' | 'EXPENSE';
+export type TransactionType = 'INCOME' | 'EXPENSE' | 'TRANSFER';
 export type HistoryRetentionType = '3months' | '6months' | 'all';
 
 export interface RecurringBill {
@@ -42,7 +42,8 @@ export interface Transaction {
     type: TransactionType;
     category: string;
     date: string; // ISO format
-    accountId: string; // 'cash', bank account Firestore ID, or credit card Firestore ID
+    accountId: string; // Source account ID ('cash', bank account Firestore ID, or credit card Firestore ID)
+    toAccountId?: string; // Target account ID for self transfers
     note?: string;
 }
 
@@ -126,6 +127,13 @@ export const EXPENSE_CATEGORIES: Category[] = [
     { name: 'Investment/SIP', icon: 'trending-up', color: '#4CAF50', type: 'EXPENSE' },
     { name: 'Debt', icon: 'credit-card', color: '#000000', type: 'EXPENSE' },
     { name: 'Others', icon: 'package', color: '#9E9E9E', type: 'EXPENSE' },
+];
+
+export const TRANSFER_CATEGORIES: Category[] = [
+    { name: 'Self Transfer', icon: 'rotate-ccw', color: '#6366F1', type: 'TRANSFER' },
+    { name: 'Bank Transfer', icon: 'landmark', color: '#3B82F6', type: 'TRANSFER' },
+    { name: 'Cash Deposit', icon: 'wallet', color: '#10B981', type: 'TRANSFER' },
+    { name: 'Cash Withdrawal', icon: 'wallet', color: '#F59E0B', type: 'TRANSFER' },
 ];
 
 export const ACCOUNT_COLORS = [

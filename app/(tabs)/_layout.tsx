@@ -1,6 +1,6 @@
 import { Tabs, useRouter, Redirect } from 'expo-router';
 import { useThemeColors } from '../../src/theme/colors';
-import { Home, PieChart, Landmark, Settings, Plus } from 'lucide-react-native';
+import { Home, PieChart, Landmark, Settings, Plus, Sparkles } from 'lucide-react-native';
 import { TouchableOpacity, View, StyleSheet, ActivityIndicator, Platform } from 'react-native';
 import { useAuth } from '../../src/context/AuthContext';
 
@@ -81,10 +81,16 @@ export default function TabLayout() {
                 }}
             />
             <Tabs.Screen
+                name="ai-planner"
+                options={{
+                    title: 'AI Planner',
+                    tabBarIcon: ({ color }) => <Sparkles color={color} size={24} />,
+                }}
+            />
+            <Tabs.Screen
                 name="reports"
                 options={{
-                    title: 'Reports',
-                    tabBarIcon: ({ color }) => <PieChart color={color} size={24} />,
+                    href: null,
                 }}
             />
             <Tabs.Screen
