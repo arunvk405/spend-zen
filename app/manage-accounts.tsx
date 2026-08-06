@@ -4,6 +4,7 @@ import {
     TextInput, Modal, Platform, ActivityIndicator, Pressable, Alert
 } from 'react-native';
 import { useRouter, Stack } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFinance } from '../src/context/FinanceContext';
 import { useThemeColors } from '../src/theme/colors';
 import { BankAccountWithBalance, CreditCardWithBalance, ACCOUNT_COLORS } from '../src/models';
@@ -183,6 +184,8 @@ function CreditCardModal({ visible, onClose, existing }: {
 export default function ManageAccounts() {
     const Colors = useThemeColors();
     const router = useRouter();
+    const insets = useSafeAreaInsets();
+    const topHeaderPadding = Math.max(insets.top + 8, Platform.OS === 'ios' ? 56 : 14);
     const { 
         bankAccounts, 
         creditCards, 
@@ -220,7 +223,7 @@ export default function ManageAccounts() {
         <View style={[s.container, { backgroundColor: Colors.background }]}>
             <Stack.Screen options={{ headerShown: false }} />
             {/* Header */}
-            <View style={[s.header, { borderBottomColor: Colors.border }]}>
+            <View style={[s.header, { borderBottomColor: Colors.border, paddingTop: topHeaderPadding }]}>
                 <Pressable onPress={() => router.back()} style={s.backBtn}>
                     <ArrowLeft size={24} color={Colors.text} />
                 </Pressable>

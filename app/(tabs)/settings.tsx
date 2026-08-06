@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Share, Switch, TextInput, ActivityIndicator, Modal, FlatList, KeyboardAvoidingView, Pressable, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColors, Typography } from '../../src/theme/colors';
 import { Logo } from '../../src/components/Logo';
 import {
@@ -42,13 +43,10 @@ import { Image } from 'react-native';
 import { useFinance } from '../../src/context/FinanceContext';
 import { useAuth } from '../../src/context/AuthContext';
 import { useRouter } from 'expo-router';
-import { NewTag } from '../../src/components/NewTag';
-import { markFeatureSeen } from '../../src/utils/newFeatureUtils';
-const SettingsItem = ({ icon: Icon, label, onPress, color, value = undefined, toggle = false, newTag = '' }: any) => {
+const SettingsItem = ({ icon: Icon, label, onPress, color, value = undefined, toggle = false }: any) => {
     const Colors = useThemeColors();
     const [isHovered, setIsHovered] = useState(false);
     const handlePress = () => {
-        if (newTag) markFeatureSeen(newTag);
         if (onPress) onPress();
     };
     return (
@@ -79,7 +77,6 @@ const SettingsItem = ({ icon: Icon, label, onPress, color, value = undefined, to
                     <Icon size={20} color={color} />
                 </View>
                 <Text style={[styles.itemLabel, { color: Colors.text }]}>{label}</Text>
-                {newTag ? <NewTag featureKey={newTag} /> : null}
             </View>
             {toggle ? (
                 <Switch
@@ -101,6 +98,9 @@ import { useTheme } from '../../src/context/ThemeContext';
 export default function Settings() {
     const Colors = useThemeColors();
     const router = useRouter();
+    const insets = useSafeAreaInsets();
+    const topScrollPadding = Math.max(insets.top + 12, Platform.OS === 'ios' ? 56 : 16);
+    const bottomScrollPadding = Math.max(insets.bottom + 85, 105);
     const { theme, setTheme } = useTheme();
     const {
         clearData,
@@ -500,7 +500,11 @@ export default function Settings() {
     };
 
     return (
-        <ScrollView style={[styles.container, { backgroundColor: Colors.background }]} showsVerticalScrollIndicator={false}>
+        <ScrollView 
+            style={[styles.container, { backgroundColor: Colors.background }]} 
+            contentContainerStyle={{ paddingTop: topScrollPadding, paddingBottom: bottomScrollPadding }}
+            showsVerticalScrollIndicator={false}
+        >
             <View style={styles.logoSection}>
                 <Logo size={60} horizontal={false} />
             </View>
@@ -711,24 +715,20 @@ export default function Settings() {
             <View style={styles.section}>
                 <Text style={[styles.sectionTitle, { color: Colors.textMuted }]}>Performance & Data Optimization</Text>
                 <View style={[styles.card, { backgroundColor: Colors.surface }]}>
-                    {/* 1-Tap Speed Boost */}
-                    <View style={[styles.item, { borderBottomColor: Colors.border, paddingVertical: 12 }]}>
-                        <View style={styles.itemLeft}>
+                    <View style={[styles.item, { borderBottomColor: Colors.border, paddingVertical: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 10, gap: 12 }}>
                             <View style={[styles.iconBox, { backgroundColor: Colors.primary + '20' }]}>
                                 <Zap size={20} color={Colors.primary} />
                             </View>
-                            <View>
-                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                    <Text style={[styles.itemLabel, { color: Colors.text }]}>1-Tap App Speed Optimizer</Text>
-                                    <NewTag featureKey="performanceOptimizer" />
-                                </View>
-                                <Text style={{ fontSize: 12, color: Colors.textMuted }}>Compacts local storage & purges search index</Text>
+                            <View style={{ flex: 1 }}>
+                                <Text style={[styles.itemLabel, { color: Colors.text }]} numberOfLines={1}>App Speed Optimizer</Text>
+                                <Text style={{ fontSize: 11, color: Colors.textMuted }} numberOfLines={1}>Compacts local storage & purges cache</Text>
                             </View>
                         </View>
                         <TouchableOpacity
-                            onPress={() => { markFeatureSeen('performanceOptimizer'); handleOptimizePerformance(); }}
+                            onPress={handleOptimizePerformance}
                             disabled={isOptimizing}
-                            style={{ backgroundColor: Colors.primary, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 }}
+                            style={{ backgroundColor: Colors.primary, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, minWidth: 75, alignItems: 'center' }}
                         >
                             {isOptimizing ? (
                                 <ActivityIndicator size="small" color="#fff" />
@@ -738,45 +738,37 @@ export default function Settings() {
                         </TouchableOpacity>
                     </View>
 
-                    {/* Export JSON Backup */}
-                    <View style={[styles.item, { borderBottomColor: Colors.border, paddingVertical: 12 }]}>
-                        <View style={styles.itemLeft}>
+                    <View style={[styles.item, { borderBottomColor: Colors.border, paddingVertical: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 10, gap: 12 }}>
                             <View style={[styles.iconBox, { backgroundColor: Colors.income + '20' }]}>
                                 <Download size={20} color={Colors.income} />
                             </View>
-                            <View>
-                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                    <Text style={[styles.itemLabel, { color: Colors.text }]}>Export Full Backup (.JSON)</Text>
-                                    <NewTag featureKey="jsonBackup" />
-                                </View>
-                                <Text style={{ fontSize: 12, color: Colors.textMuted }}>Save all transactions & accounts offline</Text>
+                            <View style={{ flex: 1 }}>
+                                <Text style={[styles.itemLabel, { color: Colors.text }]} numberOfLines={1}>Export Backup (.JSON)</Text>
+                                <Text style={{ fontSize: 11, color: Colors.textMuted }} numberOfLines={1}>Save all transactions offline</Text>
                             </View>
                         </View>
                         <TouchableOpacity
-                            onPress={() => { markFeatureSeen('jsonBackup'); handleExportJSONBackup(); }}
-                            style={{ backgroundColor: Colors.income, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 }}
+                            onPress={handleExportJSONBackup}
+                            style={{ backgroundColor: Colors.income, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, minWidth: 75, alignItems: 'center' }}
                         >
                             <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>Export</Text>
                         </TouchableOpacity>
                     </View>
 
-                    {/* Import / Restore JSON Backup */}
-                    <View style={[styles.item, { borderBottomColor: Colors.border, paddingVertical: 12 }]}>
-                        <View style={styles.itemLeft}>
+                    <View style={[styles.item, { borderBottomColor: Colors.border, paddingVertical: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 10, gap: 12 }}>
                             <View style={[styles.iconBox, { backgroundColor: '#F59E0B20' }]}>
                                 <Upload size={20} color="#F59E0B" />
                             </View>
-                            <View>
-                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                    <Text style={[styles.itemLabel, { color: Colors.text }]}>Restore Backup (.JSON)</Text>
-                                    <NewTag featureKey="jsonBackup" />
-                                </View>
-                                <Text style={{ fontSize: 12, color: Colors.textMuted }}>1-click restore transactions from file</Text>
+                            <View style={{ flex: 1 }}>
+                                <Text style={[styles.itemLabel, { color: Colors.text }]} numberOfLines={1}>Restore Backup (.JSON)</Text>
+                                <Text style={{ fontSize: 11, color: Colors.textMuted }} numberOfLines={1}>Restore transactions from file</Text>
                             </View>
                         </View>
                         <TouchableOpacity
-                            onPress={() => { markFeatureSeen('jsonBackup'); handleImportJSONBackup(); }}
-                            style={{ backgroundColor: '#F59E0B', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 }}
+                            onPress={handleImportJSONBackup}
+                            style={{ backgroundColor: '#F59E0B', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, minWidth: 75, alignItems: 'center' }}
                         >
                             <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>Restore</Text>
                         </TouchableOpacity>
@@ -784,7 +776,6 @@ export default function Settings() {
                 </View>
             </View>
 
-            {/* Legal & Help Section */}
             <View style={styles.section}>
                 <Text style={[styles.sectionTitle, { color: Colors.textMuted }]}>Legal & Help</Text>
                 <View style={[styles.card, { backgroundColor: Colors.surface }]}>
@@ -793,14 +784,12 @@ export default function Settings() {
                         label="Frequently Asked Questions (FAQ)"
                         color={Colors.primary}
                         onPress={() => setShowFaqModal(true)}
-                        newTag="faqSection"
                     />
                     <SettingsItem
                         icon={FileText}
                         label="Terms & Conditions"
                         color={Colors.primary}
                         onPress={() => setShowTermsModal(true)}
-                        newTag="termsAndConditions"
                     />
                 </View>
             </View>

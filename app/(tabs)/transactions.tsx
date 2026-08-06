@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, ScrollView, Pressable, Platform, Modal } from 'react-native';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFinance } from '../../src/context/FinanceContext';
 import { useThemeColors, Typography } from '../../src/theme/colors';
 import {
@@ -71,6 +72,10 @@ const IconRenderer = ({ name, color, size = 20 }: { name: string, color: string,
 export default function TransactionsHistory() {
     const Colors = useThemeColors();
     const router = useRouter();
+    const insets = useSafeAreaInsets();
+    const topMargin = Math.max(insets.top + 16, Platform.OS === 'ios' || Platform.OS === 'web' ? 62 : 16);
+    const bottomPadding = Math.max(insets.bottom + 85, 105);
+
     const { transactions, deleteTransaction, bankAccounts, creditCards, cashAccountName, historyRetention } = useFinance();
     const params = useLocalSearchParams<{ category?: string; accountId?: string; account?: string; date?: string; type?: string; mode?: string }>();
     const [activeSubTab, setActiveSubTab] = useState<'HISTORY' | 'REPORTS'>('HISTORY');
@@ -568,7 +573,7 @@ export default function TransactionsHistory() {
                 borderRadius: 14,
                 padding: 4,
                 marginHorizontal: 16,
-                marginTop: Platform.OS === 'ios' ? 44 : 12,
+                marginTop: topMargin,
                 marginBottom: 8,
                 borderWidth: 1,
                 borderColor: Colors.border
@@ -657,84 +662,94 @@ export default function TransactionsHistory() {
                     }}
                 />
 
-                {/* Real-time Search Input Bar */}
-                <View style={[styles.searchBar, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
-                    <Search color={Colors.textMuted} size={18} />
-                    <TextInput
-                        style={[styles.searchInput, { color: Colors.text }]}
-                        placeholder="Search notes, categories, accounts or amounts..."
-                        placeholderTextColor={Colors.textMuted}
-                        value={searchQuery}
-                        onChangeText={setSearchQuery}
-                    />
-                    {searchQuery.length > 0 && (
-                        <TouchableOpacity onPress={() => setSearchQuery('')} style={{ padding: 4 }}>
-                            <X color={Colors.textMuted} size={16} />
-                        </TouchableOpacity>
-                    )}
-                </View>
-
-                <View style={styles.filterHeaderRow}>
-                    <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        style={styles.activeChipsScroll}
-                        contentContainerStyle={styles.activeChipsContent}
-                    >
-                        {selectedCategories.length === 0 && selectedAccounts.length === 0 ? (
-                            <Text style={[styles.noActiveFiltersText, { color: Colors.textMuted }]}>
-                                All categories & accounts
-                            </Text>
-                        ) : (
-                            <>
-                                {selectedCategories.map(cat => (
-                                    <TouchableOpacity
-                                        key={`cat-${cat}`}
-                                        style={[styles.activeFilterChip, { backgroundColor: Colors.primary + '15', borderColor: Colors.primary + '30' }]}
-                                        onPress={() => setSelectedCategories(selectedCategories.filter(c => c !== cat))}
-                                    >
-                                        <Text style={[styles.activeFilterChipText, { color: Colors.primary }]}>{cat}</Text>
-                                        <X color={Colors.primary} size={12} style={styles.activeFilterChipIcon} />
-                                    </TouchableOpacity>
-                                ))}
-                                {selectedAccounts.map(accId => {
-                                    const accName = getAccountName(accId);
-                                    return (
-                                        <TouchableOpacity
-                                            key={`acc-${accId}`}
-                                            style={[styles.activeFilterChip, { backgroundColor: Colors.income + '15', borderColor: Colors.income + '30' }]}
-                                            onPress={() => setSelectedAccounts(selectedAccounts.filter(a => a !== accId))}
-                                        >
-                                            <Text style={[styles.activeFilterChipText, { color: Colors.income }]}>{accName}</Text>
-                                            <X color={Colors.income} size={12} style={styles.activeFilterChipIcon} />
-                                        </TouchableOpacity>
-                                    );
-                                })}
-                            </>
+                {/* Sleek Single-Row Search & Action Controls */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 16, marginBottom: 8 }}>
+                    <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border, borderRadius: 12, paddingHorizontal: 10, height: 42 }}>
+                        <Search color={Colors.textMuted} size={18} />
+                        <TextInput
+                            style={{ flex: 1, fontSize: 16, color: Colors.text, marginLeft: 8, paddingVertical: 0 }}
+                            placeholder="Search notes, categories..."
+                            placeholderTextColor={Colors.textMuted}
+                            value={searchQuery}
+                            onChangeText={setSearchQuery}
+                        />
+                        {searchQuery.length > 0 && (
+                            <TouchableOpacity onPress={() => setSearchQuery('')} style={{ padding: 4 }}>
+                                <X color={Colors.textMuted} size={16} />
+                            </TouchableOpacity>
                         )}
-                    </ScrollView>
+                    </View>
+
                     <TouchableOpacity
-                        style={[styles.filterIconButton, { backgroundColor: Colors.surface, borderColor: Colors.border }]}
+                        style={{ width: 42, height: 42, borderRadius: 12, backgroundColor: (selectedCategories.length > 0 || selectedAccounts.length > 0) ? Colors.primary + '20' : Colors.surface, borderWidth: 1, borderColor: (selectedCategories.length > 0 || selectedAccounts.length > 0) ? Colors.primary : Colors.border, justifyContent: 'center', alignItems: 'center' }}
                         onPress={openModal}
                     >
-                        <SlidersHorizontal color={Colors.primary} size={20} />
+                        <SlidersHorizontal color={Colors.primary} size={18} />
                     </TouchableOpacity>
+
                     <TouchableOpacity
-                        style={[styles.filterIconButton, { backgroundColor: Colors.surface, borderColor: Colors.border, marginLeft: 8 }]}
+                        style={{ width: 42, height: 42, borderRadius: 12, backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border, justifyContent: 'center', alignItems: 'center' }}
                         onPress={handleExportCSV}
                     >
-                        <Download color={Colors.primary} size={20} />
+                        <Download color={Colors.primary} size={18} />
                     </TouchableOpacity>
+
                     <TouchableOpacity
-                        style={[styles.filterIconButton, { backgroundColor: Colors.surface, borderColor: Colors.border, marginLeft: 8 }]}
+                        style={{ width: 42, height: 42, borderRadius: 12, backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border, justifyContent: 'center', alignItems: 'center' }}
                         onPress={handleExportPDF}
                     >
-                        <FileText color={Colors.primary} size={20} />
+                        <FileText color={Colors.primary} size={18} />
                     </TouchableOpacity>
                 </View>
 
-                {/* Quick Time Presets Bar */}
-                <View style={{ flexDirection: 'row', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+                {/* Compact Horizontal Preset & Type Filter Bar */}
+                <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={{ paddingHorizontal: 16, gap: 6, paddingBottom: 8 }}
+                >
+                    {/* Active Filters */}
+                    {selectedCategories.map(cat => (
+                        <TouchableOpacity
+                            key={`cat-${cat}`}
+                            style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16, backgroundColor: Colors.primary + '20', borderWidth: 1, borderColor: Colors.primary }}
+                            onPress={() => setSelectedCategories(selectedCategories.filter(c => c !== cat))}
+                        >
+                            <Text style={{ fontSize: 12, fontWeight: '600', color: Colors.primary }}>{cat}</Text>
+                            <X color={Colors.primary} size={12} />
+                        </TouchableOpacity>
+                    ))}
+                    {selectedAccounts.map(accId => (
+                        <TouchableOpacity
+                            key={`acc-${accId}`}
+                            style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16, backgroundColor: Colors.income + '20', borderWidth: 1, borderColor: Colors.income }}
+                            onPress={() => setSelectedAccounts(selectedAccounts.filter(a => a !== accId))}
+                        >
+                            <Text style={{ fontSize: 12, fontWeight: '600', color: Colors.income }}>{getAccountName(accId)}</Text>
+                            <X color={Colors.income} size={12} />
+                        </TouchableOpacity>
+                    ))}
+
+                    {/* Type Filters */}
+                    {['ALL', 'INCOME', 'EXPENSE', 'TRANSFER'].map((t) => (
+                        <TouchableOpacity
+                            key={t}
+                            style={[
+                                { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.surface },
+                                filterType === t && { backgroundColor: Colors.primary, borderColor: Colors.primary }
+                            ]}
+                            onPress={() => setFilterType(t as any)}
+                        >
+                            <Text style={[
+                                { fontSize: 12, fontWeight: '600', color: Colors.textMuted },
+                                filterType === t && { color: Colors.white }
+                            ]}>
+                                {t === 'TRANSFER' ? 'Transfer' : t.charAt(0) + t.slice(1).toLowerCase()}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+
+                    {/* Date Presets */}
                     {[
                         { id: 'THIS_MONTH', label: 'This Month' },
                         { id: 'TODAY', label: 'Today' },
@@ -757,40 +772,7 @@ export default function TransactionsHistory() {
                             </Text>
                         </TouchableOpacity>
                     ))}
-                </View>
-
-                <View style={styles.filterRow}>
-                    {['ALL', 'INCOME', 'EXPENSE', 'TRANSFER'].map((t) => (
-                        <TouchableOpacity
-                            key={t}
-                            style={[
-                                styles.filterChip,
-                                { backgroundColor: Colors.surface, borderColor: Colors.border },
-                                filterType === t && { backgroundColor: Colors.primary, borderColor: Colors.primary }
-                            ]}
-                            onPress={() => setFilterType(t as any)}
-                        >
-                            <Text style={[
-                                styles.filterText,
-                                { color: Colors.textMuted },
-                                filterType === t && { color: Colors.white }
-                            ]}>
-                                {t === 'TRANSFER' ? 'Transfer' : t.charAt(0) + t.slice(1).toLowerCase()}
-                            </Text>
-                        </TouchableOpacity>
-                    ))}
-                </View>
-                {historyRetention ? (
-                    <TouchableOpacity
-                        style={[styles.infoBanner, { backgroundColor: Colors.primary + '10', borderColor: Colors.primary + '20' }]}
-                        onPress={() => router.push('/settings')}
-                    >
-                        <Info size={14} color={Colors.primary} />
-                        <Text style={[styles.infoText, { color: Colors.primary }]}>
-                            History Policy: Auto-clear older than {historyRetention === '3months' ? '3' : '6'} months. <Text style={{ fontWeight: 'bold', textDecorationLine: 'underline' }}>Change in Settings</Text>
-                        </Text>
-                    </TouchableOpacity>
-                ) : null}
+                </ScrollView>
 
                 {/* Month & Filter Total Summary Card */}
                 <View style={[styles.summaryCard, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
@@ -864,7 +846,7 @@ export default function TransactionsHistory() {
                 data={filteredTransactions}
                 keyExtractor={(item) => item.id.toString()}
                 renderItem={renderItem}
-                contentContainerStyle={styles.listContent}
+                contentContainerStyle={[styles.listContent, { paddingBottom: bottomPadding }]}
                 initialNumToRender={12}
                 maxToRenderPerBatch={10}
                 windowSize={7}

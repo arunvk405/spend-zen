@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFinance } from '../src/context/FinanceContext';
 import { useThemeColors } from '../src/theme/colors';
 import { EXPENSE_CATEGORIES } from '../src/models';
@@ -36,6 +37,8 @@ const IconRenderer = ({ name, color, size = 20 }: { name: string, color: string,
 export default function SetBudgetsScreen() {
     const Colors = useThemeColors();
     const router = useRouter();
+    const insets = useSafeAreaInsets();
+    const topHeaderPadding = Math.max(insets.top + 8, Platform.OS === 'ios' ? 56 : 14);
     const { categoryBudgets, updateCategoryBudgets, customCategories } = useFinance();
     const [focusedInput, setFocusedInput] = useState<string | null>(null);
     const expenseCategories = useMemo(() => {
@@ -102,7 +105,7 @@ export default function SetBudgetsScreen() {
             keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
         >
             {/* Header */}
-            <View style={[styles.header, { borderBottomColor: Colors.border }]}>
+            <View style={[styles.header, { borderBottomColor: Colors.border, paddingTop: topHeaderPadding }]}>
                 <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
                     <ArrowLeft color={Colors.text} size={22} />
                 </TouchableOpacity>

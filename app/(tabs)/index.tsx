@@ -15,6 +15,7 @@ import {
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, TRANSFER_CATEGORIES } from '../../src/models';
 import { format, isSameMonth, isSameYear, parseISO, subWeeks, isSameWeek } from 'date-fns';
 import { useRouter, useFocusEffect } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const MOTIVATIONAL_QUOTES = [
     { quote: "Do not save what is left after spending, but spend what is left after saving.", author: "Warren Buffett", category: "Savings" },
@@ -84,6 +85,10 @@ const IconRenderer = ({ name, color, size = 18 }: { name: string, color: string,
 export default function HomeDashboard() {
     const Colors = useThemeColors();
     const router = useRouter();
+    const insets = useSafeAreaInsets();
+    const topPadding = Math.max(insets.top + 8, Platform.OS === 'ios' ? 56 : 14);
+    const bottomPadding = Math.max(insets.bottom + 85, 105);
+
     const {
         totalBalance, cashBalance, monthlyIncome, monthlyExpenses,
         bankAccounts, totalBankBalance,
@@ -591,7 +596,7 @@ export default function HomeDashboard() {
             </View>
         )}
 
-        <ScrollView style={[s.container, { backgroundColor: Colors.background }]} contentContainerStyle={s.content}>
+        <ScrollView style={[s.container, { backgroundColor: Colors.background }]} contentContainerStyle={[s.content, { paddingTop: topPadding, paddingBottom: bottomPadding }]}>
 
             {/* ── Quick Action Speed Dial Bar ───────────────────────── */}
             <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16, marginTop: 4 }}>

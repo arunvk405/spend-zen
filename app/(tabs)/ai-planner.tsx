@@ -3,6 +3,7 @@ import {
     View, Text, StyleSheet, ScrollView, TouchableOpacity,
     TextInput, ActivityIndicator, Platform, useWindowDimensions, Linking
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFinance } from '../../src/context/FinanceContext';
 import { useThemeColors } from '../../src/theme/colors';
 import {
@@ -26,6 +27,9 @@ export default function AIPlannerScreen() {
     const Colors = useThemeColors();
     const { width: windowWidth } = useWindowDimensions();
     const isTablet = windowWidth >= 768;
+    const insets = useSafeAreaInsets();
+    const topHeaderPadding = Math.max(insets.top + 8, Platform.OS === 'ios' ? 56 : 14);
+    const bottomScrollPadding = Math.max(insets.bottom + 85, 105);
 
     const {
         monthlyIncome, monthlyExpenses, totalBalance, totalBankBalance,
@@ -214,7 +218,7 @@ export default function AIPlannerScreen() {
     return (
         <View style={[styles.container, { backgroundColor: Colors.background }]}>
             {/* Header */}
-            <View style={[styles.header, { backgroundColor: Colors.surface, borderBottomColor: Colors.border }]}>
+            <View style={[styles.header, { backgroundColor: Colors.surface, borderBottomColor: Colors.border, paddingTop: topHeaderPadding }]}>
                 <View style={styles.headerInner}>
                     <Sparkles color={Colors.primary} size={20} />
                     <Text style={[styles.headerTitle, { color: Colors.text }]} numberOfLines={1}>
@@ -224,7 +228,7 @@ export default function AIPlannerScreen() {
             </View>
 
             <ScrollView
-                contentContainerStyle={styles.scrollContent}
+                contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomScrollPadding }]}
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
             >
@@ -569,9 +573,9 @@ export default function AIPlannerScreen() {
                         </View>
 
                         {/* Sticky Input Bar */}
-                        <View style={styles.inputRow}>
+                        <View style={styles.chatInputRow}>
                             <TextInput
-                                style={[styles.input, { backgroundColor: Colors.background, borderColor: Colors.border, color: Colors.text }]}
+                                style={[styles.chatInput, { backgroundColor: Colors.background, borderColor: Colors.border, color: Colors.text, fontSize: 16 }]}
                                 placeholder="Ask any financial planning question..."
                                 placeholderTextColor={Colors.textMuted}
                                 value={userQuestion}
@@ -581,7 +585,7 @@ export default function AIPlannerScreen() {
                                 multiline={false}
                             />
                             <TouchableOpacity
-                                style={[styles.sendBtn, { backgroundColor: Colors.primary, opacity: isAsking ? 0.6 : 1 }]}
+                                style={[styles.chatSendBtn, { backgroundColor: Colors.primary, opacity: isAsking ? 0.6 : 1 }]}
                                 onPress={() => handleAskQuestion()}
                                 disabled={isAsking}
                                 activeOpacity={0.8}
@@ -837,6 +841,26 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         marginBottom: 12,
         overflow: 'hidden',
+    },
+    chatInputRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    chatInput: {
+        flex: 1,
+        height: 46,
+        borderRadius: 23,
+        paddingHorizontal: 16,
+        borderWidth: 1,
+        fontSize: 16,
+    },
+    chatSendBtn: {
+        width: 46,
+        height: 46,
+        borderRadius: 23,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     chatScroll: {
         flex: 1,

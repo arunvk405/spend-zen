@@ -1,13 +1,19 @@
+import React from 'react';
 import { Tabs, useRouter, Redirect } from 'expo-router';
 import { useThemeColors } from '../../src/theme/colors';
 import { Home, PieChart, Landmark, Settings, Plus, Sparkles } from 'lucide-react-native';
 import { TouchableOpacity, View, StyleSheet, ActivityIndicator, Platform } from 'react-native';
 import { useAuth } from '../../src/context/AuthContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function TabLayout() {
     const Colors = useThemeColors();
     const router = useRouter();
     const { user, loading } = useAuth();
+    const insets = useSafeAreaInsets();
+
+    const tabHeight = 65 + (insets.bottom > 0 ? insets.bottom - 10 : 0);
+    const tabPaddingBottom = Math.max(insets.bottom, 10);
 
     if (loading) {
         return (
@@ -29,9 +35,9 @@ export default function TabLayout() {
                 tabBarStyle: {
                     backgroundColor: Colors.surface,
                     borderTopColor: Colors.border,
-                    height: 65,
-                    paddingBottom: 10,
-                    paddingTop: 0,
+                    height: tabHeight,
+                    paddingBottom: tabPaddingBottom,
+                    paddingTop: 4,
                     position: 'absolute',
                     borderTopWidth: 1,
                     elevation: 0,

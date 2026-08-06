@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Platform, ActivityIndicator, Alert, Pressable } from 'react-native';
 import { useFinance } from '../src/context/FinanceContext';
 import { useThemeColors, Typography } from '../src/theme/colors';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, TRANSFER_CATEGORIES, TransactionType } from '../src/models';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { getTransaction } from '../src/database/db';
@@ -66,6 +67,8 @@ import * as Haptics from 'expo-haptics';
 
 export default function AddTransaction() {
     const Colors = useThemeColors();
+    const insets = useSafeAreaInsets();
+    const topHeaderPadding = Math.max(insets.top + 8, Platform.OS === 'ios' ? 56 : 14);
     const { 
         addTransaction, 
         updateTransaction, 
@@ -326,7 +329,7 @@ export default function AddTransaction() {
 
     return (
         <View style={[styles.mainContainer, { backgroundColor: Colors.background }]}>
-            <View style={[styles.header, { backgroundColor: Colors.background, borderBottomColor: Colors.border }]}>
+            <View style={[styles.header, { backgroundColor: Colors.background, borderBottomColor: Colors.border, paddingTop: topHeaderPadding }]}>
                 <TouchableOpacity onPress={handleBack} style={styles.backButton}>
                     <ArrowLeft color={Colors.text} size={24} />
                 </TouchableOpacity>
