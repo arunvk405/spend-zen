@@ -12,8 +12,8 @@ export default function TabLayout() {
     const { user, loading } = useAuth();
     const insets = useSafeAreaInsets();
 
-    const tabHeight = Platform.OS === 'web' ? 64 : 58 + (insets.bottom > 0 ? Math.min(insets.bottom, 16) : 0);
-    const tabPaddingBottom = Platform.OS === 'web' ? 8 : (insets.bottom > 0 ? Math.min(insets.bottom, 12) : 8);
+    const tabHeight = 62 + (insets.bottom > 0 ? insets.bottom : 0);
+    const tabPaddingBottom = insets.bottom > 0 ? insets.bottom : 10;
 
     if (loading) {
         return (

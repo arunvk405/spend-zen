@@ -671,13 +671,13 @@ export default function TransactionsHistory() {
                     }}
                 />
 
-                {/* Sleek Single-Row Search & Action Controls */}
+                {/* Sleek Search Bar & Filter Controls */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 16, marginBottom: 8 }}>
-                    <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border, borderRadius: 12, paddingHorizontal: 10, height: 42 }}>
+                    <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border, borderRadius: 12, paddingHorizontal: 12, height: 42 }}>
                         <Search color={Colors.textMuted} size={18} />
                         <TextInput
-                            style={{ flex: 1, fontSize: 16, color: Colors.text, marginLeft: 8, paddingVertical: 0 }}
-                            placeholder="Search notes, categories..."
+                            style={{ flex: 1, fontSize: 15, color: Colors.text, marginLeft: 8, paddingVertical: 0 }}
+                            placeholder="Search transactions..."
                             placeholderTextColor={Colors.textMuted}
                             value={searchQuery}
                             onChangeText={setSearchQuery}
@@ -701,13 +701,6 @@ export default function TransactionsHistory() {
                         onPress={handleExportCSV}
                     >
                         <Download color={Colors.primary} size={18} />
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                        style={{ width: 42, height: 42, borderRadius: 12, backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border, justifyContent: 'center', alignItems: 'center' }}
-                        onPress={handleExportPDF}
-                    >
-                        <FileText color={Colors.primary} size={18} />
                     </TouchableOpacity>
                 </View>
 

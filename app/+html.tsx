@@ -24,9 +24,10 @@ export default function Root({ children }: PropsWithChildren) {
 
         {/* iOS Web App Meta Tags */}
         <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="apple-mobile-web-app-title" content="Spend Zen" />
         <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="theme-color" content="#ffffff" />
         <ScrollViewStyleReset />
         <style dangerouslySetInnerHTML={{ __html: `
           html, body, #root {
