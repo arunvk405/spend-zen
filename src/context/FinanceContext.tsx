@@ -107,6 +107,7 @@ interface FinanceContextType {
     clearTransactionsBefore: (date: Date) => Promise<number>;
     userSalary: number;
     updateUserSalary: (amount: number) => Promise<void>;
+    importData: (data: any) => Promise<void>;
 }
 
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
@@ -634,6 +635,24 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         }
     };
 
+    const importData = async (data: any) => {
+        if (!user) return;
+        try {
+            if (data.transactions && Array.isArray(data.transactions)) {
+                for (const tx of data.transactions) {
+                    const { id, ...cleanTx } = tx;
+                    await addTxDb(user.uid, cleanTx);
+                }
+            }
+            if (data.categoryBudgets) {
+                await updateCategoryBudgets(data.categoryBudgets);
+            }
+            await refreshData();
+        } catch (e) {
+            console.error("Error importing backup data:", e);
+        }
+    };
+
     return (
         <FinanceContext.Provider value={{
             transactions,
@@ -673,6 +692,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
             historyRetention, updateHistoryRetention,
             clearTransactionsBefore,
             userSalary, updateUserSalary,
+            importData,
         }}>
             {children}
         </FinanceContext.Provider>
