@@ -28,6 +28,11 @@ function RootLayoutNav() {
                         <meta property="og:description" content="Master your personal finances with Spend Zen: track transactions, manage category budgets, and leverage smart AI financial planning." />
                         <meta property="og:type" content="website" />
                         <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+                        {/* DNS preconnect — reduces Firebase & CDN latency for LCP */}
+                        <link rel="preconnect" href="https://firebaseapp.com" />
+                        <link rel="preconnect" href="https://firestore.googleapis.com" crossOrigin="anonymous" />
+                        <link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossOrigin="anonymous" />
+                        <link rel="dns-prefetch" href="https://firestore.googleapis.com" />
                     </Head>
                 )}
                 <StatusBar style={Colors.isDark ? "light" : "dark"} backgroundColor={Colors.background} translucent={true} />
