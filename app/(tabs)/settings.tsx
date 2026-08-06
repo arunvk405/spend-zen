@@ -43,10 +43,14 @@ import { useFinance } from '../../src/context/FinanceContext';
 import { useAuth } from '../../src/context/AuthContext';
 import { useRouter } from 'expo-router';
 import { NewTag } from '../../src/components/NewTag';
-import { FEATURE_TIMESTAMPS } from '../../src/utils/newFeatureUtils';
-const SettingsItem = ({ icon: Icon, label, onPress, color, value = undefined, toggle = false, newTag = false }: any) => {
+import { markFeatureSeen } from '../../src/utils/newFeatureUtils';
+const SettingsItem = ({ icon: Icon, label, onPress, color, value = undefined, toggle = false, newTag = '' }: any) => {
     const Colors = useThemeColors();
     const [isHovered, setIsHovered] = useState(false);
+    const handlePress = () => {
+        if (newTag) markFeatureSeen(newTag);
+        if (onPress) onPress();
+    };
     return (
         <Pressable
             style={({ pressed }) => [
@@ -66,7 +70,7 @@ const SettingsItem = ({ icon: Icon, label, onPress, color, value = undefined, to
                 pressed ? { backgroundColor: Colors.primary + '15', transform: [{ scale: 0.99 }] } : undefined,
                 Platform.OS === 'web' ? { transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)' } : undefined
             ] as any}
-            onPress={onPress}
+            onPress={handlePress}
             onHoverIn={() => setIsHovered(true)}
             onHoverOut={() => setIsHovered(false)}
         >
@@ -75,12 +79,12 @@ const SettingsItem = ({ icon: Icon, label, onPress, color, value = undefined, to
                     <Icon size={20} color={color} />
                 </View>
                 <Text style={[styles.itemLabel, { color: Colors.text }]}>{label}</Text>
-                {newTag && <NewTag featureTimestamp={newTag} />}
+                {newTag ? <NewTag featureKey={newTag} /> : null}
             </View>
             {toggle ? (
                 <Switch
                     value={value}
-                    onValueChange={onPress}
+                    onValueChange={handlePress}
                     trackColor={{ false: Colors.border, true: Colors.primary }}
                     thumbColor={Colors.white}
                 />
@@ -716,13 +720,13 @@ export default function Settings() {
                             <View>
                                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                     <Text style={[styles.itemLabel, { color: Colors.text }]}>1-Tap App Speed Optimizer</Text>
-                                    <NewTag featureTimestamp={FEATURE_TIMESTAMPS.performanceOptimizer} />
+                                    <NewTag featureKey="performanceOptimizer" />
                                 </View>
                                 <Text style={{ fontSize: 12, color: Colors.textMuted }}>Compacts local storage & purges search index</Text>
                             </View>
                         </View>
                         <TouchableOpacity
-                            onPress={handleOptimizePerformance}
+                            onPress={() => { markFeatureSeen('performanceOptimizer'); handleOptimizePerformance(); }}
                             disabled={isOptimizing}
                             style={{ backgroundColor: Colors.primary, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 }}
                         >
@@ -743,13 +747,13 @@ export default function Settings() {
                             <View>
                                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                     <Text style={[styles.itemLabel, { color: Colors.text }]}>Export Full Backup (.JSON)</Text>
-                                    <NewTag featureTimestamp={FEATURE_TIMESTAMPS.jsonBackup} />
+                                    <NewTag featureKey="jsonBackup" />
                                 </View>
                                 <Text style={{ fontSize: 12, color: Colors.textMuted }}>Save all transactions & accounts offline</Text>
                             </View>
                         </View>
                         <TouchableOpacity
-                            onPress={handleExportJSONBackup}
+                            onPress={() => { markFeatureSeen('jsonBackup'); handleExportJSONBackup(); }}
                             style={{ backgroundColor: Colors.income, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 }}
                         >
                             <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>Export</Text>
@@ -765,13 +769,13 @@ export default function Settings() {
                             <View>
                                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                     <Text style={[styles.itemLabel, { color: Colors.text }]}>Restore Backup (.JSON)</Text>
-                                    <NewTag featureTimestamp={FEATURE_TIMESTAMPS.jsonBackup} />
+                                    <NewTag featureKey="jsonBackup" />
                                 </View>
                                 <Text style={{ fontSize: 12, color: Colors.textMuted }}>1-click restore transactions from file</Text>
                             </View>
                         </View>
                         <TouchableOpacity
-                            onPress={handleImportJSONBackup}
+                            onPress={() => { markFeatureSeen('jsonBackup'); handleImportJSONBackup(); }}
                             style={{ backgroundColor: '#F59E0B', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 }}
                         >
                             <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>Restore</Text>
@@ -789,14 +793,14 @@ export default function Settings() {
                         label="Frequently Asked Questions (FAQ)"
                         color={Colors.primary}
                         onPress={() => setShowFaqModal(true)}
-                        newTag={FEATURE_TIMESTAMPS.faqSection}
+                        newTag="faqSection"
                     />
                     <SettingsItem
                         icon={FileText}
                         label="Terms & Conditions"
                         color={Colors.primary}
                         onPress={() => setShowTermsModal(true)}
-                        newTag={FEATURE_TIMESTAMPS.termsAndConditions}
+                        newTag="termsAndConditions"
                     />
                 </View>
             </View>
