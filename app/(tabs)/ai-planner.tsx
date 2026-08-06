@@ -8,7 +8,7 @@ import { useThemeColors } from '../../src/theme/colors';
 import {
     Sparkles, Target, AlertTriangle, ShieldCheck,
     Calculator, MessageSquare, Send, Key, ChevronDown, TrendingUp,
-    Check, Trash2, Eye, EyeOff, ExternalLink, RotateCcw
+    Check, Trash2, Eye, EyeOff, ExternalLink, RotateCcw, IndianRupee
 } from 'lucide-react-native';
 import {
     generateLocalAIPlan, evaluateLocalAffordability, fetchGeminiAIPlan, fetchGeminiAIChatResponse,

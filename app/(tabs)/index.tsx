@@ -10,7 +10,7 @@ import {
     Wallet, Landmark, CreditCard, TrendingUp, TrendingDown,
     ArrowRight, Briefcase, RotateCcw, Plus, AlertCircle, Pencil, Shield, X,
     PiggyBank, Gift, Laptop, Package, Utensils, Activity, Home, Car, User, PawPrint, FileText, Film,
-    Trash2, CheckCircle, ChevronDown, Bell, Sparkles
+    Trash2, CheckCircle, ChevronDown, Bell, Sparkles, IndianRupee
 } from 'lucide-react-native';
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, TRANSFER_CATEGORIES } from '../../src/models';
 import { format, isSameMonth, isSameYear, parseISO, subWeeks, isSameWeek } from 'date-fns';
