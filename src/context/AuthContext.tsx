@@ -39,14 +39,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const loginWithGoogle = async () => {
         try {
-            if (Platform.OS === 'web') {
+            if (Platform.OS === 'web' && typeof signInWithPopup === 'function') {
                 await signInWithPopup(auth, googleProvider);
             } else {
-                Alert.alert("Native Support", "Google Login for mobile requires additional configuration (EAS Build). Use Web version for full functionality.");
+                Alert.alert(
+                    "Google Sign-In",
+                    "Google 1-click Sign-In is active on Web/PWA. On mobile Expo Go, please sign in using Email or open the Web PWA."
+                );
             }
-        } catch (e) {
+        } catch (e: any) {
             console.error("Google login error:", e);
-            Alert.alert("Login Error", "Failed to sign in with Google");
+            if (e?.code === 'auth/popup-closed-by-user' || e?.code === 'auth/cancelled-popup-request') {
+                return;
+            }
+            Alert.alert("Google Login", e?.message || "Failed to sign in with Google. Please try again.");
         }
     };
 

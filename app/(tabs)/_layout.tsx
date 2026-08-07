@@ -12,11 +12,11 @@ export default function TabLayout() {
     const { user, loading } = useAuth();
     const insets = useSafeAreaInsets();
 
-    // iPhone 15 home indicator = 34px safe area inset.
-    // Tab icons sit in the top 56px; below that is the home indicator zone filled with the same background.
-    const tabBarIconsHeight = 56;
-    const tabHeight = tabBarIconsHeight + (insets.bottom > 0 ? insets.bottom : 10);
-    const tabPaddingBottom = insets.bottom > 0 ? insets.bottom : 10;
+    // On web (Safari/Chrome browser), use a compact 58px bar height.
+    // On native apps (iOS/Android Expo Go), add insets.bottom for the home indicator.
+    const isWeb = Platform.OS === 'web';
+    const tabHeight = isWeb ? 58 : 56 + (insets.bottom > 0 ? insets.bottom : 10);
+    const tabPaddingBottom = isWeb ? 4 : (insets.bottom > 0 ? insets.bottom : 10);
 
     if (loading) {
         return (
@@ -42,12 +42,16 @@ export default function TabLayout() {
                     height: tabHeight,
                     paddingBottom: tabPaddingBottom,
                     paddingTop: 6,
-                    // Stretch the bar all the way to the physical bottom edge
-                    position: 'absolute',
+                    // On web: use CSS position:fixed so the tab bar is always
+                    // anchored to the bottom of the *viewport* (not the scroll container).
+                    // This handles Safari toolbar expand/collapse correctly.
+                    // On native: absolute is correct (handles safe area via insets).
+                    position: (Platform.OS === 'web' ? 'fixed' : 'absolute') as any,
                     bottom: 0,
                     left: 0,
                     right: 0,
                     elevation: 0,
+                    zIndex: 100,
                     ...Platform.select({
                         ios: {
                             shadowColor: '#000',
