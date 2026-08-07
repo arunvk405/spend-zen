@@ -12,10 +12,10 @@ export default function TabLayout() {
     const { user, loading } = useAuth();
     const insets = useSafeAreaInsets();
 
-    // On web (Safari/Chrome browser), use a compact 58px bar height.
-    // On native apps (iOS/Android Expo Go), add insets.bottom for the home indicator.
+    // On web: 60px gives enough room for icon (24px) + label (13px) + spacing.
+    // On native: add insets.bottom for home indicator (34px on iPhone 15).
     const isWeb = Platform.OS === 'web';
-    const tabHeight = isWeb ? 58 : 56 + (insets.bottom > 0 ? insets.bottom : 10);
+    const tabHeight = isWeb ? 64 : 56 + (insets.bottom > 0 ? insets.bottom : 10);
     const tabPaddingBottom = isWeb ? 4 : (insets.bottom > 0 ? insets.bottom : 10);
 
     if (loading) {
