@@ -12,7 +12,10 @@ export default function TabLayout() {
     const { user, loading } = useAuth();
     const insets = useSafeAreaInsets();
 
-    const tabHeight = 62 + (insets.bottom > 0 ? insets.bottom : 0);
+    // iPhone 15 home indicator = 34px safe area inset.
+    // Tab icons sit in the top 56px; below that is the home indicator zone filled with the same background.
+    const tabBarIconsHeight = 56;
+    const tabHeight = tabBarIconsHeight + (insets.bottom > 0 ? insets.bottom : 10);
     const tabPaddingBottom = insets.bottom > 0 ? insets.bottom : 10;
 
     if (loading) {
@@ -35,21 +38,22 @@ export default function TabLayout() {
                 tabBarStyle: {
                     backgroundColor: Colors.surface,
                     borderTopColor: Colors.border,
+                    borderTopWidth: 1,
                     height: tabHeight,
                     paddingBottom: tabPaddingBottom,
                     paddingTop: 6,
+                    // Stretch the bar all the way to the physical bottom edge
                     position: 'absolute',
                     bottom: 0,
                     left: 0,
                     right: 0,
-                    borderTopWidth: 1,
                     elevation: 0,
                     ...Platform.select({
                         ios: {
                             shadowColor: '#000',
-                            shadowOffset: { width: 0, height: -3 },
-                            shadowOpacity: 0.04,
-                            shadowRadius: 6,
+                            shadowOffset: { width: 0, height: -2 },
+                            shadowOpacity: 0.06,
+                            shadowRadius: 8,
                         },
                         default: {}
                     }),
