@@ -1,16 +1,16 @@
 import React, { useMemo, useState } from 'react';
 import {
     View, Text, StyleSheet, ScrollView, TouchableOpacity,
-    Platform, Modal, Pressable, ActivityIndicator, Animated, TextInput, Alert
+    Platform, Modal, Pressable, ActivityIndicator, Animated, TextInput, Alert, useWindowDimensions
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { useFinance } from '../../src/context/FinanceContext';
 import { useThemeColors } from '../../src/theme/colors';
 import {
     Wallet, Landmark, CreditCard, TrendingUp, TrendingDown,
-    ArrowRight, Briefcase, RotateCcw, Plus, AlertCircle, Pencil, Shield, X,
+    ArrowRight, Briefcase, RotateCcw, Plus, AlertCircle, Pencil, X,
     PiggyBank, Gift, Laptop, Package, Utensils, Activity, Home, Car, User, PawPrint, FileText, Film,
-    Trash2, CheckCircle, ChevronDown, Bell, Sparkles, IndianRupee
+    Trash2, CheckCircle, ChevronDown, Bell, Sparkles, ChevronRight
 } from 'lucide-react-native';
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, TRANSFER_CATEGORIES } from '../../src/models';
 import { format, isSameMonth, isSameYear, parseISO, subWeeks, isSameWeek } from 'date-fns';
@@ -49,8 +49,8 @@ const HoverCard = ({ children, style, onPress, disabled = false }: any) => {
             onHoverOut={() => setIsHovered(false)}
             style={({ pressed }) => [
                 style,
-                isHovered ? { shadowOpacity: 0.12, shadowRadius: 16, elevation: 8, transform: [{ translateY: -4 }] } : undefined,
-                pressed ? { transform: [{ scale: 0.98 }] } : undefined,
+                isHovered && !disabled ? { shadowOpacity: 0.12, shadowRadius: 16, elevation: 6, transform: [{ translateY: -2 }] } : undefined,
+                pressed && !disabled ? { transform: [{ scale: 0.985 }] } : undefined,
                 Platform.OS === 'web' ? { transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)' } : undefined
             ] as any}
         >
@@ -86,16 +86,18 @@ export default function HomeDashboard() {
     const Colors = useThemeColors();
     const router = useRouter();
     const insets = useSafeAreaInsets();
-    const topPadding = Math.max(insets.top + 8, Platform.OS === 'ios' ? 56 : 14);
+    const { width: windowWidth } = useWindowDimensions();
+    const isDesktop = windowWidth >= 860;
+
+    const topPadding = Math.max(insets.top + 6, Platform.OS === 'ios' ? 52 : 14);
     const bottomPadding = Math.max(insets.bottom + 85, 105);
 
     const {
         totalBalance, cashBalance, monthlyIncome, monthlyExpenses,
         bankAccounts, totalBankBalance,
         creditCards, totalCreditDue,
-        transactions, loading, hasFetchedOnce, hasError, refreshData, clearAccountData, addTransaction,
+        transactions, loading, hasFetchedOnce, hasError, refreshData, addTransaction,
         cashAccountName, renameCashAccount,
-        historyRetention, updateHistoryRetention,
         categoryBudgets, customCategories,
         recurringBills, addRecurringBill, deleteRecurringBill, payRecurringBill,
         savingsGoals, addSavingsGoal, deleteSavingsGoal, allocateToGoal
@@ -128,6 +130,11 @@ export default function HomeDashboard() {
     const [newBillDueDate, setNewBillDueDate] = useState('1');
     const [newBillAccountId, setNewBillAccountId] = useState('cash');
 
+    const [confirmCardId, setConfirmCardId] = useState<string | null>(null);
+    const [selectedSourceAccountId, setSelectedSourceAccountId] = useState<string | null>(null);
+    const [clearing, setClearing] = useState(false);
+    const [paymentAmount, setPaymentAmount] = useState('');
+
     const triggerNewQuote = React.useCallback(() => {
         Animated.timing(fadeAnim, {
             toValue: 0,
@@ -141,7 +148,7 @@ export default function HomeDashboard() {
                 }
                 return nextIndex;
             });
-            
+
             Animated.timing(fadeAnim, {
                 toValue: 1,
                 duration: 250,
@@ -152,14 +159,10 @@ export default function HomeDashboard() {
 
     useFocusEffect(
         React.useCallback(() => {
-            // Pick a fresh quote immediately on page open/focus
             triggerNewQuote();
-
-            // Set up auto-rotation interval of 10 seconds
             const interval = setInterval(() => {
                 triggerNewQuote();
-            }, 10000);
-
+            }, 12000);
             return () => clearInterval(interval);
         }, [triggerNewQuote])
     );
@@ -167,7 +170,7 @@ export default function HomeDashboard() {
     const currentMonthExpensesByCategory = useMemo(() => {
         const now = new Date();
         const expenses: Record<string, number> = {};
-        
+
         transactions.forEach(t => {
             if (t.type === 'EXPENSE') {
                 const txDate = parseISO(t.date);
@@ -201,7 +204,7 @@ export default function HomeDashboard() {
                     color: category.color
                 };
             })
-            .sort((a, b) => b.ratio - a.ratio); // Show highest spending ratio first!
+            .sort((a, b) => b.ratio - a.ratio);
     }, [categoryBudgets, currentMonthExpensesByCategory, expenseCategories, Colors.primary]);
 
     const totalMasterBudget = useMemo(() => {
@@ -269,14 +272,14 @@ export default function HomeDashboard() {
             const pctLess = Math.round(((lastWeekExp - thisWeekExp) / lastWeekExp) * 100);
             return {
                 title: "Spending Velocity Down! 🚀",
-                message: `You spent ${pctLess}% less this week compared to last week! On track to save ₹${netSavings > 0 ? netSavings.toLocaleString() : '0'} this month.`,
+                message: `You spent ${pctLess}% less this week compared to last week! On track to save ₹${netSavings > 0 ? netSavings.toLocaleString('en-IN') : '0'} this month.`,
                 type: 'positive'
             };
         } else if (lastWeekExp > 0 && thisWeekExp > lastWeekExp) {
             const pctMore = Math.round(((thisWeekExp - lastWeekExp) / lastWeekExp) * 100);
             return {
                 title: "Weekly Spending Alert ⚠️",
-                message: `Weekly spending is up ${pctMore}% compared to last week (₹${thisWeekExp.toLocaleString()} vs ₹${lastWeekExp.toLocaleString()}). Pause non-essentials to preserve your budget.`,
+                message: `Weekly spending is up ${pctMore}% compared to last week (₹${thisWeekExp.toLocaleString('en-IN')} vs ₹${lastWeekExp.toLocaleString('en-IN')}). Pause non-essentials to preserve your budget.`,
                 type: 'warning'
             };
         } else if (savingsRate >= 30) {
@@ -288,7 +291,7 @@ export default function HomeDashboard() {
         } else if (netSavings < 0) {
             return {
                 title: "Budget Deficit Notice 🚨",
-                message: `Expenses exceed income by ₹${Math.abs(netSavings).toLocaleString()}. Review top spending categories to restore balance.`,
+                message: `Expenses exceed income by ₹${Math.abs(netSavings).toLocaleString('en-IN')}. Review top spending categories to restore balance.`,
                 type: 'danger'
             };
         } else {
@@ -299,13 +302,6 @@ export default function HomeDashboard() {
             };
         }
     }, [transactions, monthlyIncome, monthlyExpenses]);
-
-
-
-    const [confirmCardId, setConfirmCardId] = useState<string | null>(null);
-    const [selectedSourceAccountId, setSelectedSourceAccountId] = useState<string | null>(null);
-    const [clearing, setClearing] = useState(false);
-    const [paymentAmount, setPaymentAmount] = useState('');
 
     const handleRenameCash = () => {
         const newName = window.prompt("Rename Cash Account:", cashAccountName);
@@ -391,7 +387,6 @@ export default function HomeDashboard() {
         const card = creditCards.find(c => c.id === cardId);
         if (!card || card.dueAmount <= 0) return;
 
-        // Default to cash or first bank account
         setSelectedSourceAccountId('cash');
         setPaymentAmount(card.dueAmount.toString());
         setConfirmCardId(cardId);
@@ -401,7 +396,7 @@ export default function HomeDashboard() {
         if (!confirmCardId) return;
         const card = creditCards.find(c => c.id === confirmCardId);
         if (!card) return;
-        
+
         const payAmt = parseFloat(paymentAmount);
         if (isNaN(payAmt) || payAmt <= 0) {
             if (Platform.OS === 'web') {
@@ -415,7 +410,6 @@ export default function HomeDashboard() {
         setConfirmCardId(null);
         setClearing(true);
         try {
-            // 1. If a funding source is chosen (e.g. Bank or Cash), record the EXPENSE transaction first
             if (selectedSourceAccountId) {
                 await addTransaction({
                     amount: payAmt,
@@ -423,28 +417,36 @@ export default function HomeDashboard() {
                     category: 'Credit Card Payment',
                     date: new Date().toISOString(),
                     accountId: selectedSourceAccountId,
+                    toAccountId: confirmCardId,
                     note: `Paid ${card.cardName} due`
                 });
+
+                const sourceName = getAccountName(selectedSourceAccountId);
+                await addTransaction({
+                    amount: payAmt,
+                    type: 'TRANSFER',
+                    category: 'Credit Card Payment',
+                    date: new Date().toISOString(),
+                    accountId: confirmCardId,
+                    toAccountId: confirmCardId,
+                    note: `Settled using ${sourceName}`
+                });
+            } else {
+                await addTransaction({
+                    amount: payAmt,
+                    type: 'TRANSFER',
+                    category: 'Credit Card Payment',
+                    date: new Date().toISOString(),
+                    accountId: confirmCardId,
+                    toAccountId: confirmCardId,
+                    note: 'Direct Reset'
+                });
             }
-
-            // 2. Record the INCOME transaction on the Credit Card itself to settle the liability
-            const sourceName = selectedSourceAccountId 
-                ? getAccountName(selectedSourceAccountId) 
-                : 'Direct Reset';
-
-            await addTransaction({
-                amount: payAmt,
-                type: 'INCOME',
-                category: 'Credit Card Payment',
-                date: new Date().toISOString(),
-                accountId: confirmCardId,
-                note: `Settled using ${sourceName}`
-            });
 
             if (Platform.OS !== 'web') {
                 try {
                     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                } catch (e) {}
+                } catch (e) { }
             }
         } catch (error) {
             console.error("Error settling card:", error);
@@ -455,573 +457,325 @@ export default function HomeDashboard() {
         }
     };
 
-    return (
-        <>
-        {/* Web & Native Confirm & Select Funding Source Modal */}
-        <Modal visible={!!confirmCardId} transparent animationType="fade" onRequestClose={() => setConfirmCardId(null)}>
-            <Pressable style={s.modalOverlay} onPress={() => setConfirmCardId(null)}>
-                <Pressable style={[s.modalBox, { backgroundColor: Colors.surface, width: '90%', maxWidth: 360 }]} onPress={(e) => e.stopPropagation()}>
-                    <Text style={[s.modalTitle, { color: Colors.text }]}>Record Card Payment</Text>
-                    {(() => {
-                        const card = creditCards.find(c => c.id === confirmCardId);
-                        if (!card) return null;
-                        return (
-                            <>
-                                <Text style={[s.modalMsg, { color: Colors.textMuted, marginBottom: 12 }]}>
-                                    Settle due on <Text style={{ color: Colors.text, fontWeight: '700' }}>{card.cardName}</Text> (Total Due: <Text style={{ color: Colors.expense, fontWeight: '700' }}>₹{card.dueAmount.toLocaleString()}</Text>):
-                                </Text>
+    const netSavings = monthlyIncome - monthlyExpenses;
+    const isNetPositive = netSavings >= 0;
 
-                                <Text style={{ fontSize: 12, fontWeight: '600', color: Colors.textMuted, marginBottom: 4 }}>Payment Amount (₹)</Text>
-                                <TextInput 
-                                    style={[s.modalInput, { color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.background, marginBottom: 14 }]}
-                                    placeholder="e.g. 5000"
-                                    placeholderTextColor={Colors.textMuted}
-                                    keyboardType="numeric"
-                                    value={paymentAmount}
-                                    onChangeText={setPaymentAmount}
-                                />
-                                
-                                <Text style={{ fontSize: 12, fontWeight: '600', color: Colors.textMuted, marginBottom: 6 }}>Select Funding Source</Text>
+    // ── Individual Section Renderers ─────────────────────────────
 
-                                <ScrollView style={{ maxHeight: 180, marginBottom: 16 }} showsVerticalScrollIndicator={false}>
-                                    {/* Cash Account Option */}
-                                    <Pressable 
-                                        style={{
-                                            flexDirection: 'row',
-                                            justifyContent: 'space-between',
-                                            alignItems: 'center',
-                                            padding: 12,
-                                            borderRadius: 12,
-                                            borderWidth: 1,
-                                            borderColor: selectedSourceAccountId === 'cash' ? Colors.primary : Colors.border,
-                                            backgroundColor: selectedSourceAccountId === 'cash' ? Colors.primary + '08' : Colors.surface,
-                                            marginBottom: 8
-                                        }}
-                                        onPress={() => setSelectedSourceAccountId('cash')}
-                                    >
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                                            <View style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: Colors.income + '15', justifyContent: 'center', alignItems: 'center' }}>
-                                                <Wallet size={16} color={Colors.income} />
-                                            </View>
-                                            <Text style={{ color: Colors.text, fontSize: 13, fontWeight: '600' }}>{cashAccountName}</Text>
-                                        </View>
-                                        <Text style={{ color: Colors.textMuted, fontSize: 12, fontWeight: '600' }}>₹{cashBalance.toLocaleString()}</Text>
-                                    </Pressable>
-
-                                    {/* Bank Accounts List */}
-                                    {bankAccounts.map(bank => (
-                                        <Pressable 
-                                            key={bank.id}
-                                            style={{
-                                                flexDirection: 'row',
-                                                justifyContent: 'space-between',
-                                                alignItems: 'center',
-                                                padding: 12,
-                                                borderRadius: 12,
-                                                borderWidth: 1,
-                                                borderColor: selectedSourceAccountId === bank.id ? Colors.primary : Colors.border,
-                                                backgroundColor: selectedSourceAccountId === bank.id ? Colors.primary + '08' : Colors.surface,
-                                                marginBottom: 8
-                                            }}
-                                            onPress={() => setSelectedSourceAccountId(bank.id)}
-                                        >
-                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                                                <View style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: bank.color + '15', justifyContent: 'center', alignItems: 'center' }}>
-                                                    <Landmark size={16} color={bank.color} />
-                                                </View>
-                                                <Text style={{ color: Colors.text, fontSize: 13, fontWeight: '600' }} numberOfLines={1}>{bank.bankName}</Text>
-                                            </View>
-                                            <Text style={{ color: Colors.textMuted, fontSize: 12, fontWeight: '600' }}>₹{bank.computedBalance.toLocaleString()}</Text>
-                                        </Pressable>
-                                    ))}
-
-                                    {/* No Account (Just reset card due) */}
-                                    <Pressable 
-                                        style={{
-                                            flexDirection: 'row',
-                                            justifyContent: 'space-between',
-                                            alignItems: 'center',
-                                            padding: 12,
-                                            borderRadius: 12,
-                                            borderWidth: 1,
-                                            borderColor: selectedSourceAccountId === null ? Colors.primary : Colors.border,
-                                            backgroundColor: selectedSourceAccountId === null ? Colors.primary + '08' : Colors.surface,
-                                        }}
-                                        onPress={() => setSelectedSourceAccountId(null)}
-                                    >
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                                            <View style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: Colors.textMuted + '15', justifyContent: 'center', alignItems: 'center' }}>
-                                                <X size={16} color={Colors.textMuted} />
-                                            </View>
-                                            <Text style={{ color: Colors.text, fontSize: 13, fontWeight: '600' }}>No Source (Just Reset Card)</Text>
-                                        </View>
-                                    </Pressable>
-                                </ScrollView>
-                            </>
-                        );
-                    })()}
-                    <View style={s.modalBtns}>
-                        <Pressable style={[s.modalBtn, { borderColor: Colors.border, borderWidth: 1 }]} onPress={() => setConfirmCardId(null)}>
-                            <Text style={{ color: Colors.textMuted, fontWeight: '600' }}>Cancel</Text>
-                        </Pressable>
-                        <Pressable style={[s.modalBtn, { backgroundColor: Colors.primary }]} onPress={confirmClear}>
-                            {clearing ? <ActivityIndicator color="#fff" size="small" /> :
-                                <Text style={{ color: '#fff', fontWeight: '700' }}>Record Payment</Text>}
-                        </Pressable>
-                    </View>
-                </Pressable>
-            </Pressable>
-        </Modal>
-        
-        {(!hasFetchedOnce && loading) && (
-            <View style={[s.loadingOverlay, { backgroundColor: Colors.background }]}>
-                <ActivityIndicator size="large" color={Colors.primary} />
-                <Text style={{ marginTop: 12, color: Colors.textMuted, fontWeight: '600' }}>Loading your finances...</Text>
-            </View>
-        )}
-
-        {hasError && (
-            <View style={[s.loadingOverlay, { backgroundColor: Colors.background }]}>
-                <AlertCircle size={48} color={Colors.expense} />
-                <Text style={{ marginTop: 12, color: Colors.text, fontWeight: '700', fontSize: 18 }}>Sync Failed</Text>
-                <Text style={{ marginTop: 4, color: Colors.textMuted, textAlign: 'center', paddingHorizontal: 40 }}>
-                    We couldn't fetch your latest data. Please check your connection.
-                </Text>
-                <TouchableOpacity 
-                    onPress={refreshData}
-                    style={{ marginTop: 24, backgroundColor: Colors.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 }}
-                >
-                    <Text style={{ color: '#fff', fontWeight: '700' }}>Try Again</Text>
-                </TouchableOpacity>
-            </View>
-        )}
-
-        <ScrollView style={[s.container, { backgroundColor: Colors.background }]} contentContainerStyle={[s.content, { paddingTop: topPadding, paddingBottom: bottomPadding }]}>
-
-            {/* ── Quick Action Speed Dial Bar ───────────────────────── */}
-            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16, marginTop: 4 }}>
-                <TouchableOpacity
-                    style={{
-                        flex: 1,
-                        backgroundColor: Colors.expense + '12',
-                        borderColor: Colors.expense + '30',
-                        borderWidth: 1,
-                        borderRadius: 14,
-                        paddingVertical: 10,
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                    }}
-                    onPress={() => router.push({ pathname: '/add', params: { type: 'EXPENSE' } })}
-                >
-                    <Text style={{ fontSize: 12, fontWeight: '700', color: Colors.expense }}>+ Expense</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                    style={{
-                        flex: 1,
-                        backgroundColor: Colors.income + '12',
-                        borderColor: Colors.income + '30',
-                        borderWidth: 1,
-                        borderRadius: 14,
-                        paddingVertical: 10,
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                    }}
-                    onPress={() => router.push({ pathname: '/add', params: { type: 'INCOME' } })}
-                >
-                    <Text style={{ fontSize: 12, fontWeight: '700', color: Colors.income }}>+ Income</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                    style={{
-                        flex: 1,
-                        backgroundColor: Colors.primary + '12',
-                        borderColor: Colors.primary + '30',
-                        borderWidth: 1,
-                        borderRadius: 14,
-                        paddingVertical: 10,
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                    }}
-                    onPress={() => router.push({ pathname: '/add', params: { type: 'TRANSFER' } })}
-                >
-                    <Text style={{ fontSize: 12, fontWeight: '700', color: Colors.primary }}>⇄ Transfer</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                    style={{
-                        flex: 1,
-                        backgroundColor: Colors.primary + '18',
-                        borderColor: Colors.primary + '40',
-                        borderWidth: 1,
-                        borderRadius: 14,
-                        paddingVertical: 10,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        flexDirection: 'row',
-                        gap: 4
-                    }}
-                    onPress={() => router.push('/ai-planner')}
-                >
-                    <Sparkles size={12} color={Colors.primary} />
-                    <Text style={{ fontSize: 12, fontWeight: '700', color: Colors.primary }}>AI Planner</Text>
-                </TouchableOpacity>
-            </View>
-
-            {/* ── Upcoming Bills Alert Banner (Next 7 Days) ─────────── */}
-            {upcomingBillsDue.length > 0 && (
-                <View style={{
+    const renderHeroBalance = () => (
+        <HoverCard
+            disabled={true}
+            style={[
+                s.heroBalanceCard,
+                {
                     backgroundColor: Colors.surface,
-                    borderRadius: 16,
-                    padding: 14,
-                    marginBottom: 16,
-                    borderColor: '#F59E0B',
-                    borderWidth: 1,
-                    borderLeftWidth: 4,
+                    borderColor: Colors.border,
                     shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.05,
-                    shadowRadius: 6,
-                    elevation: 2
-                }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                            <Bell size={16} color="#F59E0B" />
-                            <Text style={{ fontSize: 13, fontWeight: '700', color: Colors.text }}>
-                                Upcoming Bill Reminders ({upcomingBillsDue.length})
-                            </Text>
-                        </View>
-                        <Text style={{ fontSize: 10, color: Colors.textMuted }}>Next 7 days</Text>
+                    shadowOffset: { width: 0, height: 4 },
+                    shadowOpacity: 0.06,
+                    shadowRadius: 14,
+                    elevation: 4
+                }
+            ]}
+        >
+            <View style={s.heroHeaderRow}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={[s.heroTagLabel, { color: Colors.textMuted }]}>AVAILABLE BALANCE</Text>
+                </View>
+                <View style={[s.accountsBadgePill, { backgroundColor: Colors.primary + '12', borderColor: Colors.primary + '30' }]}>
+                    <Text style={[s.accountsBadgeText, { color: Colors.primary }]}>
+                        {bankAccounts.length + 1} Accounts Active
+                    </Text>
+                </View>
+            </View>
+
+            <Text
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                style={[s.heroBalanceText, { color: Colors.text }]}
+            >
+                ₹{totalBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </Text>
+
+            <View style={s.dualAccountsRow}>
+                <View style={[s.dualAccountCard, { backgroundColor: Colors.background, borderColor: Colors.border }]}>
+                    <View style={[s.accountBadgeIcon, { backgroundColor: Colors.income + '18' }]}>
+                        <Landmark color={Colors.income} size={15} />
                     </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={[s.dualAccountLabel, { color: Colors.textMuted }]} numberOfLines={1}>
+                            Bank ({bankAccounts.length})
+                        </Text>
+                        <Text style={[s.dualAccountValue, { color: Colors.income }]} numberOfLines={1}>
+                            ₹{totalBankBalance.toLocaleString('en-IN')}
+                        </Text>
+                    </View>
+                </View>
 
-                    <View style={{ gap: 8 }}>
-                        {upcomingBillsDue.map(bill => (
-                            <View key={`alert-${bill.id}`} style={{
-                                flexDirection: 'row',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                backgroundColor: Colors.background,
-                                padding: 10,
-                                borderRadius: 12
-                            }}>
-                                <View style={{ flex: 1, marginRight: 8 }}>
-                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                        <Text style={{ fontSize: 12, fontWeight: '700', color: Colors.text }}>{bill.name}</Text>
-                                        <View style={{
-                                            backgroundColor: bill.isUrgent ? Colors.expense + '15' : '#F59E0B15',
-                                            paddingHorizontal: 6,
-                                            paddingVertical: 2,
-                                            borderRadius: 6
-                                        }}>
-                                            <Text style={{ fontSize: 9, fontWeight: '700', color: bill.isUrgent ? Colors.expense : '#F59E0B' }}>
-                                                {bill.badgeText}
-                                            </Text>
-                                        </View>
-                                    </View>
-                                    <Text style={{ fontSize: 10, color: Colors.textMuted, marginTop: 2 }}>
-                                        ₹{bill.amount.toLocaleString()} • {getAccountName(bill.accountId)}
-                                    </Text>
-                                </View>
+                <View style={[s.dualAccountCard, { backgroundColor: Colors.background, borderColor: Colors.border }]}>
+                    <View style={[s.accountBadgeIcon, { backgroundColor: Colors.primary + '18' }]}>
+                        <Wallet color={Colors.primary} size={15} />
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={[s.dualAccountLabel, { color: Colors.textMuted }]} numberOfLines={1}>
+                            {cashAccountName || 'Cash'}
+                        </Text>
+                        <Text style={[s.dualAccountValue, { color: Colors.primary }]} numberOfLines={1}>
+                            ₹{cashBalance.toLocaleString('en-IN')}
+                        </Text>
+                    </View>
+                </View>
+            </View>
 
-                                <TouchableOpacity
-                                    style={{
-                                        backgroundColor: Colors.primary,
-                                        paddingHorizontal: 12,
-                                        paddingVertical: 6,
-                                        borderRadius: 8
-                                    }}
-                                    onPress={() => payRecurringBill(bill)}
-                                >
-                                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#fff' }}>Mark Paid</Text>
-                                </TouchableOpacity>
-                            </View>
-                        ))}
+            <View style={[s.monthlyFlowStrip, { backgroundColor: Colors.background, borderColor: Colors.border }]}>
+                <View style={s.monthlyFlowItem}>
+                    <Text style={[s.monthlyFlowLabel, { color: Colors.textMuted }]}>
+                        {format(new Date(), 'MMM')} INFLOW
+                    </Text>
+                    <Text style={[s.monthlyFlowValue, { color: Colors.income }]}>
+                        +₹{monthlyIncome.toLocaleString('en-IN')}
+                    </Text>
+                </View>
+
+                <View style={[s.verticalDivider, { backgroundColor: Colors.border }]} />
+
+                <View style={s.monthlyFlowItem}>
+                    <Text style={[s.monthlyFlowLabel, { color: Colors.textMuted }]}>
+                        {format(new Date(), 'MMM')} OUTFLOW
+                    </Text>
+                    <Text style={[s.monthlyFlowValue, { color: Colors.expense }]}>
+                        -₹{monthlyExpenses.toLocaleString('en-IN')}
+                    </Text>
+                </View>
+
+                <View style={[s.verticalDivider, { backgroundColor: Colors.border }]} />
+
+                <View style={s.monthlyFlowItem}>
+                    <Text style={[s.monthlyFlowLabel, { color: Colors.textMuted }]}>
+                        NET SAVED
+                    </Text>
+                    <Text style={[s.monthlyFlowValue, { color: isNetPositive ? Colors.income : Colors.expense }]}>
+                        {isNetPositive ? '+' : ''}₹{netSavings.toLocaleString('en-IN')}
+                    </Text>
+                </View>
+            </View>
+
+            {totalMasterBudget > 0 && (
+                <View style={[s.budgetProgressBarContainer, { backgroundColor: Colors.background, borderColor: Colors.border }]}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                        <Text style={[s.budgetBarHeaderLabel, { color: Colors.text }]}>Monthly Budget Used</Text>
+                        <Text style={[
+                            s.budgetBarHeaderValue,
+                            { color: masterBudgetRatio >= 1 ? Colors.expense : masterBudgetRatio >= 0.8 ? '#F59E0B' : Colors.income }
+                        ]}>
+                            ₹{monthlyExpenses.toLocaleString('en-IN')} / ₹{totalMasterBudget.toLocaleString('en-IN')} ({Math.round(masterBudgetRatio * 100)}%)
+                        </Text>
+                    </View>
+                    <View style={[s.budgetBarTrackBg, { backgroundColor: Colors.border + '50' }]}>
+                        <View style={[
+                            s.budgetBarFillColor,
+                            {
+                                width: `${Math.min(100, Math.round(masterBudgetRatio * 100))}%`,
+                                backgroundColor: masterBudgetRatio >= 1 ? Colors.expense : masterBudgetRatio >= 0.8 ? '#F59E0B' : Colors.income
+                            }
+                        ]} />
                     </View>
                 </View>
             )}
 
-            {/* ── Net Balance Summary Card ─────────────────────────── */}
-            <HoverCard disabled={true} style={[s.summaryCard, { backgroundColor: Colors.surface, borderColor: Colors.border, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 4 }]}>
-                <Text style={[s.summaryLabel, { color: Colors.textMuted }]}>AVAILABLE BALANCE</Text>
-                <Text 
-                    numberOfLines={1} 
-                    adjustsFontSizeToFit 
-                    style={[s.totalBalance, { color: Colors.text }]}
-                >
-                    ₹{totalBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </Text>
-                <View style={[s.statsRow, { borderTopColor: Colors.border }]}>
-                    <View style={s.statItem}>
-                        <View style={[s.statIcon, { backgroundColor: Colors.income + '20' }]}>
-                            <Landmark color={Colors.income} size={16} />
-                        </View>
-                        <View style={{ flex: 1, minWidth: 0 }}>
-                            <Text style={[s.statLabel, { color: Colors.textMuted }]} numberOfLines={1}>Bank Balance</Text>
-                            <Text 
-                                numberOfLines={1} 
-                                adjustsFontSizeToFit 
-                                style={[s.statValue, { color: Colors.income }]}
+            {totalCreditDue > 0 && (
+                <View style={[s.dueAlertBanner, { backgroundColor: Colors.expense + '12', borderColor: Colors.expense + '30' }]}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+                        <AlertCircle size={15} color={Colors.expense} />
+                        <Text style={[s.dueAlertText, { color: Colors.expense }]} numberOfLines={1}>
+                            Total Credit Due: ₹{totalCreditDue.toLocaleString('en-IN')}
+                        </Text>
+                    </View>
+                    <TouchableOpacity
+                        style={[s.dueAlertBtn, { backgroundColor: Colors.expense }]}
+                        onPress={() => {
+                            const cardWithDue = creditCards.find(c => c.dueAmount > 0) || creditCards[0];
+                            if (cardWithDue) handleClearCard(cardWithDue.id);
+                        }}
+                    >
+                        <Text style={s.dueAlertBtnText}>Settle Due</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
+        </HoverCard>
+    );
+
+    const renderUpcomingBills = () => {
+        if (upcomingBillsDue.length === 0) return null;
+        return (
+            <View style={[s.billsAlertCard, { backgroundColor: Colors.surface, borderColor: '#F59E0B', borderLeftColor: '#F59E0B' }]}>
+                <View style={s.billsAlertHeader}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Bell size={15} color="#F59E0B" />
+                        <Text style={[s.billsAlertTitle, { color: Colors.text }]}>
+                            Upcoming Bill Reminders ({upcomingBillsDue.length})
+                        </Text>
+                    </View>
+                    <Text style={[s.billsAlertSubtitle, { color: Colors.textMuted }]}>Next 7 days</Text>
+                </View>
+
+                <View style={{ gap: 8 }}>
+                    {upcomingBillsDue.map(bill => (
+                        <View key={`alert-${bill.id}`} style={[s.billAlertItem, { backgroundColor: Colors.background, borderColor: Colors.border }]}>
+                            <View style={{ flex: 1, marginRight: 8 }}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                    <Text style={[s.billAlertName, { color: Colors.text }]}>{bill.name}</Text>
+                                    <View style={[
+                                        s.billUrgencyBadge,
+                                        { backgroundColor: bill.isUrgent ? Colors.expense + '15' : '#F59E0B15' }
+                                    ]}>
+                                        <Text style={[
+                                            s.billUrgencyBadgeText,
+                                            { color: bill.isUrgent ? Colors.expense : '#F59E0B' }
+                                        ]}>
+                                            {bill.badgeText}
+                                        </Text>
+                                    </View>
+                                </View>
+                                <Text style={[s.billAlertMeta, { color: Colors.textMuted }]}>
+                                    ₹{bill.amount.toLocaleString('en-IN')} • {getAccountName(bill.accountId)}
+                                </Text>
+                            </View>
+
+                            <TouchableOpacity
+                                style={[s.payBillActionBtn, { backgroundColor: Colors.primary }]}
+                                onPress={() => payRecurringBill(bill)}
                             >
-                                ₹{totalBankBalance.toLocaleString()}
-                            </Text>
+                                <Text style={s.payBillActionBtnText}>Mark Paid</Text>
+                            </TouchableOpacity>
                         </View>
-                    </View>
-                    <View style={s.statItem}>
-                        <View style={[s.statIcon, { backgroundColor: Colors.primary + '20' }]}>
-                            <Wallet color={Colors.primary} size={16} />
-                        </View>
-                        <View style={{ flex: 1, minWidth: 0 }}>
-                            <Text style={[s.statLabel, { color: Colors.textMuted }]} numberOfLines={1}>{cashAccountName || 'Cash in Hand'}</Text>
-                            <Text 
-                                numberOfLines={1} 
-                                adjustsFontSizeToFit 
-                                style={[s.statValue, { color: Colors.primary }]}
-                            >
-                                ₹{cashBalance.toLocaleString()}
-                            </Text>
-                        </View>
-                    </View>
+                    ))}
                 </View>
+            </View>
+        );
+    };
 
-                {/* Compact, elegant monthly budget stats banner directly integrated */}
-                <View style={{ 
-                    marginTop: 14, 
-                    paddingVertical: 10, 
-                    paddingHorizontal: 12, 
-                    borderRadius: 12, 
-                    backgroundColor: Colors.isDark ? '#ffffff05' : '#00000002',
-                    borderWidth: 1,
-                    borderColor: Colors.border
-                }}>
-                    {/* Row 1: Month Title & Savings */}
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                        <Text style={{ fontSize: 11, fontWeight: '700', color: Colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                            {format(new Date(), 'MMMM')} Summary
-                        </Text>
-                        <View style={{ backgroundColor: (monthlyIncome - monthlyExpenses) >= 0 ? Colors.income + '15' : Colors.expense + '15', paddingVertical: 2, paddingHorizontal: 8, borderRadius: 6 }}>
-                            <Text style={{ fontSize: 11, fontWeight: '700', color: (monthlyIncome - monthlyExpenses) >= 0 ? Colors.income : Colors.expense }}>
-                                Save: ₹{(monthlyIncome - monthlyExpenses).toLocaleString()}
-                            </Text>
-                        </View>
-                    </View>
-                    
-                    {/* Row 2: Inflow / Outflow side-by-side */}
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: Colors.border + '30', paddingTop: 8 }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                            <Text style={{ fontSize: 11, color: Colors.textMuted }}>In:</Text>
-                            <Text style={{ fontSize: 11, color: Colors.income, fontWeight: '600' }}>+₹{monthlyIncome.toLocaleString()}</Text>
-                        </View>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                            <Text style={{ fontSize: 11, color: Colors.textMuted }}>Out:</Text>
-                            <Text style={{ fontSize: 11, color: Colors.expense, fontWeight: '600' }}>-₹{monthlyExpenses.toLocaleString()}</Text>
-                        </View>
-                    </View>
-                </View>
-
-                {totalMasterBudget > 0 && (
-                    <View style={{
-                        marginTop: 12,
-                        backgroundColor: Colors.isDark ? '#ffffff05' : '#00000002',
-                        borderRadius: 12,
-                        padding: 10,
-                        borderWidth: 1,
-                        borderColor: Colors.border
-                    }}>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                            <Text style={{ fontSize: 11, fontWeight: '700', color: Colors.text }}>Monthly Budget Used</Text>
-                            <Text style={{ fontSize: 11, fontWeight: 'bold', color: masterBudgetRatio >= 1 ? Colors.expense : masterBudgetRatio >= 0.8 ? '#F59E0B' : Colors.income }}>
-                                ₹{monthlyExpenses.toLocaleString()} / ₹{totalMasterBudget.toLocaleString()} ({Math.round(masterBudgetRatio * 100)}%)
-                            </Text>
-                        </View>
-                        <View style={{ height: 6, backgroundColor: Colors.border + '40', borderRadius: 3, overflow: 'hidden' }}>
-                            <View style={{
-                                height: '100%',
-                                width: `${Math.min(100, Math.round(masterBudgetRatio * 100))}%`,
-                                backgroundColor: masterBudgetRatio >= 1 ? Colors.expense : masterBudgetRatio >= 0.8 ? '#F59E0B' : Colors.income,
-                                borderRadius: 3
-                            }} />
-                        </View>
-                    </View>
-                )}
-
-                {totalCreditDue > 0 && (
-                    <View style={[s.dueAlert, { backgroundColor: Colors.expense + '15', borderColor: Colors.expense + '30', marginTop: 10 }]}>
-                        <AlertCircle size={14} color={Colors.expense} />
-                        <Text style={[s.dueAlertText, { color: Colors.expense }]}>
-                            Total Credit Card Due: ₹{totalCreditDue.toLocaleString()}
-                        </Text>
-                    </View>
-                )}
-            </HoverCard>
-
-            {/* ── Dynamic & Interactive Financial Mindset Spark ────── */}
-            <Pressable
-                onPress={triggerNewQuote}
-                style={({ pressed }) => [
-                    {
-                        backgroundColor: Colors.surface,
-                        borderRadius: 16,
-                        padding: 16,
-                        borderWidth: 1,
-                        borderColor: Colors.border,
-                        borderLeftWidth: 4,
-                        borderLeftColor: Colors.primary,
-                        marginTop: 16,
-                        marginBottom: 8,
-                        flexDirection: 'row',
-                        gap: 12,
-                        alignItems: 'center',
-                        shadowColor: '#000',
-                        shadowOffset: { width: 0, height: 4 },
-                        shadowOpacity: pressed ? 0.02 : 0.05,
-                        shadowRadius: 8,
-                        elevation: 2,
-                    },
-                    pressed ? { transform: [{ scale: 0.99 }] } : undefined,
-                    Platform.OS === 'web' ? { cursor: 'pointer', transition: 'all 0.15s ease' } : undefined
-                ] as any}
-            >
-                <View style={{
-                    backgroundColor: Colors.primary + '15',
-                    padding: 10,
-                    borderRadius: 12,
-                    justifyContent: 'center',
-                    alignItems: 'center'
-                }}>
-                    <PiggyBank color={Colors.primary} size={22} />
-                </View>
-                <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                        <Text style={{
-                            color: Colors.textMuted,
-                            fontSize: 10,
-                            fontWeight: '700',
-                            textTransform: 'uppercase',
-                            letterSpacing: 0.5
-                        }}>
-                            — {MOTIVATIONAL_QUOTES[currentQuoteIndex].category} Spark
-                        </Text>
-                        <Text style={{
-                            color: Colors.primary,
-                            fontSize: 9,
-                            fontWeight: '700',
-                            textTransform: 'uppercase',
-                            letterSpacing: 0.5,
-                            opacity: 0.8
-                        }}>
+    const renderMindfulness = () => (
+        <Pressable
+            onPress={triggerNewQuote}
+            style={({ pressed }) => [
+                s.mindfulnessCard,
+                {
+                    backgroundColor: Colors.surface,
+                    borderColor: Colors.border,
+                    borderLeftColor: Colors.primary,
+                },
+                pressed ? { transform: [{ scale: 0.99 }] } : undefined,
+                Platform.OS === 'web' ? { cursor: 'pointer', transition: 'all 0.15s ease' } : undefined
+            ] as any}
+        >
+            <View style={[s.quoteIconCircle, { backgroundColor: Colors.primary + '15' }]}>
+                <PiggyBank color={Colors.primary} size={20} />
+            </View>
+            <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
+                <View style={s.quoteHeaderRow}>
+                    <Text style={[s.quoteCategoryTag, { color: Colors.textMuted }]}>
+                        — {MOTIVATIONAL_QUOTES[currentQuoteIndex].category} Spark
+                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                        <RotateCcw size={10} color={Colors.primary} />
+                        <Text style={[s.quoteRotateHint, { color: Colors.primary }]}>
                             Tap to rotate
                         </Text>
                     </View>
-                    <Text style={{
-                        color: Colors.text,
-                        fontSize: 13,
-                        fontWeight: '600',
-                        lineHeight: 18,
-                        fontStyle: 'italic'
-                    }}>
-                        "{MOTIVATIONAL_QUOTES[currentQuoteIndex].quote}"
-                    </Text>
-                    <Text style={{
-                        color: Colors.textMuted,
-                        fontSize: 11,
-                        fontWeight: '700',
-                        marginTop: 4,
-                        textTransform: 'uppercase',
-                        letterSpacing: 0.5
-                    }}>
-                        — {MOTIVATIONAL_QUOTES[currentQuoteIndex].author}
-                    </Text>
-                </Animated.View>
-            </Pressable>
-
-            {/* ── Dynamic AI Financial Tip of the Day Card ─────────── */}
-            <View style={{
-                backgroundColor: Colors.surface,
-                borderRadius: 16,
-                padding: 16,
-                borderWidth: 1,
-                borderColor: Colors.border,
-                borderLeftWidth: 4,
-                borderLeftColor: aiFinancialTip.type === 'positive' ? Colors.income : aiFinancialTip.type === 'warning' ? '#F59E0B' : aiFinancialTip.type === 'danger' ? Colors.expense : Colors.primary,
-                marginTop: 8,
-                marginBottom: 16,
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.04,
-                shadowRadius: 6,
-                elevation: 2
-            }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                    <View style={{
-                        backgroundColor: (aiFinancialTip.type === 'positive' ? Colors.income : aiFinancialTip.type === 'warning' ? '#F59E0B' : aiFinancialTip.type === 'danger' ? Colors.expense : Colors.primary) + '15',
-                        padding: 6,
-                        borderRadius: 8
-                    }}>
-                        <Sparkles size={16} color={aiFinancialTip.type === 'positive' ? Colors.income : aiFinancialTip.type === 'warning' ? '#F59E0B' : aiFinancialTip.type === 'danger' ? Colors.expense : Colors.primary} />
-                    </View>
-                    <Text style={{ fontSize: 13, fontWeight: '700', color: Colors.text }}>
-                        {aiFinancialTip.title}
-                    </Text>
                 </View>
-                <Text style={{ fontSize: 12, color: Colors.textMuted, lineHeight: 18 }}>
-                    {aiFinancialTip.message}
+                <Text style={[s.quoteBodyText, { color: Colors.text }]}>
+                    "{MOTIVATIONAL_QUOTES[currentQuoteIndex].quote}"
+                </Text>
+                <Text style={[s.quoteAuthorText, { color: Colors.textMuted }]}>
+                    — {MOTIVATIONAL_QUOTES[currentQuoteIndex].author}
+                </Text>
+            </Animated.View>
+        </Pressable>
+    );
+
+    const renderAiInsight = () => (
+        <View style={[
+            s.aiInsightCard,
+            {
+                backgroundColor: Colors.surface,
+                borderColor: Colors.border,
+                borderLeftColor: aiFinancialTip.type === 'positive' ? Colors.income : aiFinancialTip.type === 'warning' ? '#F59E0B' : aiFinancialTip.type === 'danger' ? Colors.expense : Colors.primary,
+            }
+        ]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <View style={[
+                    s.aiInsightIconBadge,
+                    {
+                        backgroundColor: (aiFinancialTip.type === 'positive' ? Colors.income : aiFinancialTip.type === 'warning' ? '#F59E0B' : aiFinancialTip.type === 'danger' ? Colors.expense : Colors.primary) + '15'
+                    }
+                ]}>
+                    <Sparkles size={15} color={aiFinancialTip.type === 'positive' ? Colors.income : aiFinancialTip.type === 'warning' ? '#F59E0B' : aiFinancialTip.type === 'danger' ? Colors.expense : Colors.primary} />
+                </View>
+                <Text style={[s.aiInsightTitle, { color: Colors.text }]}>
+                    {aiFinancialTip.title}
                 </Text>
             </View>
+            <Text style={[s.aiInsightMessage, { color: Colors.textMuted }]}>
+                {aiFinancialTip.message}
+            </Text>
+        </View>
+    );
 
-            {/* ── Category Budgets ─────────────────────────────────── */}
+    const renderCategoryBudgets = () => (
+        <View style={{ marginBottom: 16 }}>
             <View style={s.sectionHeader}>
                 <Text style={[s.sectionTitle, { color: Colors.text }]}>Category Budgets</Text>
-                <TouchableOpacity 
+                <TouchableOpacity
                     onPress={() => router.push('/set-budgets')}
                     style={[s.addAccountBtn, { backgroundColor: Colors.primary }]}
+                    accessibilityLabel="Set category budgets"
                 >
-                    <Pencil size={14} color="#fff" />
+                    <Pencil size={13} color="#fff" />
                 </TouchableOpacity>
             </View>
 
             {activeBudgets.length === 0 ? (
-                <TouchableOpacity 
+                <TouchableOpacity
                     onPress={() => router.push('/set-budgets')}
-                    style={[s.emptyCard, { borderColor: Colors.border }]}
+                    style={[s.emptyCard, { borderColor: Colors.border, backgroundColor: Colors.surface }]}
                 >
                     <Plus size={16} color={Colors.textMuted} />
                     <Text style={[s.emptyText, { color: Colors.textMuted }]}>Set your monthly budgets</Text>
                 </TouchableOpacity>
             ) : (
                 <HoverCard disabled={true} style={[s.budgetContainerCard, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
-                    <View style={{ gap: 16 }}>
+                    <View style={{ gap: 14 }}>
                         {activeBudgets.map(budget => {
                             const isExceeded = budget.ratio >= 1.0;
                             const isWarning = budget.ratio >= 0.8 && budget.ratio < 1.0;
-                            
+
                             let barColor = budget.color;
                             if (isExceeded) barColor = Colors.expense;
                             else if (isWarning) barColor = '#FF9800';
 
                             return (
                                 <View key={budget.name} style={s.budgetRow}>
-                                    {/* Category Title & Info */}
                                     <View style={s.budgetInfoRow}>
                                         <View style={s.budgetLabelCol}>
-                                            <View style={[s.budgetIconBg, { backgroundColor: budget.color + '15' }]}>
-                                                <IconRenderer name={budget.icon} color={budget.color} size={16} />
+                                            <View style={[s.budgetIconBg, { backgroundColor: budget.color + '18' }]}>
+                                                <IconRenderer name={budget.icon} color={budget.color} size={15} />
                                             </View>
                                             <Text style={[s.budgetName, { color: Colors.text }]}>{budget.name}</Text>
                                         </View>
                                         <View style={{ alignItems: 'flex-end' }}>
                                             <Text style={[s.budgetAmountText, { color: Colors.text }]}>
-                                                ₹{budget.spent.toLocaleString()} <Text style={{ color: Colors.textMuted, fontSize: 11, fontWeight: 'normal' }}>of ₹{budget.limit.toLocaleString()}</Text>
+                                                ₹{budget.spent.toLocaleString('en-IN')} <Text style={{ color: Colors.textMuted, fontSize: 11, fontWeight: 'normal' }}>of ₹{budget.limit.toLocaleString('en-IN')}</Text>
                                             </Text>
                                             {isExceeded && (
-                                                <Text style={{ fontSize: 10, color: Colors.expense, fontWeight: '700', marginTop: 2 }}>
-                                                    Over by ₹{(budget.spent - budget.limit).toLocaleString()}
+                                                <Text style={{ fontSize: 9.5, color: Colors.expense, fontWeight: '700', marginTop: 1 }}>
+                                                    Over by ₹{(budget.spent - budget.limit).toLocaleString('en-IN')}
                                                 </Text>
                                             )}
                                         </View>
                                     </View>
 
-                                    {/* Progress Bar Track */}
-                                    <View style={[s.budgetBarTrack, { backgroundColor: Colors.border + '30' }]}>
+                                    <View style={[s.budgetBarTrack, { backgroundColor: Colors.border + '40' }]}>
                                         <View style={[s.budgetBarFill, { width: `${budget.percent}%`, backgroundColor: barColor }]} />
                                     </View>
                                 </View>
@@ -1030,28 +784,32 @@ export default function HomeDashboard() {
                     </View>
                 </HoverCard>
             )}
+        </View>
+    );
 
-            {/* ── Savings Goals ────────────────────────────────────── */}
+    const renderSavingsGoals = () => (
+        <View style={{ marginBottom: 16 }}>
             <View style={s.sectionHeader}>
                 <Text style={[s.sectionTitle, { color: Colors.text }]}>Savings Goals</Text>
-                <TouchableOpacity 
+                <TouchableOpacity
                     onPress={() => setIsCreateGoalOpen(true)}
                     style={[s.addAccountBtn, { backgroundColor: Colors.primary }]}
+                    accessibilityLabel="Create savings goal"
                 >
                     <Plus size={14} color="#fff" />
                 </TouchableOpacity>
             </View>
 
             {savingsGoals.length === 0 ? (
-                <TouchableOpacity 
+                <TouchableOpacity
                     onPress={() => setIsCreateGoalOpen(true)}
-                    style={[s.emptyCard, { borderColor: Colors.border }]}
+                    style={[s.emptyCard, { borderColor: Colors.border, backgroundColor: Colors.surface }]}
                 >
                     <Plus size={16} color={Colors.textMuted} />
                     <Text style={[s.emptyText, { color: Colors.textMuted }]}>Create your first savings goal</Text>
                 </TouchableOpacity>
             ) : (
-                <View style={{ gap: 12, marginBottom: 16 }}>
+                <View style={{ gap: 10 }}>
                     {savingsGoals.map(goal => {
                         const progress = goal.targetAmount > 0 ? goal.currentAmount / goal.targetAmount : 0;
                         const percent = Math.min(100, Math.round(progress * 100));
@@ -1063,23 +821,23 @@ export default function HomeDashboard() {
                                         <Text style={[s.goalName, { color: Colors.text }]}>{goal.name}</Text>
                                     </View>
                                     <TouchableOpacity onPress={() => deleteSavingsGoal(goal.id)} style={{ padding: 4 }}>
-                                        <Trash2 size={14} color={Colors.expense} />
+                                        <Trash2 size={13} color={Colors.expense} />
                                     </TouchableOpacity>
                                 </View>
 
                                 <View style={s.goalDetails}>
                                     <Text style={[s.goalAmountText, { color: Colors.text }]}>
-                                        ₹{goal.currentAmount.toLocaleString()} <Text style={{ color: Colors.textMuted, fontSize: 11, fontWeight: 'normal' }}>of ₹{goal.targetAmount.toLocaleString()}</Text>
+                                        ₹{goal.currentAmount.toLocaleString('en-IN')} <Text style={{ color: Colors.textMuted, fontSize: 11, fontWeight: 'normal' }}>of ₹{goal.targetAmount.toLocaleString('en-IN')}</Text>
                                     </Text>
                                     <Text style={[s.goalPercent, { color: goal.color, fontWeight: '700' }]}>{percent}%</Text>
                                 </View>
 
-                                <View style={[s.goalTrack, { backgroundColor: Colors.border + '30' }]}>
+                                <View style={[s.goalTrack, { backgroundColor: Colors.border + '40' }]}>
                                     <View style={[s.goalFill, { width: `${percent}%`, backgroundColor: goal.color }]} />
                                 </View>
 
-                                <TouchableOpacity 
-                                    style={[s.allocateBtn, { borderColor: goal.color + '40', backgroundColor: goal.color + '10' }]}
+                                <TouchableOpacity
+                                    style={[s.allocateBtn, { borderColor: goal.color + '40', backgroundColor: goal.color + '12' }]}
                                     onPress={() => {
                                         setSelectedGoal(goal);
                                         setAllocateAmount('');
@@ -1095,28 +853,32 @@ export default function HomeDashboard() {
                     })}
                 </View>
             )}
+        </View>
+    );
 
-            {/* ── Subscriptions & Recurring Bills ───────────────────── */}
+    const renderRecurringBills = () => (
+        <View style={{ marginBottom: 16 }}>
             <View style={s.sectionHeader}>
                 <Text style={[s.sectionTitle, { color: Colors.text }]}>Recurring Bills & Subs</Text>
-                <TouchableOpacity 
+                <TouchableOpacity
                     onPress={() => setIsAddBillOpen(true)}
                     style={[s.addAccountBtn, { backgroundColor: Colors.primary }]}
+                    accessibilityLabel="Add recurring bill"
                 >
                     <Plus size={14} color="#fff" />
                 </TouchableOpacity>
             </View>
 
             {recurringBills.length === 0 ? (
-                <TouchableOpacity 
+                <TouchableOpacity
                     onPress={() => setIsAddBillOpen(true)}
-                    style={[s.emptyCard, { borderColor: Colors.border }]}
+                    style={[s.emptyCard, { borderColor: Colors.border, backgroundColor: Colors.surface }]}
                 >
                     <Plus size={16} color={Colors.textMuted} />
                     <Text style={[s.emptyText, { color: Colors.textMuted }]}>Add your first subscription or bill</Text>
                 </TouchableOpacity>
             ) : (
-                <View style={{ gap: 12, marginBottom: 24 }}>
+                <View style={{ gap: 10 }}>
                     {recurringBills.map(bill => {
                         const currentMonthStr = format(new Date(), 'yyyy-MM');
                         const isPaid = bill.lastPaidMonth === currentMonthStr;
@@ -1125,36 +887,36 @@ export default function HomeDashboard() {
                         return (
                             <HoverCard key={bill.id} disabled={true} style={[s.billCard, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
                                 <View style={s.billInfo}>
-                                    <View style={{ flex: 1 }}>
+                                    <View style={{ flex: 1, marginRight: 8 }}>
                                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                                             <Text style={[s.billName, { color: Colors.text }]} numberOfLines={1}>{bill.name}</Text>
-                                            <View style={[s.billCategoryTag, { backgroundColor: Colors.border + '40' }]}>
+                                            <View style={[s.billCategoryTag, { backgroundColor: Colors.border + '50' }]}>
                                                 <Text style={[s.billCategoryTagText, { color: Colors.textMuted }]}>{bill.category}</Text>
                                             </View>
                                         </View>
-                                        <Text style={{ fontSize: 11, color: Colors.textMuted, marginTop: 4 }}>
-                                            Due day {bill.dueDate} • Paid via {accountName}
+                                        <Text style={{ fontSize: 10.5, color: Colors.textMuted, marginTop: 3 }}>
+                                            Due day {bill.dueDate} • via {accountName}
                                         </Text>
                                     </View>
-                                    
-                                    <View style={{ alignItems: 'center', flexDirection: 'row', gap: 12 }}>
-                                        <Text style={[s.billAmount, { color: Colors.text }]}>₹{bill.amount.toLocaleString()}</Text>
-                                        
+
+                                    <View style={{ alignItems: 'center', flexDirection: 'row', gap: 10 }}>
+                                        <Text style={[s.billAmount, { color: Colors.text }]}>₹{bill.amount.toLocaleString('en-IN')}</Text>
+
                                         {isPaid ? (
                                             <View style={s.paidStatusBadge}>
                                                 <CheckCircle size={16} color="#4CAF50" />
                                             </View>
                                         ) : (
-                                            <TouchableOpacity 
+                                            <TouchableOpacity
                                                 style={[s.payBillBtn, { backgroundColor: Colors.primary }]}
                                                 onPress={() => payRecurringBill(bill)}
                                             >
                                                 <Text style={s.payBillBtnText}>Pay</Text>
                                             </TouchableOpacity>
                                         )}
-                                        
+
                                         <TouchableOpacity onPress={() => deleteRecurringBill(bill.id)} style={{ padding: 4 }}>
-                                            <Trash2 size={14} color={Colors.expense} />
+                                            <Trash2 size={13} color={Colors.expense} />
                                         </TouchableOpacity>
                                     </View>
                                 </View>
@@ -1163,143 +925,167 @@ export default function HomeDashboard() {
                     })}
                 </View>
             )}
+        </View>
+    );
 
-            {/* ── Cash ─────────────────────────────────────────────── */}
+    const renderCashAccount = () => (
+        <View style={{ marginBottom: 16 }}>
             <View style={[s.sectionHeader]}>
                 <Text style={[s.sectionTitle, { color: Colors.text }]}>{cashAccountName}</Text>
-                <TouchableOpacity onPress={handleRenameCash} style={{ padding: 4 }}>
-                    <Pencil size={14} color={Colors.textMuted} />
+                <TouchableOpacity onPress={handleRenameCash} style={{ padding: 4 }} accessibilityLabel="Rename cash account">
+                    <Pencil size={13} color={Colors.textMuted} />
                 </TouchableOpacity>
             </View>
-            <HoverCard 
+            <HoverCard
                 style={[s.cashCard, { backgroundColor: Colors.surface, borderColor: Colors.border }]}
                 onPress={() => router.push({ pathname: '/reports', params: { accountId: 'cash' } })}
             >
-                <View style={[s.accountIcon, { backgroundColor: '#4CAF5020' }]}>
-                    <Wallet color="#4CAF50" size={22} />
+                <View style={[s.accountIcon, { backgroundColor: '#4CAF5018', marginBottom: 0 }]}>
+                    <Wallet color="#4CAF50" size={20} />
                 </View>
                 <View style={{ flex: 1 }}>
                     <Text style={[s.accountName, { color: Colors.textMuted }]}>{cashAccountName}</Text>
-                    <Text style={[s.accountBalance, { color: Colors.text }]}>₹{cashBalance.toLocaleString()}</Text>
+                    <Text style={[s.accountBalance, { color: Colors.text }]}>₹{cashBalance.toLocaleString('en-IN')}</Text>
                 </View>
+                <ChevronRight size={16} color={Colors.textMuted} />
             </HoverCard>
+        </View>
+    );
 
-            {/* ── Bank Accounts ─────────────────────────────────────── */}
+    const renderBankAccounts = () => (
+        <View style={{ marginBottom: 16 }}>
             <View style={s.sectionHeader}>
                 <Text style={[s.sectionTitle, { color: Colors.text }]}>Bank Accounts</Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                    <Text style={[s.sectionTotal, { color: Colors.income }]}>₹{totalBankBalance.toLocaleString()}</Text>
-                    <TouchableOpacity onPress={() => router.push('/manage-accounts')}
-                        style={[s.addAccountBtn, { backgroundColor: Colors.primary }]}>
+                    <Text style={[s.sectionTotal, { color: Colors.income }]}>₹{totalBankBalance.toLocaleString('en-IN')}</Text>
+                    <TouchableOpacity
+                        onPress={() => router.push('/manage-accounts')}
+                        style={[s.addAccountBtn, { backgroundColor: Colors.primary }]}
+                        accessibilityLabel="Manage bank accounts"
+                    >
                         <Plus size={14} color="#fff" />
                     </TouchableOpacity>
                 </View>
             </View>
             {bankAccounts.length === 0 ? (
-                <TouchableOpacity onPress={() => router.push('/manage-accounts')}
-                    style={[s.emptyCard, { borderColor: Colors.border }]}>
+                <TouchableOpacity
+                    onPress={() => router.push('/manage-accounts')}
+                    style={[s.emptyCard, { borderColor: Colors.border, backgroundColor: Colors.surface }]}
+                >
                     <Plus size={16} color={Colors.textMuted} />
                     <Text style={[s.emptyText, { color: Colors.textMuted }]}>Add your first bank account</Text>
                 </TouchableOpacity>
             ) : (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.hScroll}>
                     {bankAccounts.map(acc => (
-                        <HoverCard 
-                            key={acc.id} 
-                            style={[s.bankCard, { backgroundColor: Colors.surface, borderColor: Colors.border, borderTopColor: acc.color, borderTopWidth: 3 }]}
+                        <HoverCard
+                            key={acc.id}
+                            style={[s.bankCard, { backgroundColor: Colors.surface, borderColor: Colors.border, borderTopColor: acc.color, borderTopWidth: 3.5 }]}
                             onPress={() => router.push({ pathname: '/reports', params: { accountId: acc.id } })}
                         >
-                            <View style={[s.accountIcon, { backgroundColor: acc.color + '20' }]}>
-                                <Landmark color={acc.color} size={20} />
+                            <View style={[s.accountIcon, { backgroundColor: acc.color + '18' }]}>
+                                <Landmark color={acc.color} size={18} />
                             </View>
-                            <Text style={[s.accountName, { color: Colors.textMuted }]} numberOfLines={1}>{acc.bankName}</Text>
+                            <Text style={[s.accountName, { color: Colors.text }]} numberOfLines={1}>{acc.bankName}</Text>
                             <Text style={[s.accountType, { color: Colors.textMuted }]}>{acc.accountType}</Text>
-                            <Text style={[s.accountBalance, { color: Colors.text }]}>₹{acc.computedBalance.toLocaleString()}</Text>
+                            <Text style={[s.accountBalance, { color: Colors.text }]}>₹{acc.computedBalance.toLocaleString('en-IN')}</Text>
                         </HoverCard>
                     ))}
-                    <HoverCard onPress={() => router.push('/manage-accounts')}
-                        style={[s.bankCard, s.addCard, { borderColor: Colors.border }]}>
-                        <Plus size={24} color={Colors.textMuted} />
-                        <Text style={[{ color: Colors.textMuted, fontSize: 12, marginTop: 4 }]}>Add</Text>
+                    <HoverCard
+                        onPress={() => router.push('/manage-accounts')}
+                        style={[s.bankCard, s.addCard, { borderColor: Colors.border, backgroundColor: Colors.surface }]}
+                    >
+                        <Plus size={22} color={Colors.textMuted} />
+                        <Text style={{ color: Colors.textMuted, fontSize: 12, marginTop: 4, fontWeight: '600' }}>Add Bank</Text>
                     </HoverCard>
                 </ScrollView>
             )}
+        </View>
+    );
 
-            {/* ── Credit Cards ──────────────────────────────────────── */}
+    const renderCreditCards = () => (
+        <View style={{ marginBottom: 16 }}>
             <View style={s.sectionHeader}>
                 <Text style={[s.sectionTitle, { color: Colors.text }]}>Credit Cards</Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                     {totalCreditDue > 0 && (
-                        <Text style={[s.sectionTotal, { color: Colors.expense }]}>Due ₹{totalCreditDue.toLocaleString()}</Text>
+                        <Text style={[s.sectionTotal, { color: Colors.expense }]}>Due ₹{totalCreditDue.toLocaleString('en-IN')}</Text>
                     )}
-                    <TouchableOpacity onPress={() => router.push('/manage-accounts?tab=credit')}
-                        style={[s.addAccountBtn, { backgroundColor: '#EF4444' }]}>
+                    <TouchableOpacity
+                        onPress={() => router.push('/manage-accounts?tab=credit')}
+                        style={[s.addAccountBtn, { backgroundColor: '#EF4444' }]}
+                        accessibilityLabel="Manage credit cards"
+                    >
                         <Plus size={14} color="#fff" />
                     </TouchableOpacity>
                 </View>
             </View>
             {creditCards.length === 0 ? (
-                <TouchableOpacity onPress={() => router.push('/manage-accounts?tab=credit')}
-                    style={[s.emptyCard, { borderColor: Colors.border }]}>
+                <TouchableOpacity
+                    onPress={() => router.push('/manage-accounts?tab=credit')}
+                    style={[s.emptyCard, { borderColor: Colors.border, backgroundColor: Colors.surface }]}
+                >
                     <Plus size={16} color={Colors.textMuted} />
                     <Text style={[s.emptyText, { color: Colors.textMuted }]}>Add your first credit card</Text>
                 </TouchableOpacity>
             ) : (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.hScroll}>
                     {creditCards.map(card => (
-                        <HoverCard 
-                            key={card.id} 
-                            style={[s.bankCard, { width: 170, padding: 12, backgroundColor: Colors.surface, borderColor: Colors.border, borderTopColor: card.color, borderTopWidth: 3 }]}
+                        <HoverCard
+                            key={card.id}
+                            style={[
+                                s.bankCard,
+                                {
+                                    width: 175,
+                                    padding: 12,
+                                    backgroundColor: Colors.surface,
+                                    borderColor: Colors.border,
+                                    borderTopColor: card.color,
+                                    borderTopWidth: 3.5
+                                }
+                            ]}
                             onPress={() => router.push({ pathname: '/reports', params: { accountId: card.id } })}
                         >
                             <View style={{ position: 'absolute', top: 8, right: 8, zIndex: 1 }}>
                                 <Pressable onPress={() => handleClearCard(card.id)} hitSlop={8}>
-                                    <RotateCcw size={10} color={Colors.textMuted} />
+                                    <RotateCcw size={11} color={Colors.textMuted} />
                                 </Pressable>
                             </View>
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                                <View style={[s.accountIcon, { width: 28, height: 28, marginBottom: 0, backgroundColor: card.color + '20' }]}>
+                                <View style={[s.accountIcon, { width: 28, height: 28, marginBottom: 0, backgroundColor: card.color + '18' }]}>
                                     <CreditCard color={card.color} size={14} />
                                 </View>
                                 <View style={{ flex: 1 }}>
                                     <Text style={[s.accountName, { color: Colors.text, fontWeight: '700' }]} numberOfLines={1}>{card.cardName}</Text>
-                                    <Text style={{ fontSize: 9, color: Colors.textMuted }}>Due on {card.dueDay}</Text>
+                                    <Text style={{ fontSize: 9.5, color: Colors.textMuted }}>Due on {card.dueDay}</Text>
                                 </View>
                             </View>
 
-                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 }}>
                                 <View>
-                                    <Text style={{ fontSize: 8, color: Colors.textMuted, textTransform: 'uppercase' }}>Limit</Text>
-                                    <Text style={{ fontSize: 11, fontWeight: '700', color: Colors.text }}>₹{card.creditLimit.toLocaleString()}</Text>
+                                    <Text style={{ fontSize: 8.5, color: Colors.textMuted, textTransform: 'uppercase' }}>Limit</Text>
+                                    <Text style={{ fontSize: 11, fontWeight: '700', color: Colors.text }}>₹{card.creditLimit.toLocaleString('en-IN')}</Text>
                                 </View>
                                 <View style={{ alignItems: 'flex-end' }}>
-                                    <Text style={{ fontSize: 8, color: Colors.textMuted, textTransform: 'uppercase' }}>Used</Text>
-                                    <Text style={{ fontSize: 11, fontWeight: '700', color: Colors.expense }}>₹{card.usedAmount.toLocaleString()}</Text>
+                                    <Text style={{ fontSize: 8.5, color: Colors.textMuted, textTransform: 'uppercase' }}>Used</Text>
+                                    <Text style={{ fontSize: 11, fontWeight: '700', color: Colors.expense }}>₹{card.usedAmount.toLocaleString('en-IN')}</Text>
                                 </View>
                             </View>
 
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                                 <View>
-                                    <Text style={{ fontSize: 8, color: Colors.textMuted, textTransform: 'uppercase' }}>Avail</Text>
-                                    <Text style={{ fontSize: 11, fontWeight: '700', color: Colors.income }}>₹{card.availableBalance.toLocaleString()}</Text>
+                                    <Text style={{ fontSize: 8.5, color: Colors.textMuted, textTransform: 'uppercase' }}>Avail</Text>
+                                    <Text style={{ fontSize: 11, fontWeight: '700', color: Colors.income }}>₹{card.availableBalance.toLocaleString('en-IN')}</Text>
                                 </View>
                                 <View style={{ alignItems: 'flex-end' }}>
-                                    <Text style={{ fontSize: 8, color: Colors.textMuted, textTransform: 'uppercase' }}>Due</Text>
-                                    <Text style={{ fontSize: 11, fontWeight: '700', color: card.dueAmount > 0 ? Colors.expense : Colors.text }}>₹{card.dueAmount.toLocaleString()}</Text>
+                                    <Text style={{ fontSize: 8.5, color: Colors.textMuted, textTransform: 'uppercase' }}>Due</Text>
+                                    <Text style={{ fontSize: 11, fontWeight: '700', color: card.dueAmount > 0 ? Colors.expense : Colors.text }}>₹{card.dueAmount.toLocaleString('en-IN')}</Text>
                                 </View>
                             </View>
 
                             {card.usedAmount > 0 && (
                                 <TouchableOpacity
-                                    style={{
-                                        marginTop: 8,
-                                        backgroundColor: Colors.primary + '15',
-                                        borderColor: Colors.primary + '30',
-                                        borderWidth: 1,
-                                        borderRadius: 8,
-                                        paddingVertical: 4,
-                                        alignItems: 'center'
-                                    }}
+                                    style={[s.payCardBtn, { backgroundColor: Colors.primary + '14', borderColor: Colors.primary + '30' }]}
                                     onPress={(e: any) => {
                                         if (e && e.stopPropagation) e.stopPropagation();
                                         router.push({
@@ -1313,52 +1099,62 @@ export default function HomeDashboard() {
                                         });
                                     }}
                                 >
-                                    <Text style={{ fontSize: 10, fontWeight: '700', color: Colors.primary }}>Pay Card Bill</Text>
+                                    <Text style={[s.payCardBtnText, { color: Colors.primary }]}>Pay Card Bill</Text>
                                 </TouchableOpacity>
                             )}
                         </HoverCard>
                     ))}
-                    <HoverCard onPress={() => router.push('/manage-accounts?tab=credit')}
-                        style={[s.bankCard, s.addCard, { width: 100, borderColor: Colors.border }]}>
-                        <Plus size={24} color={Colors.textMuted} />
-                        <Text style={[{ color: Colors.textMuted, fontSize: 12, marginTop: 4 }]}>Add</Text>
+                    <HoverCard
+                        onPress={() => router.push('/manage-accounts?tab=credit')}
+                        style={[s.bankCard, s.addCard, { width: 110, borderColor: Colors.border, backgroundColor: Colors.surface }]}
+                    >
+                        <Plus size={22} color={Colors.textMuted} />
+                        <Text style={{ color: Colors.textMuted, fontSize: 12, marginTop: 4, fontWeight: '600' }}>Add Card</Text>
                     </HoverCard>
                 </ScrollView>
             )}
+        </View>
+    );
 
-            {/* ── Recent Transactions ───────────────────────────────── */}
-            <View style={[s.sectionHeader, { marginTop: 8 }]}>
-                <Text style={[s.sectionTitle, { color: Colors.text }]}>Recent Transactions</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                    {loading && <ActivityIndicator size="small" color={Colors.primary} />}
-                    <TouchableOpacity onPress={refreshData}>
-                        <RotateCcw size={16} color={Colors.textMuted} />
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => router.push('/transactions')}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                            <Text style={[s.seeAll, { color: Colors.primary }]}>See All </Text>
-                            <ArrowRight size={14} color={Colors.primary} />
-                        </View>
-                    </TouchableOpacity>
+    const renderRecentTransactions = () => {
+        const allCategories = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES, ...TRANSFER_CATEGORIES];
+        return (
+            <View style={{ marginBottom: 20 }}>
+                <View style={[s.sectionHeader, { marginTop: 4 }]}>
+                    <Text style={[s.sectionTitle, { color: Colors.text }]}>Recent Transactions</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                        {loading && <ActivityIndicator size="small" color={Colors.primary} />}
+                        <TouchableOpacity onPress={refreshData} accessibilityLabel="Refresh data">
+                            <RotateCcw size={15} color={Colors.textMuted} />
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => router.push('/transactions')}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                <Text style={[s.seeAll, { color: Colors.primary }]}>See All </Text>
+                                <ArrowRight size={13} color={Colors.primary} />
+                            </View>
+                        </TouchableOpacity>
+                    </View>
                 </View>
-            </View>
-            {(() => {
-                const allCategories = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES, ...TRANSFER_CATEGORIES];
-                return currentMonthTransactions.slice(0, 5).map(tx => {
+
+                {currentMonthTransactions.slice(0, 5).map(tx => {
                     const isTransfer = tx.type === 'TRANSFER';
-                    const categoryData = allCategories.find(c => c.name === tx.category && c.type === tx.type) || 
-                                       allCategories.find(c => c.name === tx.category) ||
-                                       { icon: isTransfer ? 'rotate-ccw' : 'package', color: isTransfer ? Colors.primary : Colors.textMuted };
-                    
+                    const categoryData = allCategories.find(c => c.name === tx.category && c.type === tx.type) ||
+                        allCategories.find(c => c.name === tx.category) ||
+                        { icon: isTransfer ? 'rotate-ccw' : 'package', color: isTransfer ? Colors.primary : Colors.textMuted };
+
                     const fromAccName = getAccountName(tx.accountId);
                     const toAccName = tx.toAccountId ? getAccountName(tx.toAccountId) : '';
                     const accountDisplay = isTransfer && toAccName ? `${fromAccName} ➔ ${toAccName}` : fromAccName;
 
                     return (
-                        <HoverCard disabled={true} key={tx.id} style={[s.txItem, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
-                            <View style={[s.txHeader, { 
+                        <HoverCard
+                            disabled={true}
+                            key={tx.id}
+                            style={[s.txItem, { backgroundColor: Colors.surface, borderColor: Colors.border }]}
+                        >
+                            <View style={[s.txHeader, {
                                 borderBottomColor: Colors.border + '30',
-                                backgroundColor: Colors.isDark ? '#ffffff05' : '#00000003' 
+                                backgroundColor: Colors.isDark ? '#ffffff05' : '#00000003'
                             }]}>
                                 <Text style={[s.txCategory, { color: Colors.text }]}>{tx.category || (isTransfer ? 'Self Transfer' : '')}</Text>
                                 {tx.note && (
@@ -1369,420 +1165,942 @@ export default function HomeDashboard() {
                             </View>
 
                             <View style={s.txBody}>
-                                <View style={[s.txIcon, { backgroundColor: (categoryData.color || Colors.primary) + '15', marginHorizontal: 0 }]}>
-                                    <IconRenderer name={categoryData.icon} color={categoryData.color || Colors.primary} size={18} />
+                                <View style={[s.txIcon, { backgroundColor: (categoryData.color || Colors.primary) + '15' }]}>
+                                    <IconRenderer name={categoryData.icon} color={categoryData.color || Colors.primary} size={16} />
                                 </View>
-                                
-                                <View style={{ marginLeft: 16, flex: 1 }}>
-                                    <Text style={[s.txAccountTag, { color: Colors.textMuted, marginTop: 0 }]} numberOfLines={1}>
+
+                                <View style={{ marginLeft: 12, flex: 1 }}>
+                                    <Text style={[s.txAccountTag, { color: Colors.textMuted }]} numberOfLines={1}>
                                         {accountDisplay} • {format(new Date(tx.date), 'MMM d')}
                                     </Text>
                                 </View>
 
                                 <View style={{ alignItems: 'flex-end' }}>
                                     <Text style={[s.txAmount, { color: tx.type === 'INCOME' ? Colors.income : tx.type === 'EXPENSE' ? Colors.expense : Colors.primary }]}>
-                                        {tx.type === 'INCOME' ? '+' : tx.type === 'EXPENSE' ? '-' : '⇄ '}₹{tx.amount.toLocaleString()}
+                                        {tx.type === 'INCOME' ? '+' : tx.type === 'EXPENSE' ? '-' : '⇄ '}₹{Number(tx.amount).toLocaleString('en-IN')}
                                     </Text>
                                 </View>
                             </View>
                         </HoverCard>
                     );
-                });
-            })()}
-            {currentMonthTransactions.length === 0 && (
-                <View style={[s.emptyCard, { borderColor: Colors.border, flexDirection: 'column', gap: 4, padding: 32 }]}>
-                    <Text style={[s.emptyText, { color: Colors.textMuted }]}>No transactions this month.</Text>
-                    <Text style={[{ color: Colors.textMuted, fontSize: 12 }]}>Tap '+' to start tracking!</Text>
+                })}
+
+                {currentMonthTransactions.length === 0 && (
+                    <View style={[s.emptyCard, { borderColor: Colors.border, backgroundColor: Colors.surface, flexDirection: 'column', gap: 4, padding: 28 }]}>
+                        <Text style={[s.emptyText, { color: Colors.textMuted }]}>No transactions this month.</Text>
+                        <Text style={{ color: Colors.textMuted, fontSize: 12 }}>Tap '+' or quick actions to start tracking!</Text>
+                    </View>
+                )}
+            </View>
+        );
+    };
+
+    return (
+        <>
+            {/* Settle / Pay Card Modal */}
+            <Modal visible={!!confirmCardId} transparent animationType="fade" onRequestClose={() => setConfirmCardId(null)}>
+                <Pressable style={s.modalOverlay} onPress={() => setConfirmCardId(null)}>
+                    <Pressable style={[s.modalBox, { backgroundColor: Colors.surface, width: '92%', maxWidth: 400 }]} onPress={(e) => e.stopPropagation()}>
+                        <View style={s.modalHeaderRow}>
+                            <Text style={[s.modalTitle, { color: Colors.text }]}>Record Card Payment</Text>
+                            <TouchableOpacity onPress={() => setConfirmCardId(null)} hitSlop={8}>
+                                <X size={20} color={Colors.textMuted} />
+                            </TouchableOpacity>
+                        </View>
+
+                        {(() => {
+                            const card = creditCards.find(c => c.id === confirmCardId);
+                            if (!card) return null;
+                            return (
+                                <>
+                                    <Text style={[s.modalMsg, { color: Colors.textMuted }]}>
+                                        Settle balance on <Text style={{ color: Colors.text, fontWeight: '700' }}>{card.cardName}</Text> (Total Due: <Text style={{ color: Colors.expense, fontWeight: '700' }}>₹{card.dueAmount.toLocaleString('en-IN')}</Text>):
+                                    </Text>
+
+                                    <Text style={[s.modalFieldLabel, { color: Colors.textMuted }]}>Payment Amount (₹)</Text>
+                                    <TextInput
+                                        style={[s.modalInput, { color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.background, marginBottom: 14 }]}
+                                        placeholder="e.g. 5000"
+                                        placeholderTextColor={Colors.textMuted}
+                                        keyboardType="numeric"
+                                        value={paymentAmount}
+                                        onChangeText={setPaymentAmount}
+                                    />
+
+                                    <Text style={[s.modalFieldLabel, { color: Colors.textMuted, marginBottom: 8 }]}>Select Funding Account</Text>
+
+                                    <ScrollView style={{ maxHeight: 180, marginBottom: 16 }} showsVerticalScrollIndicator={false}>
+                                        <Pressable
+                                            style={[
+                                                s.fundingOptionItem,
+                                                {
+                                                    borderColor: selectedSourceAccountId === 'cash' ? Colors.primary : Colors.border,
+                                                    backgroundColor: selectedSourceAccountId === 'cash' ? Colors.primary + '10' : Colors.surface,
+                                                }
+                                            ]}
+                                            onPress={() => setSelectedSourceAccountId('cash')}
+                                        >
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                                                <View style={[s.fundingOptionIconBg, { backgroundColor: Colors.income + '15' }]}>
+                                                    <Wallet size={16} color={Colors.income} />
+                                                </View>
+                                                <Text style={{ color: Colors.text, fontSize: 13, fontWeight: '600' }}>{cashAccountName}</Text>
+                                            </View>
+                                            <Text style={{ color: Colors.textMuted, fontSize: 12, fontWeight: '600' }}>₹{cashBalance.toLocaleString('en-IN')}</Text>
+                                        </Pressable>
+
+                                        {bankAccounts.map(bank => (
+                                            <Pressable
+                                                key={bank.id}
+                                                style={[
+                                                    s.fundingOptionItem,
+                                                    {
+                                                        borderColor: selectedSourceAccountId === bank.id ? Colors.primary : Colors.border,
+                                                        backgroundColor: selectedSourceAccountId === bank.id ? Colors.primary + '10' : Colors.surface,
+                                                    }
+                                                ]}
+                                                onPress={() => setSelectedSourceAccountId(bank.id)}
+                                            >
+                                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, marginRight: 8 }}>
+                                                    <View style={[s.fundingOptionIconBg, { backgroundColor: bank.color + '15' }]}>
+                                                        <Landmark size={16} color={bank.color} />
+                                                    </View>
+                                                    <Text style={{ color: Colors.text, fontSize: 13, fontWeight: '600' }} numberOfLines={1}>{bank.bankName}</Text>
+                                                </View>
+                                                <Text style={{ color: Colors.textMuted, fontSize: 12, fontWeight: '600' }}>₹{bank.computedBalance.toLocaleString('en-IN')}</Text>
+                                            </Pressable>
+                                        ))}
+
+                                        <Pressable
+                                            style={[
+                                                s.fundingOptionItem,
+                                                {
+                                                    borderColor: selectedSourceAccountId === null ? Colors.primary : Colors.border,
+                                                    backgroundColor: selectedSourceAccountId === null ? Colors.primary + '10' : Colors.surface,
+                                                }
+                                            ]}
+                                            onPress={() => setSelectedSourceAccountId(null)}
+                                        >
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                                                <View style={[s.fundingOptionIconBg, { backgroundColor: Colors.textMuted + '15' }]}>
+                                                    <RotateCcw size={16} color={Colors.textMuted} />
+                                                </View>
+                                                <Text style={{ color: Colors.text, fontSize: 13, fontWeight: '600' }}>Direct Reset (No Account)</Text>
+                                            </View>
+                                        </Pressable>
+                                    </ScrollView>
+                                </>
+                            );
+                        })()}
+                        <View style={s.modalBtns}>
+                            <Pressable style={[s.modalBtn, { borderColor: Colors.border, borderWidth: 1 }]} onPress={() => setConfirmCardId(null)}>
+                                <Text style={{ color: Colors.textMuted, fontWeight: '600' }}>Cancel</Text>
+                            </Pressable>
+                            <Pressable style={[s.modalBtn, { backgroundColor: Colors.primary }]} onPress={confirmClear}>
+                                {clearing ? <ActivityIndicator color="#fff" size="small" /> :
+                                    <Text style={{ color: '#fff', fontWeight: '700' }}>Record Payment</Text>}
+                            </Pressable>
+                        </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            {(!hasFetchedOnce && loading) && (
+                <View style={[s.loadingOverlay, { backgroundColor: Colors.background }]}>
+                    <ActivityIndicator size="large" color={Colors.primary} />
+                    <Text style={{ marginTop: 12, color: Colors.textMuted, fontWeight: '600' }}>Loading your finances...</Text>
                 </View>
             )}
-        </ScrollView>
 
-        {/* Create Goal Modal */}
-        <Modal
-            visible={isCreateGoalOpen}
-            transparent={true}
-            animationType="slide"
-            onRequestClose={() => setIsCreateGoalOpen(false)}
-        >
-            <View style={s.modalOverlay}>
-                <View style={[s.modalBox, { backgroundColor: Colors.surface }]}>
-                    <Text style={[s.modalTitle, { color: Colors.text }]}>New Savings Goal</Text>
-                    
-                    <Text style={{ fontSize: 12, color: Colors.textMuted, marginBottom: 4 }}>Goal Name</Text>
-                    <TextInput 
-                        style={[s.modalInput, { color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.background }]}
-                        placeholder="e.g. Vacation Fund"
-                        placeholderTextColor={Colors.textMuted}
-                        value={newGoalName}
-                        onChangeText={setNewGoalName}
-                    />
-
-                    <Text style={{ fontSize: 12, color: Colors.textMuted, marginBottom: 4, marginTop: 12 }}>Target Amount (₹)</Text>
-                    <TextInput 
-                        style={[s.modalInput, { color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.background }]}
-                        placeholder="e.g. 50000"
-                        placeholderTextColor={Colors.textMuted}
-                        keyboardType="numeric"
-                        value={newGoalTarget}
-                        onChangeText={setNewGoalTarget}
-                    />
-
-                    <Text style={{ fontSize: 12, color: Colors.textMuted, marginBottom: 8, marginTop: 12 }}>Color Theme</Text>
-                    <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
-                        {['#2196F3', '#4CAF50', '#FF9800', '#E91E63', '#9C27B0', '#00BCD4'].map(cColor => (
-                            <TouchableOpacity 
-                                key={cColor}
-                                style={[
-                                    s.colorSelectCircle, 
-                                    { backgroundColor: cColor },
-                                    newGoalColor === cColor && { borderWidth: 2, borderColor: Colors.text }
-                                ]}
-                                onPress={() => setNewGoalColor(cColor)}
-                            />
-                        ))}
-                    </View>
-
-                    <View style={s.modalBtns}>
-                        <TouchableOpacity 
-                            style={[s.modalBtn, { borderWidth: 1, borderColor: Colors.border }]}
-                            onPress={() => setIsCreateGoalOpen(false)}
-                        >
-                            <Text style={{ color: Colors.textMuted, fontWeight: '700' }}>Cancel</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity 
-                            style={[s.modalBtn, { backgroundColor: Colors.primary }]}
-                            onPress={handleCreateGoal}
-                        >
-                            <Text style={{ color: '#fff', fontWeight: '700' }}>Create</Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            </View>
-        </Modal>
-
-        {/* Allocate Funds Modal */}
-        <Modal
-            visible={isAllocateOpen}
-            transparent={true}
-            animationType="slide"
-            onRequestClose={() => setIsAllocateOpen(false)}
-        >
-            <View style={s.modalOverlay}>
-                <View style={[s.modalBox, { backgroundColor: Colors.surface }]}>
-                    <Text style={[s.modalTitle, { color: Colors.text }]}>Allocate Funds</Text>
-                    <Text style={{ fontSize: 13, color: Colors.textMuted, marginBottom: 16 }}>
-                        Move money towards: <Text style={{ fontWeight: '700', color: Colors.text }}>{selectedGoal?.name}</Text>
+            {hasError && (
+                <View style={[s.loadingOverlay, { backgroundColor: Colors.background }]}>
+                    <AlertCircle size={48} color={Colors.expense} />
+                    <Text style={{ marginTop: 12, color: Colors.text, fontWeight: '700', fontSize: 18 }}>Sync Failed</Text>
+                    <Text style={{ marginTop: 4, color: Colors.textMuted, textAlign: 'center', paddingHorizontal: 40 }}>
+                        We couldn't fetch your latest data. Please check your connection.
                     </Text>
-                    
-                    <Text style={{ fontSize: 12, color: Colors.textMuted, marginBottom: 4 }}>Amount (₹)</Text>
-                    <TextInput 
-                        style={[s.modalInput, { color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.background }]}
-                        placeholder="e.g. 5000"
-                        placeholderTextColor={Colors.textMuted}
-                        keyboardType="numeric"
-                        value={allocateAmount}
-                        onChangeText={setAllocateAmount}
-                    />
-
-                    <Text style={{ fontSize: 12, color: Colors.textMuted, marginBottom: 4, marginTop: 12 }}>Deduct From Account</Text>
-                    <View style={{ zIndex: 100 }}>
-                        <TouchableOpacity 
-                            style={[s.dropdownTrigger, { borderColor: Colors.border, backgroundColor: Colors.background }]}
-                            onPress={() => setShowAllocateAccountDropdown(!showAllocateAccountDropdown)}
-                        >
-                            <Text style={{ color: Colors.text, fontSize: 14 }}>
-                                {targetAccounts.find(a => a.id === allocateAccountId)?.name || 'Select Account'}
-                            </Text>
-                            <ChevronDown size={16} color={Colors.textMuted} />
-                        </TouchableOpacity>
-
-                        {showAllocateAccountDropdown && (
-                            <View style={[s.dropdownMenu, { borderColor: Colors.border, backgroundColor: Colors.surface }]}>
-                                <ScrollView style={{ maxHeight: 150 }} nestedScrollEnabled={true}>
-                                    {targetAccounts.map(acc => (
-                                        <TouchableOpacity 
-                                            key={acc.id} 
-                                            style={[s.dropdownItem, allocateAccountId === acc.id && { backgroundColor: Colors.primary + '15' }]}
-                                            onPress={() => {
-                                                setAllocateAccountId(acc.id);
-                                                setShowAllocateAccountDropdown(false);
-                                            }}
-                                        >
-                                            <Text style={{ color: Colors.text, fontSize: 13 }}>{acc.name}</Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </ScrollView>
-                            </View>
-                        )}
-                    </View>
-
-                    <View style={s.modalBtns}>
-                        <TouchableOpacity 
-                            style={[s.modalBtn, { borderWidth: 1, borderColor: Colors.border }]}
-                            onPress={() => setIsAllocateOpen(false)}
-                        >
-                            <Text style={{ color: Colors.textMuted, fontWeight: '700' }}>Cancel</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity 
-                            style={[s.modalBtn, { backgroundColor: Colors.primary }]}
-                            onPress={handleAllocate}
-                        >
-                            <Text style={{ color: '#fff', fontWeight: '700' }}>Confirm</Text>
-                        </TouchableOpacity>
-                    </View>
+                    <TouchableOpacity
+                        onPress={refreshData}
+                        style={{ marginTop: 24, backgroundColor: Colors.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 }}
+                    >
+                        <Text style={{ color: '#fff', fontWeight: '700' }}>Try Again</Text>
+                    </TouchableOpacity>
                 </View>
-            </View>
-        </Modal>
+            )}
 
-        {/* Add Bill Modal */}
-        <Modal
-            visible={isAddBillOpen}
-            transparent={true}
-            animationType="slide"
-            onRequestClose={() => setIsAddBillOpen(false)}
-        >
-            <View style={s.modalOverlay}>
-                <View style={[s.modalBox, { backgroundColor: Colors.surface }]}>
-                    <Text style={[s.modalTitle, { color: Colors.text }]}>New Recurring Bill</Text>
-                    
-                    <Text style={{ fontSize: 12, color: Colors.textMuted, marginBottom: 4 }}>Bill Name</Text>
-                    <TextInput 
-                        style={[s.modalInput, { color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.background }]}
-                        placeholder="e.g. Netflix, Rent"
-                        placeholderTextColor={Colors.textMuted}
-                        value={newBillName}
-                        onChangeText={setNewBillName}
-                    />
+            <ScrollView
+                style={[s.container, { backgroundColor: Colors.background }]}
+                contentContainerStyle={[
+                    s.content,
+                    {
+                        paddingTop: topPadding,
+                        paddingBottom: bottomPadding,
+                        maxWidth: isDesktop ? 1200 : 680,
+                        width: '100%',
+                        alignSelf: 'center',
+                    }
+                ]}
+                showsVerticalScrollIndicator={false}
+            >
 
-                    <View style={{ flexDirection: 'row', gap: 12, marginTop: 12 }}>
-                        <View style={{ flex: 1 }}>
-                            <Text style={{ fontSize: 12, color: Colors.textMuted, marginBottom: 4 }}>Amount (₹)</Text>
-                            <TextInput 
-                                style={[s.modalInput, { color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.background }]}
-                                placeholder="199"
-                                placeholderTextColor={Colors.textMuted}
-                                keyboardType="numeric"
-                                value={newBillAmount}
-                                onChangeText={setNewBillAmount}
-                            />
+                {/* ── 1. Top Quick Action Command Bar ─────────────────────── */}
+                <View style={s.quickActionsRow}>
+                    <HoverCard
+                        style={[s.quickActionCard, { backgroundColor: Colors.expense + '12', borderColor: Colors.expense + '25' }]}
+                        onPress={() => router.push({ pathname: '/add', params: { type: 'EXPENSE' } })}
+                    >
+                        <View style={[s.quickActionIconCircle, { backgroundColor: Colors.expense + '20' }]}>
+                            <TrendingDown size={15} color={Colors.expense} />
                         </View>
-                        <View style={{ flex: 1 }}>
-                            <Text style={{ fontSize: 12, color: Colors.textMuted, marginBottom: 4 }}>Due Day (1-31)</Text>
-                            <TextInput 
-                                style={[s.modalInput, { color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.background }]}
-                                placeholder="16"
-                                placeholderTextColor={Colors.textMuted}
-                                keyboardType="numeric"
-                                value={newBillDueDate}
-                                onChangeText={setNewBillDueDate}
-                            />
+                        <Text style={[s.quickActionLabel, { color: Colors.expense }]}>Expense</Text>
+                    </HoverCard>
+
+                    <HoverCard
+                        style={[s.quickActionCard, { backgroundColor: Colors.income + '12', borderColor: Colors.income + '25' }]}
+                        onPress={() => router.push({ pathname: '/add', params: { type: 'INCOME' } })}
+                    >
+                        <View style={[s.quickActionIconCircle, { backgroundColor: Colors.income + '20' }]}>
+                            <TrendingUp size={15} color={Colors.income} />
+                        </View>
+                        <Text style={[s.quickActionLabel, { color: Colors.income }]}>Income</Text>
+                    </HoverCard>
+
+                    <HoverCard
+                        style={[s.quickActionCard, { backgroundColor: Colors.primary + '12', borderColor: Colors.primary + '25' }]}
+                        onPress={() => router.push({ pathname: '/add', params: { type: 'TRANSFER' } })}
+                    >
+                        <View style={[s.quickActionIconCircle, { backgroundColor: Colors.primary + '20' }]}>
+                            <RotateCcw size={15} color={Colors.primary} />
+                        </View>
+                        <Text style={[s.quickActionLabel, { color: Colors.primary }]}>Transfer</Text>
+                    </HoverCard>
+
+                    <HoverCard
+                        style={[s.quickActionCard, { backgroundColor: '#8B5CF614', borderColor: '#8B5CF630' }]}
+                        onPress={() => router.push('/ai-planner')}
+                    >
+                        <View style={[s.quickActionIconCircle, { backgroundColor: '#8B5CF622' }]}>
+                            <Sparkles size={15} color="#8B5CF6" />
+                        </View>
+                        <Text style={[s.quickActionLabel, { color: '#8B5CF6' }]}>AI Planner</Text>
+                    </HoverCard>
+                </View>
+
+                {/* ── 2. Responsive Content Layout (2-Column Desktop Grid or 1-Column Mobile) ── */}
+                {isDesktop ? (
+                    <View style={s.desktopGridContainer}>
+                        {/* Left Column (Primary Financial Flow & Accounts) */}
+                        <View style={s.desktopLeftCol}>
+                            {renderHeroBalance()}
+                            {renderBankAccounts()}
+                            {renderCreditCards()}
+                            {renderRecentTransactions()}
+                        </View>
+
+                        {/* Right Column (Intelligence, Budgets & Goals) */}
+                        <View style={s.desktopRightCol}>
+                            {renderMindfulness()}
+                            {renderAiInsight()}
+                            {renderUpcomingBills()}
+                            {renderCategoryBudgets()}
+                            {renderSavingsGoals()}
+                            {renderRecurringBills()}
+                            {renderCashAccount()}
                         </View>
                     </View>
-
-                    <Text style={{ fontSize: 12, color: Colors.textMuted, marginBottom: 4, marginTop: 12 }}>Category</Text>
-                    <View style={{ zIndex: 110, marginBottom: 12 }}>
-                        <TouchableOpacity 
-                            style={[s.dropdownTrigger, { borderColor: Colors.border, backgroundColor: Colors.background }]}
-                            onPress={() => {
-                                setShowBillCategoryDropdown(!showBillCategoryDropdown);
-                                setShowBillAccountDropdown(false);
-                            }}
-                        >
-                            <Text style={{ color: Colors.text, fontSize: 14 }}>{newBillCategory}</Text>
-                            <ChevronDown size={16} color={Colors.textMuted} />
-                        </TouchableOpacity>
-
-                        {showBillCategoryDropdown && (
-                            <View style={[s.dropdownMenu, { borderColor: Colors.border, backgroundColor: Colors.surface }]}>
-                                <ScrollView style={{ maxHeight: 150 }} nestedScrollEnabled={true}>
-                                    {expenseCategories.map(cat => (
-                                        <TouchableOpacity 
-                                            key={cat.name} 
-                                            style={[s.dropdownItem, newBillCategory === cat.name && { backgroundColor: Colors.primary + '15' }]}
-                                            onPress={() => {
-                                                setNewBillCategory(cat.name);
-                                                setShowBillCategoryDropdown(false);
-                                            }}
-                                        >
-                                            <Text style={{ color: Colors.text, fontSize: 13 }}>{cat.name}</Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </ScrollView>
-                            </View>
-                        )}
+                ) : (
+                    <View style={s.mobileContainer}>
+                        {renderHeroBalance()}
+                        {renderUpcomingBills()}
+                        {renderMindfulness()}
+                        {renderAiInsight()}
+                        {renderCategoryBudgets()}
+                        {renderSavingsGoals()}
+                        {renderRecurringBills()}
+                        {renderCashAccount()}
+                        {renderBankAccounts()}
+                        {renderCreditCards()}
+                        {renderRecentTransactions()}
                     </View>
+                )}
+            </ScrollView>
 
-                    <Text style={{ fontSize: 12, color: Colors.textMuted, marginBottom: 4 }}>Primary Payment Account</Text>
-                    <View style={{ zIndex: 100, marginBottom: 20 }}>
-                        <TouchableOpacity 
-                            style={[s.dropdownTrigger, { borderColor: Colors.border, backgroundColor: Colors.background }]}
-                            onPress={() => {
-                                setShowBillAccountDropdown(!showBillAccountDropdown);
-                                setShowBillCategoryDropdown(false);
-                            }}
-                        >
-                            <Text style={{ color: Colors.text, fontSize: 14 }}>
-                                {targetAccounts.find(a => a.id === newBillAccountId)?.name || 'Select Account'}
-                            </Text>
-                            <ChevronDown size={16} color={Colors.textMuted} />
-                        </TouchableOpacity>
+            {/* Create Goal Modal */}
+            <Modal
+                visible={isCreateGoalOpen}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setIsCreateGoalOpen(false)}
+            >
+                <View style={s.modalOverlay}>
+                    <View style={[s.modalBox, { backgroundColor: Colors.surface }]}>
+                        <View style={s.modalHeaderRow}>
+                            <Text style={[s.modalTitle, { color: Colors.text }]}>New Savings Goal</Text>
+                            <TouchableOpacity onPress={() => setIsCreateGoalOpen(false)} hitSlop={8}>
+                                <X size={20} color={Colors.textMuted} />
+                            </TouchableOpacity>
+                        </View>
 
-                        {showBillAccountDropdown && (
-                            <View style={[s.dropdownMenu, { borderColor: Colors.border, backgroundColor: Colors.surface }]}>
-                                <ScrollView style={{ maxHeight: 150 }} nestedScrollEnabled={true}>
-                                    {targetAccounts.map(acc => (
-                                        <TouchableOpacity 
-                                            key={acc.id} 
-                                            style={[s.dropdownItem, newBillAccountId === acc.id && { backgroundColor: Colors.primary + '15' }]}
-                                            onPress={() => {
-                                                setNewBillAccountId(acc.id);
-                                                setShowBillAccountDropdown(false);
-                                            }}
-                                        >
-                                            <Text style={{ color: Colors.text, fontSize: 13 }}>{acc.name}</Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </ScrollView>
-                            </View>
-                        )}
-                    </View>
+                        <Text style={[s.modalFieldLabel, { color: Colors.textMuted, marginBottom: 4 }]}>Goal Name</Text>
+                        <TextInput
+                            style={[s.modalInput, { color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.background }]}
+                            placeholder="e.g. Vacation Fund"
+                            placeholderTextColor={Colors.textMuted}
+                            value={newGoalName}
+                            onChangeText={setNewGoalName}
+                        />
 
-                    <View style={s.modalBtns}>
-                        <TouchableOpacity 
-                            style={[s.modalBtn, { borderWidth: 1, borderColor: Colors.border }]}
-                            onPress={() => setIsAddBillOpen(false)}
-                        >
-                            <Text style={{ color: Colors.textMuted, fontWeight: '700' }}>Cancel</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity 
-                            style={[s.modalBtn, { backgroundColor: Colors.primary }]}
-                            onPress={handleCreateBill}
-                        >
-                            <Text style={{ color: '#fff', fontWeight: '700' }}>Add Bill</Text>
-                        </TouchableOpacity>
+                        <Text style={[s.modalFieldLabel, { color: Colors.textMuted, marginBottom: 4, marginTop: 12 }]}>Target Amount (₹)</Text>
+                        <TextInput
+                            style={[s.modalInput, { color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.background }]}
+                            placeholder="e.g. 50000"
+                            placeholderTextColor={Colors.textMuted}
+                            keyboardType="numeric"
+                            value={newGoalTarget}
+                            onChangeText={setNewGoalTarget}
+                        />
+
+                        <Text style={[s.modalFieldLabel, { color: Colors.textMuted, marginBottom: 8, marginTop: 12 }]}>Color Theme</Text>
+                        <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
+                            {['#2196F3', '#4CAF50', '#FF9800', '#E91E63', '#9C27B0', '#00BCD4'].map(cColor => (
+                                <TouchableOpacity
+                                    key={cColor}
+                                    style={[
+                                        s.colorSelectCircle,
+                                        { backgroundColor: cColor },
+                                        newGoalColor === cColor && { borderWidth: 2, borderColor: Colors.text }
+                                    ]}
+                                    onPress={() => setNewGoalColor(cColor)}
+                                />
+                            ))}
+                        </View>
+
+                        <View style={s.modalBtns}>
+                            <TouchableOpacity
+                                style={[s.modalBtn, { borderWidth: 1, borderColor: Colors.border }]}
+                                onPress={() => setIsCreateGoalOpen(false)}
+                            >
+                                <Text style={{ color: Colors.textMuted, fontWeight: '700' }}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[s.modalBtn, { backgroundColor: Colors.primary }]}
+                                onPress={handleCreateGoal}
+                            >
+                                <Text style={{ color: '#fff', fontWeight: '700' }}>Create</Text>
+                            </TouchableOpacity>
+                        </View>
                     </View>
                 </View>
-            </View>
-        </Modal>
+            </Modal>
+
+            {/* Allocate Funds Modal */}
+            <Modal
+                visible={isAllocateOpen}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setIsAllocateOpen(false)}
+            >
+                <View style={s.modalOverlay}>
+                    <View style={[s.modalBox, { backgroundColor: Colors.surface }]}>
+                        <View style={s.modalHeaderRow}>
+                            <Text style={[s.modalTitle, { color: Colors.text }]}>Allocate Funds</Text>
+                            <TouchableOpacity onPress={() => setIsAllocateOpen(false)} hitSlop={8}>
+                                <X size={20} color={Colors.textMuted} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <Text style={{ fontSize: 13, color: Colors.textMuted, marginBottom: 14 }}>
+                            Move money towards: <Text style={{ fontWeight: '700', color: Colors.text }}>{selectedGoal?.name}</Text>
+                        </Text>
+
+                        <Text style={[s.modalFieldLabel, { color: Colors.textMuted, marginBottom: 4 }]}>Amount (₹)</Text>
+                        <TextInput
+                            style={[s.modalInput, { color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.background }]}
+                            placeholder="e.g. 5000"
+                            placeholderTextColor={Colors.textMuted}
+                            keyboardType="numeric"
+                            value={allocateAmount}
+                            onChangeText={setAllocateAmount}
+                        />
+
+                        <Text style={[s.modalFieldLabel, { color: Colors.textMuted, marginBottom: 4, marginTop: 12 }]}>Deduct From Account</Text>
+                        <View style={{ zIndex: 100 }}>
+                            <TouchableOpacity
+                                style={[s.dropdownTrigger, { borderColor: Colors.border, backgroundColor: Colors.background }]}
+                                onPress={() => setShowAllocateAccountDropdown(!showAllocateAccountDropdown)}
+                            >
+                                <Text style={{ color: Colors.text, fontSize: 13.5 }}>
+                                    {targetAccounts.find(a => a.id === allocateAccountId)?.name || 'Select Account'}
+                                </Text>
+                                <ChevronDown size={16} color={Colors.textMuted} />
+                            </TouchableOpacity>
+
+                            {showAllocateAccountDropdown && (
+                                <View style={[s.dropdownMenu, { borderColor: Colors.border, backgroundColor: Colors.surface }]}>
+                                    <ScrollView style={{ maxHeight: 150 }} nestedScrollEnabled={true}>
+                                        {targetAccounts.map(acc => (
+                                            <TouchableOpacity
+                                                key={acc.id}
+                                                style={[s.dropdownItem, allocateAccountId === acc.id && { backgroundColor: Colors.primary + '15' }]}
+                                                onPress={() => {
+                                                    setAllocateAccountId(acc.id);
+                                                    setShowAllocateAccountDropdown(false);
+                                                }}
+                                            >
+                                                <Text style={{ color: Colors.text, fontSize: 13 }}>{acc.name}</Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </ScrollView>
+                                </View>
+                            )}
+                        </View>
+
+                        <View style={[s.modalBtns, { marginTop: 18 }]}>
+                            <TouchableOpacity
+                                style={[s.modalBtn, { borderWidth: 1, borderColor: Colors.border }]}
+                                onPress={() => setIsAllocateOpen(false)}
+                            >
+                                <Text style={{ color: Colors.textMuted, fontWeight: '700' }}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[s.modalBtn, { backgroundColor: Colors.primary }]}
+                                onPress={handleAllocate}
+                            >
+                                <Text style={{ color: '#fff', fontWeight: '700' }}>Confirm</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Add Bill Modal */}
+            <Modal
+                visible={isAddBillOpen}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setIsAddBillOpen(false)}
+            >
+                <View style={s.modalOverlay}>
+                    <View style={[s.modalBox, { backgroundColor: Colors.surface }]}>
+                        <View style={s.modalHeaderRow}>
+                            <Text style={[s.modalTitle, { color: Colors.text }]}>New Recurring Bill</Text>
+                            <TouchableOpacity onPress={() => setIsAddBillOpen(false)} hitSlop={8}>
+                                <X size={20} color={Colors.textMuted} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <Text style={[s.modalFieldLabel, { color: Colors.textMuted, marginBottom: 4 }]}>Bill Name</Text>
+                        <TextInput
+                            style={[s.modalInput, { color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.background }]}
+                            placeholder="e.g. Netflix, Rent"
+                            placeholderTextColor={Colors.textMuted}
+                            value={newBillName}
+                            onChangeText={setNewBillName}
+                        />
+
+                        <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+                            <View style={{ flex: 1 }}>
+                                <Text style={[s.modalFieldLabel, { color: Colors.textMuted, marginBottom: 4 }]}>Amount (₹)</Text>
+                                <TextInput
+                                    style={[s.modalInput, { color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.background }]}
+                                    placeholder="199"
+                                    placeholderTextColor={Colors.textMuted}
+                                    keyboardType="numeric"
+                                    value={newBillAmount}
+                                    onChangeText={setNewBillAmount}
+                                />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={[s.modalFieldLabel, { color: Colors.textMuted, marginBottom: 4 }]}>Due Day (1-31)</Text>
+                                <TextInput
+                                    style={[s.modalInput, { color: Colors.text, borderColor: Colors.border, backgroundColor: Colors.background }]}
+                                    placeholder="16"
+                                    placeholderTextColor={Colors.textMuted}
+                                    keyboardType="numeric"
+                                    value={newBillDueDate}
+                                    onChangeText={setNewBillDueDate}
+                                />
+                            </View>
+                        </View>
+
+                        <Text style={[s.modalFieldLabel, { color: Colors.textMuted, marginBottom: 4, marginTop: 12 }]}>Category</Text>
+                        <View style={{ zIndex: 110, marginBottom: 12 }}>
+                            <TouchableOpacity
+                                style={[s.dropdownTrigger, { borderColor: Colors.border, backgroundColor: Colors.background }]}
+                                onPress={() => {
+                                    setShowBillCategoryDropdown(!showBillCategoryDropdown);
+                                    setShowBillAccountDropdown(false);
+                                }}
+                            >
+                                <Text style={{ color: Colors.text, fontSize: 13.5 }}>{newBillCategory}</Text>
+                                <ChevronDown size={16} color={Colors.textMuted} />
+                            </TouchableOpacity>
+
+                            {showBillCategoryDropdown && (
+                                <View style={[s.dropdownMenu, { borderColor: Colors.border, backgroundColor: Colors.surface }]}>
+                                    <ScrollView style={{ maxHeight: 150 }} nestedScrollEnabled={true}>
+                                        {expenseCategories.map(cat => (
+                                            <TouchableOpacity
+                                                key={cat.name}
+                                                style={[s.dropdownItem, newBillCategory === cat.name && { backgroundColor: Colors.primary + '15' }]}
+                                                onPress={() => {
+                                                    setNewBillCategory(cat.name);
+                                                    setShowBillCategoryDropdown(false);
+                                                }}
+                                            >
+                                                <Text style={{ color: Colors.text, fontSize: 13 }}>{cat.name}</Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </ScrollView>
+                                </View>
+                            )}
+                        </View>
+
+                        <Text style={[s.modalFieldLabel, { color: Colors.textMuted, marginBottom: 4 }]}>Primary Payment Account</Text>
+                        <View style={{ zIndex: 100, marginBottom: 20 }}>
+                            <TouchableOpacity
+                                style={[s.dropdownTrigger, { borderColor: Colors.border, backgroundColor: Colors.background }]}
+                                onPress={() => {
+                                    setShowBillAccountDropdown(!showBillAccountDropdown);
+                                    setShowBillCategoryDropdown(false);
+                                }}
+                            >
+                                <Text style={{ color: Colors.text, fontSize: 13.5 }}>
+                                    {targetAccounts.find(a => a.id === newBillAccountId)?.name || 'Select Account'}
+                                </Text>
+                                <ChevronDown size={16} color={Colors.textMuted} />
+                            </TouchableOpacity>
+
+                            {showBillAccountDropdown && (
+                                <View style={[s.dropdownMenu, { borderColor: Colors.border, backgroundColor: Colors.surface }]}>
+                                    <ScrollView style={{ maxHeight: 150 }} nestedScrollEnabled={true}>
+                                        {targetAccounts.map(acc => (
+                                            <TouchableOpacity
+                                                key={acc.id}
+                                                style={[s.dropdownItem, newBillAccountId === acc.id && { backgroundColor: Colors.primary + '15' }]}
+                                                onPress={() => {
+                                                    setNewBillAccountId(acc.id);
+                                                    setShowBillAccountDropdown(false);
+                                                }}
+                                            >
+                                                <Text style={{ color: Colors.text, fontSize: 13 }}>{acc.name}</Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </ScrollView>
+                                </View>
+                            )}
+                        </View>
+
+                        <View style={s.modalBtns}>
+                            <TouchableOpacity
+                                style={[s.modalBtn, { borderWidth: 1, borderColor: Colors.border }]}
+                                onPress={() => setIsAddBillOpen(false)}
+                            >
+                                <Text style={{ color: Colors.textMuted, fontWeight: '700' }}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[s.modalBtn, { backgroundColor: Colors.primary }]}
+                                onPress={handleCreateBill}
+                            >
+                                <Text style={{ color: '#fff', fontWeight: '700' }}>Add Bill</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </>
     );
 }
 
 const s = StyleSheet.create({
     container: { flex: 1 },
-    content: { padding: 20, paddingBottom: 100 },
-    // Summary
-    summaryCard: { borderRadius: 24, padding: 24, marginBottom: 24, borderWidth: 1 },
-    summaryLabel: { fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1 },
-    totalBalance: { fontSize: 32, fontWeight: 'bold', marginVertical: 10 },
-    statsRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 20, paddingTop: 20, borderTopWidth: 1 },
-    statItem: { flexDirection: 'row', alignItems: 'center' },
-    statIcon: { width: 32, height: 32, borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginRight: 10 },
-    statLabel: { fontSize: 12 },
-    statValue: { fontSize: 15, fontWeight: 'bold' },
-    dueAlert: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12, padding: 10, borderRadius: 10, borderWidth: 1 },
-    dueAlertText: { fontSize: 13, fontWeight: '600' },
-    // Section header
-    sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, marginTop: 4 },
-    sectionTitle: { fontSize: 18, fontWeight: '700' },
-    sectionTotal: { fontSize: 14, fontWeight: '700' },
-    addAccountBtn: { width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
-    // Cash
-    cashCard: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 16, padding: 16, borderWidth: 1, marginBottom: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
-    // Bank
-    hScroll: { marginHorizontal: -20, paddingLeft: 20, marginBottom: 24, paddingBottom: 16, paddingTop: 8, marginTop: -4 },
-    bankCard: { width: 148, padding: 14, borderRadius: 18, marginRight: 12, borderWidth: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
-    addCard: { justifyContent: 'center', alignItems: 'center', borderStyle: 'dashed', shadowOpacity: 0, elevation: 0 },
-    // Credit card
-    creditCard: { borderRadius: 18, padding: 16, marginBottom: 14, borderWidth: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
-    creditCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
-    creditCardName: { fontSize: 15, fontWeight: '700' },
-    creditCardDueDate: { fontSize: 12, marginTop: 2 },
-    creditCardStats: { flexDirection: 'row', justifyContent: 'space-between', paddingTop: 12, borderTopWidth: 1, marginBottom: 12 },
-    creditStat: { alignItems: 'center' },
-    creditStatLabel: { fontSize: 10, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
-    creditStatVal: { fontSize: 14, fontWeight: '700', marginTop: 2 },
-    usageBarBg: { height: 4, borderRadius: 2, overflow: 'hidden' },
-    usageBarFill: { height: 4, borderRadius: 2 },
-    clearBtn: { width: 30, height: 30, borderRadius: 15, justifyContent: 'center', alignItems: 'center' },
-    // Common
-    accountIcon: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
-    accountName: { fontSize: 12, fontWeight: '400' },
-    accountType: { fontSize: 11, marginTop: 1 },
-    accountBalance: { fontSize: 16, fontWeight: 'bold', marginTop: 4 },
-    emptyCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderStyle: 'dashed', borderRadius: 14, padding: 18, marginBottom: 24 },
-    emptyText: { fontSize: 14 },
-    seeAll: { fontWeight: '600', fontSize: 14 },
-    txItem: {
-        padding: 0,
-        borderRadius: 14,
-        marginBottom: 10,
-        borderWidth: 1,
+    content: { paddingHorizontal: 16, paddingBottom: 100 },
+
+    // Responsive Containers
+    desktopGridContainer: {
+        flexDirection: 'row',
+        gap: 20,
+        alignItems: 'flex-start',
+        width: '100%',
+    },
+    desktopLeftCol: {
+        flex: 1.15,
+        minWidth: 0,
+        maxWidth: '100%',
         overflow: 'hidden',
     },
-    txHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 14,
-        paddingVertical: 8,
-        borderBottomWidth: 1,
-        gap: 6,
+    desktopRightCol: {
+        flex: 0.85,
+        minWidth: 0,
     },
-    txBody: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 14,
-    },
-    txIcon: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-    txCategory: { fontSize: 14, fontWeight: '700' },
-    txNote: { fontSize: 11, fontWeight: '500' },
-    txAmount: { fontSize: 15, fontWeight: 'bold' },
-    txAccountTag: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
-    // Modal
-    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
-    modalBox: { width: 320, borderRadius: 20, padding: 24, elevation: 10 },
-    modalTitle: { fontSize: 18, fontWeight: '700', marginBottom: 10 },
-    modalMsg: { fontSize: 14, lineHeight: 20, marginBottom: 24 },
-    modalBtns: { flexDirection: 'row', gap: 12 },
-    modalBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center' },
-    optionBtn: {
+    mobileContainer: {
         width: '100%',
-        padding: 16,
-        borderRadius: 12,
-        borderWidth: 1,
-        marginTop: 10,
-        alignItems: 'center',
     },
-    optionText: {
-        fontSize: 15,
+
+    // Quick Action Bar
+    quickActionsRow: {
+        flexDirection: 'row',
+        gap: 8,
+        marginBottom: 14,
+        marginTop: 4,
+    },
+    quickActionCard: {
+        flex: 1,
+        borderRadius: 14,
+        borderWidth: 1,
+        paddingVertical: 9,
+        paddingHorizontal: 6,
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 4,
+    },
+    quickActionIconCircle: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    quickActionLabel: {
+        fontSize: 11.5,
         fontWeight: '700',
     },
-    loadingOverlay: {
-        ...StyleSheet.absoluteFillObject,
-        justifyContent: 'center',
-        alignItems: 'center',
-        zIndex: 1000,
-    },
-    // Budget Styles
-    budgetContainerCard: {
-        borderRadius: 20,
-        borderWidth: 1,
-        padding: 16,
+
+    // Executive Hero Balance Card
+    heroBalanceCard: {
+        borderRadius: 22,
+        padding: 18,
         marginBottom: 16,
-        elevation: 2,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
+        borderWidth: 1,
     },
-    budgetRow: {
-        width: '100%',
-    },
-    budgetInfoRow: {
+    heroHeaderRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
         marginBottom: 6,
+    },
+    heroTagLabel: {
+        fontSize: 11,
+        fontWeight: '700',
+        letterSpacing: 0.8,
+        textTransform: 'uppercase',
+    },
+    accountsBadgePill: {
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 10,
+        borderWidth: 1,
+    },
+    accountsBadgeText: {
+        fontSize: 10,
+        fontWeight: '700',
+    },
+    heroBalanceText: {
+        fontSize: 30,
+        fontWeight: '800',
+        letterSpacing: -0.5,
+        marginBottom: 14,
+    },
+
+    // Dual Micro-Cards
+    dualAccountsRow: {
+        flexDirection: 'row',
+        gap: 8,
+        marginBottom: 12,
+    },
+    dualAccountCard: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 9,
+        borderRadius: 12,
+        borderWidth: 1,
+        gap: 8,
+    },
+    accountBadgeIcon: {
+        width: 30,
+        height: 30,
+        borderRadius: 8,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    dualAccountLabel: {
+        fontSize: 10.5,
+        fontWeight: '600',
+    },
+    dualAccountValue: {
+        fontSize: 13,
+        fontWeight: '800',
+        marginTop: 1,
+    },
+
+    // Monthly Flow Strip
+    monthlyFlowStrip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-around',
+        paddingVertical: 8,
+        paddingHorizontal: 8,
+        borderRadius: 12,
+        borderWidth: 1,
+        marginBottom: 10,
+    },
+    monthlyFlowItem: {
+        flex: 1,
+        alignItems: 'center',
+    },
+    monthlyFlowLabel: {
+        fontSize: 9,
+        fontWeight: '700',
+        letterSpacing: 0.3,
+    },
+    monthlyFlowValue: {
+        fontSize: 12,
+        fontWeight: '800',
+        marginTop: 2,
+    },
+    verticalDivider: {
+        width: 1,
+        height: 22,
+    },
+
+    // Budget Progress Bar inside Hero
+    budgetProgressBarContainer: {
+        borderRadius: 12,
+        padding: 9,
+        borderWidth: 1,
+        marginBottom: 8,
+    },
+    budgetBarHeaderLabel: {
+        fontSize: 10.5,
+        fontWeight: '700',
+    },
+    budgetBarHeaderValue: {
+        fontSize: 10.5,
+        fontWeight: '700',
+    },
+    budgetBarTrackBg: {
+        height: 5,
+        borderRadius: 2.5,
+        overflow: 'hidden',
+    },
+    budgetBarFillColor: {
+        height: 5,
+        borderRadius: 2.5,
+    },
+
+    // Credit Due Banner inside Hero
+    dueAlertBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingVertical: 7,
+        paddingHorizontal: 10,
+        borderRadius: 10,
+        borderWidth: 1,
+        marginTop: 4,
+    },
+    dueAlertText: {
+        fontSize: 11.5,
+        fontWeight: '700',
+    },
+    dueAlertBtn: {
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 6,
+    },
+    dueAlertBtnText: {
+        color: '#fff',
+        fontSize: 10.5,
+        fontWeight: '700',
+    },
+
+    // Bill Reminders Alert Card
+    billsAlertCard: {
+        borderRadius: 16,
+        padding: 13,
+        marginBottom: 14,
+        borderWidth: 1,
+        borderLeftWidth: 4,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.04,
+        shadowRadius: 6,
+        elevation: 2,
+    },
+    billsAlertHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 8,
+    },
+    billsAlertTitle: {
+        fontSize: 12.5,
+        fontWeight: '700',
+    },
+    billsAlertSubtitle: {
+        fontSize: 10,
+    },
+    billAlertItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: 9,
+        borderRadius: 10,
+        borderWidth: 1,
+    },
+    billAlertName: {
+        fontSize: 12,
+        fontWeight: '700',
+    },
+    billUrgencyBadge: {
+        paddingHorizontal: 5,
+        paddingVertical: 1.5,
+        borderRadius: 5,
+    },
+    billUrgencyBadgeText: {
+        fontSize: 8.5,
+        fontWeight: '700',
+    },
+    billAlertMeta: {
+        fontSize: 9.5,
+        marginTop: 2,
+    },
+    payBillActionBtn: {
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 7,
+    },
+    payBillActionBtnText: {
+        fontSize: 10.5,
+        fontWeight: '700',
+        color: '#fff',
+    },
+
+    // Mindfulness Spark Card
+    mindfulnessCard: {
+        borderRadius: 16,
+        padding: 14,
+        borderWidth: 1,
+        borderLeftWidth: 4,
+        marginBottom: 10,
+        flexDirection: 'row',
+        gap: 12,
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.04,
+        shadowRadius: 6,
+        elevation: 2,
+    },
+    quoteIconCircle: {
+        width: 36,
+        height: 36,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    quoteHeaderRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 3,
+    },
+    quoteCategoryTag: {
+        fontSize: 9.5,
+        fontWeight: '700',
+        letterSpacing: 0.4,
+        textTransform: 'uppercase',
+    },
+    quoteRotateHint: {
+        fontSize: 8.5,
+        fontWeight: '700',
+        textTransform: 'uppercase',
+        letterSpacing: 0.4,
+    },
+    quoteBodyText: {
+        fontSize: 12,
+        fontWeight: '600',
+        lineHeight: 17,
+        fontStyle: 'italic',
+    },
+    quoteAuthorText: {
+        fontSize: 10,
+        fontWeight: '700',
+        marginTop: 3,
+        textTransform: 'uppercase',
+        letterSpacing: 0.4,
+    },
+
+    // AI Insight Card
+    aiInsightCard: {
+        borderRadius: 16,
+        padding: 13,
+        borderWidth: 1,
+        borderLeftWidth: 4,
+        marginBottom: 14,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.03,
+        shadowRadius: 6,
+        elevation: 2,
+    },
+    aiInsightIconBadge: {
+        padding: 4,
+        borderRadius: 6,
+    },
+    aiInsightTitle: {
+        fontSize: 12.5,
+        fontWeight: '700',
+    },
+    aiInsightMessage: {
+        fontSize: 11.5,
+        lineHeight: 16,
+    },
+
+    // Section Header
+    sectionHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 10,
+        marginTop: 4,
+    },
+    sectionTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        letterSpacing: -0.2,
+    },
+    sectionTotal: {
+        fontSize: 13,
+        fontWeight: '700',
+    },
+    addAccountBtn: {
+        width: 26,
+        height: 26,
+        borderRadius: 13,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+
+    // Category Budgets
+    budgetContainerCard: {
+        borderRadius: 16,
+        borderWidth: 1,
+        padding: 14,
+        marginBottom: 14,
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.04,
+        shadowRadius: 6,
+    },
+    budgetRow: { width: '100%' },
+    budgetInfoRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 5,
     },
     budgetLabelCol: {
         flexDirection: 'row',
@@ -1790,46 +2108,47 @@ const s = StyleSheet.create({
         gap: 8,
     },
     budgetIconBg: {
-        width: 30,
-        height: 30,
-        borderRadius: 15,
+        width: 28,
+        height: 28,
+        borderRadius: 8,
         justifyContent: 'center',
         alignItems: 'center',
     },
     budgetName: {
-        fontSize: 14,
+        fontSize: 13,
         fontWeight: '600',
     },
     budgetAmountText: {
-        fontSize: 13,
+        fontSize: 12,
         fontWeight: '700',
     },
     budgetBarTrack: {
-        height: 8,
-        borderRadius: 4,
+        height: 6,
+        borderRadius: 3,
         width: '100%',
         overflow: 'hidden',
     },
     budgetBarFill: {
-        height: 8,
-        borderRadius: 4,
+        height: 6,
+        borderRadius: 3,
     },
-    // Savings Goals Styles
+
+    // Savings Goals
     goalCard: {
-        borderRadius: 16,
+        borderRadius: 14,
         borderWidth: 1,
-        padding: 16,
+        padding: 13,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
+        shadowOpacity: 0.04,
+        shadowRadius: 6,
         elevation: 2,
     },
     goalHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 8,
+        marginBottom: 6,
     },
     goalColorDot: {
         width: 8,
@@ -1837,54 +2156,55 @@ const s = StyleSheet.create({
         borderRadius: 4,
     },
     goalName: {
-        fontSize: 14,
+        fontSize: 13,
         fontWeight: '700',
     },
     goalDetails: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 8,
+        marginBottom: 6,
     },
     goalAmountText: {
-        fontSize: 13,
+        fontSize: 12,
         fontWeight: '700',
     },
     goalPercent: {
-        fontSize: 13,
+        fontSize: 12,
     },
     goalTrack: {
-        height: 6,
-        borderRadius: 3,
+        height: 5,
+        borderRadius: 2.5,
         width: '100%',
         overflow: 'hidden',
-        marginBottom: 12,
+        marginBottom: 10,
     },
     goalFill: {
-        height: 6,
-        borderRadius: 3,
+        height: 5,
+        borderRadius: 2.5,
     },
     allocateBtn: {
-        height: 32,
-        borderRadius: 8,
+        height: 28,
+        borderRadius: 7,
         borderWidth: 1,
         flexDirection: 'row',
         justifyContent: 'center',
         alignItems: 'center',
     },
     allocateBtnText: {
-        fontSize: 12,
+        fontSize: 11,
         fontWeight: '700',
     },
-    // Recurring Bills Styles
+
+    // Recurring Bills
     billCard: {
-        borderRadius: 16,
+        borderRadius: 14,
         borderWidth: 1,
-        padding: 14,
+        padding: 12,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
+        shadowOpacity: 0.04,
+        shadowRadius: 6,
         elevation: 2,
     },
     billInfo: {
@@ -1893,83 +2213,277 @@ const s = StyleSheet.create({
         alignItems: 'center',
     },
     billName: {
-        fontSize: 14,
+        fontSize: 13,
         fontWeight: '700',
-        maxWidth: 120,
     },
     billCategoryTag: {
-        paddingHorizontal: 6,
-        paddingVertical: 2,
+        paddingHorizontal: 5,
+        paddingVertical: 1.5,
         borderRadius: 4,
     },
     billCategoryTagText: {
-        fontSize: 9,
+        fontSize: 8.5,
         fontWeight: '700',
     },
     billAmount: {
-        fontSize: 14,
+        fontSize: 13,
         fontWeight: '700',
     },
     payBillBtn: {
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 8,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 6,
     },
     payBillBtnText: {
         color: '#fff',
-        fontSize: 12,
+        fontSize: 11,
         fontWeight: '700',
     },
     paidStatusBadge: {
-        padding: 4,
+        padding: 2,
+    },
+
+    // Cash Card
+    cashCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        borderRadius: 14,
+        padding: 13,
+        borderWidth: 1,
+        marginBottom: 18,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.04,
+        shadowRadius: 6,
+        elevation: 2,
+    },
+
+    // Horizontal Scroll for Banks & Cards
+    hScroll: {
+        width: '100%',
+        maxWidth: '100%',
+        overflow: 'hidden',
+        marginBottom: 18,
+        paddingBottom: 8,
+        paddingTop: 4,
+    },
+    bankCard: {
+        width: 142,
+        padding: 12,
+        borderRadius: 14,
+        marginRight: 10,
+        borderWidth: 1,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.04,
+        shadowRadius: 6,
+        elevation: 2,
+    },
+    addCard: {
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderStyle: 'dashed',
+        shadowOpacity: 0,
+        elevation: 0,
+    },
+    accountIcon: {
+        width: 34,
+        height: 34,
+        borderRadius: 10,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 6,
+    },
+    accountName: {
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    accountType: {
+        fontSize: 10,
+        marginTop: 1,
+    },
+    accountBalance: {
+        fontSize: 14.5,
+        fontWeight: '800',
+        marginTop: 3,
+    },
+    payCardBtn: {
+        marginTop: 6,
+        borderWidth: 1,
+        borderRadius: 6,
+        paddingVertical: 3.5,
+        alignItems: 'center',
+    },
+    payCardBtnText: {
+        fontSize: 9.5,
+        fontWeight: '700',
+    },
+
+    // Empty state
+    emptyCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        borderWidth: 1,
+        borderStyle: 'dashed',
+        borderRadius: 12,
+        padding: 14,
+        marginBottom: 14,
+    },
+    emptyText: {
+        fontSize: 12.5,
+    },
+    seeAll: {
+        fontWeight: '600',
+        fontSize: 12.5,
+    },
+
+    // Transactions list
+    txItem: {
+        padding: 0,
+        borderRadius: 12,
+        marginBottom: 8,
+        borderWidth: 1,
+        overflow: 'hidden',
+    },
+    txHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderBottomWidth: 1,
+        gap: 6,
+    },
+    txBody: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 10,
+    },
+    txIcon: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    txCategory: {
+        fontSize: 12.5,
+        fontWeight: '700',
+    },
+    txNote: {
+        fontSize: 10.5,
+        fontWeight: '500',
+    },
+    txAmount: {
+        fontSize: 13.5,
+        fontWeight: '800',
+    },
+    txAccountTag: {
+        fontSize: 10,
+        fontWeight: '600',
+        textTransform: 'uppercase',
+        letterSpacing: 0.4,
+    },
+
+    // Modals
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 16,
+    },
+    modalBox: {
+        width: '100%',
+        maxWidth: 360,
+        borderRadius: 18,
+        padding: 18,
+        elevation: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.12,
+        shadowRadius: 16,
+    },
+    modalHeaderRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    modalTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+    },
+    modalMsg: {
+        fontSize: 12.5,
+        lineHeight: 18,
+        marginBottom: 12,
+    },
+    modalFieldLabel: {
+        fontSize: 11,
+        fontWeight: '600',
     },
     modalInput: {
         borderWidth: 1,
-        borderRadius: 10,
-        height: 40,
-        paddingHorizontal: 12,
-        fontSize: 14,
+        borderRadius: 8,
+        height: 38,
+        paddingHorizontal: 10,
+        fontSize: 13,
         ...Platform.select({
             web: { outlineStyle: 'none' },
             default: {}
         })
     } as any,
-    colorSelectCircle: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-    },
-    accountSelectRow: {
-        borderWidth: 1,
+    fundingOptionItem: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: 10,
         borderRadius: 10,
-        paddingVertical: 10,
-        paddingHorizontal: 12,
-    },
-    categorySelectTag: {
         borderWidth: 1,
-        borderRadius: 8,
-        paddingHorizontal: 10,
-        paddingVertical: 6,
+        marginBottom: 6,
     },
-    categorySelectTagText: {
-        fontSize: 12,
-        fontWeight: '600',
+    fundingOptionIconBg: {
+        width: 26,
+        height: 26,
+        borderRadius: 6,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    modalBtns: {
+        flexDirection: 'row',
+        gap: 8,
+        marginTop: 6,
+    },
+    modalBtn: {
+        flex: 1,
+        paddingVertical: 10,
+        borderRadius: 8,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    colorSelectCircle: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
     },
     dropdownTrigger: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
         borderWidth: 1,
-        borderRadius: 10,
-        height: 42,
-        paddingHorizontal: 12,
+        borderRadius: 8,
+        height: 38,
+        paddingHorizontal: 10,
     },
     dropdownMenu: {
         position: 'absolute',
-        top: 46,
+        top: 42,
         left: 0,
         right: 0,
-        borderRadius: 10,
+        borderRadius: 8,
         borderWidth: 1,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 4 },
@@ -1980,7 +2494,13 @@ const s = StyleSheet.create({
         overflow: 'hidden',
     },
     dropdownItem: {
-        paddingVertical: 12,
-        paddingHorizontal: 14,
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+    },
+    loadingOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 1000,
     },
 });

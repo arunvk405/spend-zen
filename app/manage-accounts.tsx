@@ -370,7 +370,7 @@ export default function ManageAccounts() {
                     <Text style={[s.infoText, { color: Colors.textMuted }]}>
                         {tab === 'bank'
                             ? 'Bank account balance = Opening balance + all income − all expenses recorded for that account.'
-                            : 'Credit card balance is tracked from transactions. Use income transactions on a card to record payments.'
+                            : 'Credit card balance is tracked from purchases. Record card payment expenses from your bank or cash to settle dues.'
                         }
                     </Text>
                 </View>

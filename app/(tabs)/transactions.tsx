@@ -1,17 +1,18 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, ScrollView, Pressable, Platform, Modal } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, ScrollView, Platform, Modal } from 'react-native';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFinance } from '../../src/context/FinanceContext';
-import { useThemeColors, Typography } from '../../src/theme/colors';
+import { useThemeColors } from '../../src/theme/colors';
 import {
-    Search, Trash2, Calendar, ChevronLeft, ChevronRight, Pencil, Info,
+    Search, Trash2, Calendar, ChevronLeft, ChevronRight, ChevronDown, Pencil,
     Briefcase, PiggyBank, Gift, TrendingUp, Laptop, Package,
     Utensils, Activity, Home, Car, User, PawPrint, Film, CreditCard, Wallet, Landmark,
-    SlidersHorizontal, X, Download, Copy, FileText
+    SlidersHorizontal, X, Download, Copy, FileText, RotateCcw,
+    LayoutList, List, Zap, Award
 } from 'lucide-react-native';
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, TRANSFER_CATEGORIES } from '../../src/models';
-import { format, startOfMonth, endOfMonth, isWithinInterval, parseISO, isSameMonth, isSameYear, isToday, isSameWeek } from 'date-fns';
+import { format, parseISO, isSameMonth, isSameYear, isToday, isYesterday, isSameWeek } from 'date-fns';
 import ReportsView from './reports';
 
 const MONTHS = [
@@ -19,34 +20,7 @@ const MONTHS = [
     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
 ];
 
-const ITEM_WIDTH = 72; // 64 width + 8 marginRight
-const getItemLayout = (data: any, index: number) => ({
-    length: ITEM_WIDTH,
-    offset: ITEM_WIDTH * index,
-    index,
-});
-
-const HoverCard = ({ children, style, onPress, disabled = false }: any) => {
-    const [isHovered, setIsHovered] = useState(false);
-    return (
-        <Pressable
-            onPress={onPress}
-            disabled={disabled}
-            onHoverIn={() => setIsHovered(true)}
-            onHoverOut={() => setIsHovered(false)}
-            style={({ pressed }) => [
-                style,
-                isHovered ? { shadowOpacity: 0.12, shadowRadius: 16, elevation: 8, transform: [{ translateY: -4 }] } : undefined,
-                pressed ? { transform: [{ scale: 0.98 }] } : undefined,
-                Platform.OS === 'web' ? { transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)' } : undefined
-            ] as any}
-        >
-            {children}
-        </Pressable>
-    );
-};
-
-const IconRenderer = ({ name, color, size = 20 }: { name: string, color: string, size?: number }) => {
+const IconRenderer = ({ name, color, size = 18 }: { name: string, color: string, size?: number }) => {
     switch (name) {
         case 'briefcase': return <Briefcase color={color} size={size} />;
         case 'piggy-bank': return <PiggyBank color={color} size={size} />;
@@ -64,32 +38,54 @@ const IconRenderer = ({ name, color, size = 20 }: { name: string, color: string,
         case 'landmark': return <Landmark color={color} size={size} />;
         case 'credit-card': return <CreditCard color={color} size={size} />;
         case 'cross': return <Activity color={color} size={size} />;
+        case 'rotate-ccw': return <RotateCcw color={color} size={size} />;
         case 'package': return <Package color={color} size={size} />;
         default: return <Package color={color} size={size} />;
     }
 };
 
+export type CreditFilterType = 'ALL' | 'NON_CREDIT' | 'CREDIT';
+export type ViewDensity = 'DETAILED' | 'COMPACT';
+
+export interface TransactionGroup {
+    key: string;
+    title: string;
+    date: string;
+    totalIncome: number;
+    totalExpense: number;
+    net: number;
+    items: any[];
+}
+
 export default function TransactionsHistory() {
     const Colors = useThemeColors();
     const router = useRouter();
     const insets = useSafeAreaInsets();
-    const topMargin = Math.max(insets.top, Platform.OS === 'web' ? 12 : 8);
+    const topMargin = Math.max(insets.top, Platform.OS === 'web' ? 10 : 6);
     const bottomPadding = Math.max(insets.bottom + 85, 105);
 
-    const { transactions, deleteTransaction, bankAccounts, creditCards, cashAccountName, historyRetention } = useFinance();
+    const { transactions, deleteTransaction, bankAccounts, creditCards, cashAccountName } = useFinance();
     const params = useLocalSearchParams<{ category?: string; accountId?: string; account?: string; date?: string; type?: string; mode?: string }>();
     const [activeSubTab, setActiveSubTab] = useState<'HISTORY' | 'REPORTS'>('HISTORY');
     const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
     const [selectedAccounts, setSelectedAccounts] = useState<string[]>([]);
+    const [creditFilter, setCreditFilter] = useState<CreditFilterType>('ALL');
+    const [viewDensity, setViewDensity] = useState<ViewDensity>('DETAILED');
     const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+    const [isMonthPickerOpen, setIsMonthPickerOpen] = useState(false);
 
     // Modal temp states
     const [tempCategories, setTempCategories] = useState<string[]>([]);
     const [tempAccounts, setTempAccounts] = useState<string[]>([]);
+    const [tempCreditFilter, setTempCreditFilter] = useState<CreditFilterType>('ALL');
 
     const [searchQuery, setSearchQuery] = useState('');
     const [filterType, setFilterType] = useState<'ALL' | 'INCOME' | 'EXPENSE' | 'TRANSFER'>('ALL');
     const [datePreset, setDatePreset] = useState<'THIS_MONTH' | 'TODAY' | 'THIS_WEEK' | 'ALL_TIME'>('THIS_MONTH');
+
+    // Date state
+    const [selectedDate, setSelectedDate] = useState(() => new Date());
+    const [pickerYear, setPickerYear] = useState(() => new Date().getFullYear());
 
     const getAccountName = useCallback((id: string) => {
         if (id === 'cash') return cashAccountName;
@@ -99,10 +95,6 @@ export default function TransactionsHistory() {
         if (card) return card.cardName;
         return id;
     }, [cashAccountName, bankAccounts, creditCards]);
-
-    // Month/Year filter state
-    const [selectedDate, setSelectedDate] = useState(new Date());
-    const monthListRef = useRef<FlatList>(null);
 
     useEffect(() => {
         if (params.mode === 'reports') {
@@ -116,7 +108,6 @@ export default function TransactionsHistory() {
 
             if (hasCategory || hasAccountId || hasDate || hasType) {
                 if (hasCategory) {
-                    // Check if passed category string is actually an Account Name or Account ID
                     const matchingAccount = bankAccounts.find(b => b.bankName === params.category || b.id === params.category) ||
                         creditCards.find(c => c.cardName === params.category || c.id === params.category) ||
                         (params.category === cashAccountName || params.category === 'cash' ? { id: 'cash' } : null);
@@ -130,44 +121,36 @@ export default function TransactionsHistory() {
                 }
                 if (hasAccountId) {
                     const rawAcc = params.accountId || params.account;
-                    const accObj = bankAccounts.find(b => b.id === rawAcc || b.bankName === rawAcc) ||
-                        creditCards.find(c => c.id === rawAcc || c.cardName === rawAcc) ||
-                        (rawAcc === 'cash' || rawAcc === cashAccountName ? { id: 'cash' } : null);
+                    if (rawAcc === 'NON_CREDIT' || rawAcc === 'CREDIT' || rawAcc === 'ALL') {
+                        setCreditFilter(rawAcc);
+                    } else {
+                        const accObj = bankAccounts.find(b => b.id === rawAcc || b.bankName === rawAcc) ||
+                            creditCards.find(c => c.id === rawAcc || c.cardName === rawAcc) ||
+                            (rawAcc === 'cash' || rawAcc === cashAccountName ? { id: 'cash' } : null);
 
-                    if (accObj) {
-                        setSelectedAccounts([accObj.id]);
-                    } else if (rawAcc) {
-                        setSelectedAccounts([rawAcc as string]);
+                        if (accObj) {
+                            setSelectedAccounts([accObj.id]);
+                        } else if (rawAcc) {
+                            setSelectedAccounts([rawAcc as string]);
+                        }
                     }
                 }
                 if (hasType) {
                     setFilterType(params.type as 'ALL' | 'INCOME' | 'EXPENSE' | 'TRANSFER');
                 }
                 if (hasDate) {
-                    setSelectedDate(new Date(params.date as string));
+                    const parsed = new Date(params.date as string);
+                    setSelectedDate(parsed);
+                    setPickerYear(parsed.getFullYear());
                 }
-                // Clear the params from the router so they don't lock the state when tab changes
                 router.setParams({ category: '', accountId: '', account: '', date: '', type: '' });
             }
         }
-    }, [params.category, params.accountId, params.account, params.date, params.type, bankAccounts, creditCards, cashAccountName]);
-
-    useFocusEffect(
-        React.useCallback(() => {
-            const timer = setTimeout(() => {
-                monthListRef.current?.scrollToIndex({
-                    index: selectedDate.getMonth(),
-                    animated: true,
-                    viewPosition: 0.5,
-                });
-            }, 150);
-            return () => clearTimeout(timer);
-        }, [selectedDate])
-    );
+    }, [params.category, params.accountId, params.account, params.date, params.type, bankAccounts, creditCards, cashAccountName, router]);
 
     const filteredTransactions = useMemo(() => {
         const now = new Date();
-        return transactions.filter(tx => {
+        const result = transactions.filter(tx => {
             const txDate = parseISO(tx.date);
 
             let matchesDate = true;
@@ -181,9 +164,21 @@ export default function TransactionsHistory() {
                 matchesDate = true;
             }
 
-            const matchesType = filterType === 'ALL' || tx.type === filterType;
+            const isCardAccount = creditCards.some(c => c.id === tx.accountId) || tx.accountId === 'credit';
+            const isCardPayment = tx.category === 'Credit Card Payment';
+            const effectiveType = (isCardAccount && isCardPayment) ? 'TRANSFER' : tx.type;
+            const matchesType = filterType === 'ALL' || effectiveType === filterType;
             const matchesCategory = selectedCategories.length === 0 || selectedCategories.includes(tx.category);
             const matchesAccount = selectedAccounts.length === 0 || selectedAccounts.includes(tx.accountId);
+
+            const isCreditTx = isCardAccount || (tx.type === 'TRANSFER' && creditCards.some(c => c.id === tx.toAccountId));
+
+            let matchesCreditFilter = true;
+            if (creditFilter === 'NON_CREDIT') {
+                matchesCreditFilter = !isCreditTx;
+            } else if (creditFilter === 'CREDIT') {
+                matchesCreditFilter = isCreditTx;
+            }
 
             let matchesSearch = true;
             if (searchQuery.trim()) {
@@ -201,9 +196,11 @@ export default function TransactionsHistory() {
                     amountText.includes(query);
             }
 
-            return matchesDate && matchesType && matchesCategory && matchesAccount && matchesSearch;
+            return matchesDate && matchesType && matchesCategory && matchesAccount && matchesCreditFilter && matchesSearch;
         });
-    }, [transactions, filterType, selectedDate, selectedCategories, selectedAccounts, searchQuery, datePreset, cashAccountName, bankAccounts, creditCards]);
+
+        return result.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }, [transactions, filterType, selectedDate, selectedCategories, selectedAccounts, creditFilter, searchQuery, datePreset, getAccountName, creditCards]);
 
     const totals = useMemo(() => {
         let income = 0;
@@ -212,7 +209,12 @@ export default function TransactionsHistory() {
 
         filteredTransactions.forEach(tx => {
             const amt = Number(tx.amount) || 0;
-            if (tx.type === 'INCOME') {
+            const isCardAccount = creditCards.some(c => c.id === tx.accountId) || tx.accountId === 'credit';
+            const isCardPayment = tx.category === 'Credit Card Payment';
+
+            if (isCardAccount && isCardPayment) {
+                transfer += amt;
+            } else if (tx.type === 'INCOME') {
                 income += amt;
             } else if (tx.type === 'EXPENSE') {
                 expense += amt;
@@ -233,9 +235,100 @@ export default function TransactionsHistory() {
             net,
             count: filteredTransactions.length
         };
-    }, [filteredTransactions]);
+    }, [filteredTransactions, creditCards]);
 
-    const hasActiveFilters = selectedCategories.length > 0 || selectedAccounts.length > 0 || filterType !== 'ALL' || searchQuery.trim().length > 0 || datePreset !== 'THIS_MONTH';
+    const insights = useMemo(() => {
+        const expenseDates = new Set<string>();
+        const categoryExpenses: Record<string, number> = {};
+        let maxExpense = 0;
+
+        filteredTransactions.forEach(tx => {
+            const isCardAccount = creditCards.some(c => c.id === tx.accountId) || tx.accountId === 'credit';
+            const isCardPayment = tx.category === 'Credit Card Payment';
+            const amt = Number(tx.amount) || 0;
+
+            if (tx.type === 'EXPENSE' && !(isCardAccount && isCardPayment)) {
+                if (tx.date) expenseDates.add(tx.date.split('T')[0]);
+                categoryExpenses[tx.category] = (categoryExpenses[tx.category] || 0) + amt;
+                if (amt > maxExpense) {
+                    maxExpense = amt;
+                }
+            }
+        });
+
+        const activeDays = Math.max(expenseDates.size, 1);
+        const dailyAvg = totals.expense > 0 ? Math.round(totals.expense / activeDays) : 0;
+
+        let topCategoryName = 'None';
+        let topCategoryAmount = 0;
+        Object.entries(categoryExpenses).forEach(([cat, sum]) => {
+            if (sum > topCategoryAmount) {
+                topCategoryAmount = sum;
+                topCategoryName = cat;
+            }
+        });
+
+        const topCategoryPercent = totals.expense > 0 ? Math.round((topCategoryAmount / totals.expense) * 100) : 0;
+
+        return {
+            dailyAvg,
+            topCategoryName,
+            topCategoryAmount,
+            topCategoryPercent,
+            maxExpense,
+            activeDays
+        };
+    }, [filteredTransactions, totals.expense, creditCards]);
+
+    const formatDateHeader = (dateStr: string) => {
+        try {
+            const d = parseISO(dateStr);
+            if (isToday(d)) return `Today, ${format(d, 'dd MMM')}`;
+            if (isYesterday(d)) return `Yesterday, ${format(d, 'dd MMM')}`;
+            return format(d, 'EEE, dd MMM yyyy');
+        } catch {
+            return dateStr;
+        }
+    };
+
+    const groupedTransactions = useMemo<TransactionGroup[]>(() => {
+        if (filteredTransactions.length === 0) return [];
+
+        const groupsMap = new Map<string, TransactionGroup>();
+
+        filteredTransactions.forEach(tx => {
+            const dateKey = tx.date ? tx.date.split('T')[0] : 'Unknown';
+            if (!groupsMap.has(dateKey)) {
+                groupsMap.set(dateKey, {
+                    key: dateKey,
+                    title: formatDateHeader(dateKey),
+                    date: dateKey,
+                    totalIncome: 0,
+                    totalExpense: 0,
+                    net: 0,
+                    items: []
+                });
+            }
+            const grp = groupsMap.get(dateKey)!;
+            grp.items.push(tx);
+            const amt = Number(tx.amount) || 0;
+            const isCardAccount = creditCards.some(c => c.id === tx.accountId) || tx.accountId === 'credit';
+            const isCardPayment = tx.category === 'Credit Card Payment';
+            if (!(isCardAccount && isCardPayment)) {
+                if (tx.type === 'INCOME') grp.totalIncome += amt;
+                else if (tx.type === 'EXPENSE') grp.totalExpense += amt;
+            }
+            grp.net = Math.round((grp.totalIncome - grp.totalExpense) * 100) / 100;
+        });
+
+        return Array.from(groupsMap.values());
+    }, [filteredTransactions, creditCards]);
+
+    const activeFilterCount = (selectedCategories.length) +
+        (selectedAccounts.length) +
+        (creditFilter !== 'ALL' ? 1 : 0) +
+        (filterType !== 'ALL' ? 1 : 0) +
+        (datePreset !== 'THIS_MONTH' ? 1 : 0);
 
     const formatAmount = (num: number) => {
         return num.toLocaleString('en-IN', {
@@ -273,13 +366,63 @@ export default function TransactionsHistory() {
     const openModal = () => {
         setTempCategories([...selectedCategories]);
         setTempAccounts([...selectedAccounts]);
+        setTempCreditFilter(creditFilter);
         setIsFilterModalOpen(true);
     };
 
     const handleApply = () => {
         setSelectedCategories([...tempCategories]);
         setSelectedAccounts([...tempAccounts]);
+        setCreditFilter(tempCreditFilter);
         setIsFilterModalOpen(false);
+    };
+
+    const handleReset = () => {
+        setTempCategories([]);
+        setTempAccounts([]);
+        setTempCreditFilter('ALL');
+    };
+
+    const handleCancel = () => {
+        setIsFilterModalOpen(false);
+    };
+
+    const toggleTempCategory = (categoryName: string) => {
+        if (tempCategories.includes(categoryName)) {
+            setTempCategories(tempCategories.filter(c => c !== categoryName));
+        } else {
+            setTempCategories([...tempCategories, categoryName]);
+        }
+    };
+
+    const toggleTempAccount = (accountId: string) => {
+        if (tempAccounts.includes(accountId)) {
+            setTempAccounts(tempAccounts.filter(a => a !== accountId));
+        } else {
+            setTempAccounts([...tempAccounts, accountId]);
+        }
+    };
+
+    // Zero-overflow month stepper
+    const stepMonth = (delta: number) => {
+        const year = selectedDate.getFullYear();
+        const month = selectedDate.getMonth();
+        const newDate = new Date(year, month + delta, 1);
+        setSelectedDate(newDate);
+        setPickerYear(newDate.getFullYear());
+        setDatePreset('THIS_MONTH');
+    };
+
+    const openMonthPicker = () => {
+        setPickerYear(selectedDate.getFullYear());
+        setIsMonthPickerOpen(true);
+    };
+
+    const selectPickerMonth = (monthIndex: number) => {
+        const newDate = new Date(pickerYear, monthIndex, 1);
+        setSelectedDate(newDate);
+        setDatePreset('THIS_MONTH');
+        setIsMonthPickerOpen(false);
     };
 
     const handleExportCSV = () => {
@@ -293,7 +436,6 @@ export default function TransactionsHistory() {
             return;
         }
 
-        // Header row
         let csv = 'Date,Category,Type,Amount,Account,Note\n';
 
         filteredTransactions.forEach(t => {
@@ -334,128 +476,6 @@ export default function TransactionsHistory() {
         });
     };
 
-    const handleExportPDF = () => {
-        if (filteredTransactions.length === 0) {
-            if (Platform.OS === 'web') {
-                window.alert("No transactions to export");
-            }
-            return;
-        }
-
-        if (Platform.OS === 'web') {
-            const monthTitle = format(selectedDate, 'MMMM yyyy');
-            const printWindow = window.open('', '_blank');
-            if (!printWindow) return;
-
-            let rowsHtml = '';
-            filteredTransactions.forEach(t => {
-                const accName = getAccountName(t.accountId);
-                const toAcc = t.toAccountId ? ` ➔ ${getAccountName(t.toAccountId)}` : '';
-                const color = t.type === 'INCOME' ? '#10B981' : t.type === 'EXPENSE' ? '#EF4444' : '#6366F1';
-                const sign = t.type === 'INCOME' ? '+' : t.type === 'EXPENSE' ? '-' : '⇄ ';
-                rowsHtml += `
-                    <tr>
-                        <td>${format(new Date(t.date), 'dd MMM yyyy')}</td>
-                        <td>${t.category}</td>
-                        <td>${t.type}</td>
-                        <td>${accName}${toAcc}</td>
-                        <td style="color: ${color}; font-weight: bold;">${sign}₹${Number(t.amount).toLocaleString()}</td>
-                        <td>${t.note || '-'}</td>
-                    </tr>
-                `;
-            });
-
-            const htmlContent = `
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <title>SpendZen Statement - ${monthTitle}</title>
-                    <style>
-                        body { font-family: Arial, sans-serif; padding: 24px; color: #1e293b; }
-                        h1 { margin-bottom: 4px; color: #4f46e5; font-size: 22px; }
-                        p { font-size: 13px; color: #64748b; margin-top: 0; }
-                        .summary { display: flex; gap: 16px; margin: 20px 0; background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0; }
-                        .stat { flex: 1; }
-                        .stat-label { font-size: 11px; color: #64748b; text-transform: uppercase; font-weight: 600; }
-                        .stat-val { font-size: 18px; font-weight: bold; margin-top: 4px; }
-                        table { width: 100%; border-collapse: collapse; margin-top: 16px; }
-                        th, td { padding: 10px 12px; border-bottom: 1px solid #e2e8f0; text-align: left; font-size: 13px; }
-                        th { background: #f1f5f9; font-weight: 700; color: #334155; }
-                    </style>
-                </head>
-                <body>
-                    <h1>SpendZen Monthly Statement</h1>
-                    <p>Period: <strong>${monthTitle}</strong> | Generated on: ${format(new Date(), 'dd MMM yyyy')}</p>
-                    <div class="summary">
-                        <div class="stat"><div class="stat-label">Total Income</div><div class="stat-val" style="color:#10B981;">+₹${totals.income.toLocaleString()}</div></div>
-                        <div class="stat"><div class="stat-label">Total Expense</div><div class="stat-val" style="color:#EF4444;">-₹${totals.expense.toLocaleString()}</div></div>
-                        <div class="stat"><div class="stat-label">Net Balance</div><div class="stat-val">₹${totals.net.toLocaleString()}</div></div>
-                        <div class="stat"><div class="stat-label">Total Txns</div><div class="stat-val">${totals.count}</div></div>
-                    </div>
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Date</th>
-                                <th>Category</th>
-                                <th>Type</th>
-                                <th>Account</th>
-                                <th>Amount</th>
-                                <th>Note</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${rowsHtml}
-                        </tbody>
-                    </table>
-                    <script>
-                        window.onload = function() { window.print(); }
-                    </script>
-                </body>
-                </html>
-            `;
-
-            printWindow.document.write(htmlContent);
-            printWindow.document.close();
-        }
-    };
-
-    const handleReset = () => {
-        setTempCategories([]);
-        setTempAccounts([]);
-    };
-
-    const handleCancel = () => {
-        setIsFilterModalOpen(false);
-    };
-
-    const toggleTempCategory = (categoryName: string) => {
-        if (tempCategories.includes(categoryName)) {
-            setTempCategories(tempCategories.filter(c => c !== categoryName));
-        } else {
-            setTempCategories([...tempCategories, categoryName]);
-        }
-    };
-
-    const toggleTempAccount = (accountId: string) => {
-        if (tempAccounts.includes(accountId)) {
-            setTempAccounts(tempAccounts.filter(a => a !== accountId));
-        } else {
-            setTempAccounts([...tempAccounts, accountId]);
-        }
-    };
-
-    const changeYear = (delta: number) => {
-        const newDate = new Date(selectedDate);
-        newDate.setFullYear(selectedDate.getFullYear() + delta);
-        setSelectedDate(newDate);
-    };
-
-    const selectMonth = (index: number) => {
-        const newDate = new Date(selectedDate);
-        newDate.setMonth(index);
-        setSelectedDate(newDate);
-    };
-
     const handleDelete = async (item: any) => {
         if (Platform.OS === 'web') {
             if (window.confirm(`Are you sure you want to delete this ${item.type.toLowerCase()} transaction of ₹${item.amount}?`)) {
@@ -486,8 +506,6 @@ export default function TransactionsHistory() {
         }
     };
 
-
-
     const categoryMap = useMemo(() => {
         const map = new Map<string, any>();
         [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES, ...TRANSFER_CATEGORIES].forEach(c => {
@@ -497,42 +515,46 @@ export default function TransactionsHistory() {
         return map;
     }, []);
 
-    const renderItem = ({ item }: { item: any }) => {
-        const isTransfer = item.type === 'TRANSFER';
-        const categoryData = categoryMap.get(`${item.type}_${item.category}`) ||
+    const renderDetailedItem = (item: any) => {
+        const isCardAccount = creditCards.some(c => c.id === item.accountId) || item.accountId === 'credit';
+        const isCardPayment = item.category === 'Credit Card Payment';
+        const displayType = (isCardAccount && isCardPayment) ? 'TRANSFER' : item.type;
+        const isTransfer = displayType === 'TRANSFER';
+        const categoryData = categoryMap.get(`${displayType}_${item.category}`) ||
             categoryMap.get(item.category) ||
-            { icon: isTransfer ? 'rotate-ccw' : 'package', color: isTransfer ? Colors.primary : Colors.textMuted };
+            { icon: isTransfer ? (isCardPayment ? 'credit-card' : 'rotate-ccw') : (isCardPayment ? 'credit-card' : 'package'), color: isTransfer ? Colors.primary : Colors.textMuted };
 
         const fromAccName = getAccountName(item.accountId);
         const toAccName = item.toAccountId ? getAccountName(item.toAccountId) : '';
-        const accountDisplay = isTransfer && toAccName ? `${fromAccName} ➔ ${toAccName}` : fromAccName;
+        const accountDisplay = isTransfer && toAccName && toAccName !== fromAccName ? `${fromAccName} ➔ ${toAccName}` : fromAccName;
         const formattedDate = format(new Date(item.date), 'dd MMM');
 
         return (
             <TouchableOpacity
+                key={item.id}
                 activeOpacity={0.8}
                 style={[styles.transactionItem, { backgroundColor: Colors.surface, borderColor: Colors.border }]}
                 onPress={() => router.push({ pathname: '/add', params: { id: item.id } })}
             >
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 12 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingVertical: 10 }}>
                     {/* Category Icon */}
                     <View style={{
-                        width: 44,
-                        height: 44,
-                        borderRadius: 14,
+                        width: 38,
+                        height: 38,
+                        borderRadius: 12,
                         backgroundColor: (categoryData.color || Colors.primary) + '15',
                         justifyContent: 'center',
                         alignItems: 'center'
                     }}>
-                        <IconRenderer name={categoryData.icon} color={categoryData.color || Colors.primary} size={20} />
+                        <IconRenderer name={categoryData.icon} color={categoryData.color || Colors.primary} size={18} />
                     </View>
 
                     {/* Transaction Info */}
                     <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 14, fontWeight: '700', color: Colors.text }} numberOfLines={1}>
+                        <Text style={{ fontSize: 13.5, fontWeight: '700', color: Colors.text }} numberOfLines={1}>
                             {item.category || (isTransfer ? 'Self Transfer' : 'Expense')}
                         </Text>
-                        <Text style={{ fontSize: 11, color: Colors.textMuted, marginTop: 2 }} numberOfLines={1}>
+                        <Text style={{ fontSize: 11, color: Colors.textMuted, marginTop: 1 }} numberOfLines={1}>
                             {formattedDate} • {accountDisplay}{item.note ? ` • ${item.note}` : ''}
                         </Text>
                     </View>
@@ -540,31 +562,31 @@ export default function TransactionsHistory() {
                     {/* Amount & Actions */}
                     <View style={{ alignItems: 'flex-end' }}>
                         <Text style={{
-                            fontSize: 15,
+                            fontSize: 14.5,
                             fontWeight: '700',
-                            color: item.type === 'INCOME' ? Colors.income : item.type === 'EXPENSE' ? Colors.expense : Colors.primary
+                            color: displayType === 'INCOME' ? Colors.income : displayType === 'EXPENSE' ? Colors.expense : Colors.primary
                         }}>
-                            {item.type === 'INCOME' ? '+' : item.type === 'EXPENSE' ? '-' : '⇄ '}₹{item.amount.toLocaleString('en-IN')}
+                            {displayType === 'INCOME' ? '+' : displayType === 'EXPENSE' ? '-' : '⇄ '}₹{item.amount.toLocaleString('en-IN')}
                         </Text>
 
-                        <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
+                        <View style={{ flexDirection: 'row', gap: 8, marginTop: 3 }}>
                             <TouchableOpacity
                                 style={{ padding: 2 }}
                                 onPress={(e: any) => { e?.stopPropagation?.(); handleDuplicate(item); }}
                             >
-                                <Copy color={Colors.textMuted} size={14} />
+                                <Copy color={Colors.textMuted} size={13} />
                             </TouchableOpacity>
                             <TouchableOpacity
                                 style={{ padding: 2 }}
                                 onPress={(e: any) => { e?.stopPropagation?.(); router.push({ pathname: '/add', params: { id: item.id } }); }}
                             >
-                                <Pencil color={Colors.primary} size={14} />
+                                <Pencil color={Colors.primary} size={13} />
                             </TouchableOpacity>
                             <TouchableOpacity
                                 style={{ padding: 2 }}
                                 onPress={(e: any) => { e?.stopPropagation?.(); handleDelete(item); }}
                             >
-                                <Trash2 color={Colors.expense} size={14} />
+                                <Trash2 color={Colors.expense} size={13} />
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -573,183 +595,282 @@ export default function TransactionsHistory() {
         );
     };
 
+    const renderCompactItem = (item: any) => {
+        const isCardAccount = creditCards.some(c => c.id === item.accountId) || item.accountId === 'credit';
+        const isCardPayment = item.category === 'Credit Card Payment';
+        const displayType = (isCardAccount && isCardPayment) ? 'TRANSFER' : item.type;
+        const isTransfer = displayType === 'TRANSFER';
+        const categoryData = categoryMap.get(`${displayType}_${item.category}`) ||
+            categoryMap.get(item.category) ||
+            { icon: isTransfer ? 'rotate-ccw' : 'package', color: Colors.primary };
+
+        const fromAccName = getAccountName(item.accountId);
+        const toAccName = item.toAccountId ? getAccountName(item.toAccountId) : '';
+        const accountDisplay = isTransfer && toAccName && toAccName !== fromAccName ? `${fromAccName} ➔ ${toAccName}` : fromAccName;
+
+        return (
+            <TouchableOpacity
+                key={item.id}
+                activeOpacity={0.8}
+                style={[styles.compactItem, { backgroundColor: Colors.surface, borderColor: Colors.border }]}
+                onPress={() => router.push({ pathname: '/add', params: { id: item.id } })}
+            >
+                <View style={{
+                    width: 28,
+                    height: 28,
+                    borderRadius: 8,
+                    backgroundColor: (categoryData.color || Colors.primary) + '15',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    marginRight: 8,
+                }}>
+                    <IconRenderer name={categoryData.icon} color={categoryData.color || Colors.primary} size={14} />
+                </View>
+
+                <View style={{ flex: 1, marginRight: 6 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <Text style={{ fontSize: 12.5, fontWeight: '700', color: Colors.text }} numberOfLines={1}>
+                            {item.category || (isTransfer ? 'Transfer' : 'Expense')}
+                        </Text>
+                        <Text style={{ fontSize: 11, color: Colors.textMuted }} numberOfLines={1}>
+                            • {accountDisplay}
+                        </Text>
+                    </View>
+                    {item.note ? (
+                        <Text style={{ fontSize: 10.5, color: Colors.textMuted, marginTop: 1 }} numberOfLines={1}>
+                            {item.note}
+                        </Text>
+                    ) : null}
+                </View>
+
+                <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={{
+                        fontSize: 13.5,
+                        fontWeight: '700',
+                        color: displayType === 'INCOME' ? Colors.income : displayType === 'EXPENSE' ? Colors.expense : Colors.primary
+                    }}>
+                        {displayType === 'INCOME' ? '+' : displayType === 'EXPENSE' ? '-' : '⇄ '}₹{item.amount.toLocaleString('en-IN')}
+                    </Text>
+                </View>
+            </TouchableOpacity>
+        );
+    };
+
+    const renderGroup = ({ item: group }: { item: TransactionGroup }) => {
+        return (
+            <View style={styles.groupContainer} key={group.key}>
+                {/* Day Timeline Header Banner */}
+                {group.title ? (
+                    <View style={styles.groupHeaderRow}>
+                        <View style={styles.groupHeaderLeft}>
+                            <Calendar size={12} color={Colors.primary} />
+                            <Text style={[styles.groupDateText, { color: Colors.text }]}>
+                                {group.title}
+                            </Text>
+                            <View style={[styles.groupCountBadge, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+                                <Text style={[styles.groupCountText, { color: Colors.textMuted }]}>
+                                    {group.items.length} {group.items.length === 1 ? 'txn' : 'txns'}
+                                </Text>
+                            </View>
+                        </View>
+
+                        {/* Daily Subtotal Badge */}
+                        <View style={styles.groupHeaderRight}>
+                            {group.totalExpense > 0 && (
+                                <Text style={[styles.groupExpenseText, { color: Colors.expense }]}>
+                                    -₹{formatAmount(group.totalExpense)}
+                                </Text>
+                            )}
+                            {group.totalIncome > 0 && (
+                                <Text style={[styles.groupIncomeText, { color: Colors.income }]}>
+                                    +₹{formatAmount(group.totalIncome)}
+                                </Text>
+                            )}
+                        </View>
+                    </View>
+                ) : null}
+
+                {/* List of items inside this group */}
+                <View style={styles.groupItemsContainer}>
+                    {group.items.map((tx: any) => (
+                        <React.Fragment key={tx.id}>
+                            {viewDensity === 'COMPACT' ? renderCompactItem(tx) : renderDetailedItem(tx)}
+                        </React.Fragment>
+                    ))}
+                </View>
+            </View>
+        );
+    };
+
+    if (activeSubTab === 'REPORTS') {
+        return <ReportsView initialDate={selectedDate} onSubTabChange={setActiveSubTab} />;
+    }
+
     return (
         <View style={[styles.container, { backgroundColor: Colors.background }]}>
-            {/* Top Sub-tab Segmented Control */}
-            <View style={{
-                flexDirection: 'row',
-                backgroundColor: Colors.surface,
-                borderRadius: 14,
-                padding: 4,
-                marginHorizontal: 16,
-                marginTop: topMargin,
-                marginBottom: 8,
-                borderWidth: 1,
-                borderColor: Colors.border
-            }}>
-                <TouchableOpacity
-                    style={{
-                        flex: 1,
-                        paddingVertical: 8,
-                        alignItems: 'center',
-                        borderRadius: 10,
-                        backgroundColor: activeSubTab === 'HISTORY' ? Colors.primary : 'transparent'
-                    }}
-                    onPress={() => setActiveSubTab('HISTORY')}
-                >
-                    <Text style={{ fontSize: 13, fontWeight: '700', color: activeSubTab === 'HISTORY' ? '#fff' : Colors.textMuted }}>
-                        📜 History
-                    </Text>
-                </TouchableOpacity>
+            {/* COMPACT UNIFIED HEADER CONTAINER */}
+            <View style={[styles.compactHeaderWrapper, { backgroundColor: Colors.background, paddingTop: topMargin }]}>
+                
+                {/* 1. TOP BAR: SubTabs + Interactive Month Navigator */}
+                <View style={styles.topNavRow}>
+                    {/* Compact Subtab Pills */}
+                    <View style={[styles.subtabContainer, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+                        <TouchableOpacity
+                            style={[styles.subtabBtn, { backgroundColor: Colors.primary }]}
+                            onPress={() => setActiveSubTab('HISTORY')}
+                        >
+                            <Text style={[styles.subtabText, { color: '#fff' }]}>
+                                📜 History
+                            </Text>
+                        </TouchableOpacity>
 
-                <TouchableOpacity
-                    style={{
-                        flex: 1,
-                        paddingVertical: 8,
-                        alignItems: 'center',
-                        borderRadius: 10,
-                        backgroundColor: activeSubTab === 'REPORTS' ? Colors.primary : 'transparent'
-                    }}
-                    onPress={() => setActiveSubTab('REPORTS')}
-                >
-                    <Text style={{ fontSize: 13, fontWeight: '700', color: activeSubTab === 'REPORTS' ? '#fff' : Colors.textMuted }}>
-                        📊 Analytics & Reports
-                    </Text>
-                </TouchableOpacity>
-            </View>
+                        <TouchableOpacity
+                            style={styles.subtabBtn}
+                            onPress={() => setActiveSubTab('REPORTS')}
+                        >
+                            <Text style={[styles.subtabText, { color: Colors.textMuted }]}>
+                                📊 Reports
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
 
-            {activeSubTab === 'REPORTS' ? (
-                <ReportsView />
-            ) : (
-                <>
-                    <View style={[styles.header, { backgroundColor: Colors.background, borderBottomColor: Colors.border }]}>
-                <View style={styles.yearRow}>
-                    <TouchableOpacity onPress={() => changeYear(-1)} style={styles.arrowBtn}>
-                        <ChevronLeft color={Colors.textMuted} size={20} />
-                    </TouchableOpacity>
-                    <Text style={[styles.yearText, { color: Colors.text }]}>{selectedDate.getFullYear()}</Text>
-                    <TouchableOpacity onPress={() => changeYear(1)} style={styles.arrowBtn}>
-                        <ChevronRight color={Colors.textMuted} size={20} />
-                    </TouchableOpacity>
+                    {/* Month Navigator Stepper + Modal Trigger */}
+                    <View style={[styles.monthNavGroup, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+                        <TouchableOpacity onPress={() => stepMonth(-1)} style={styles.monthStepBtn} accessibilityLabel="Previous month">
+                            <ChevronLeft color={Colors.textMuted} size={16} />
+                        </TouchableOpacity>
+
+                        <TouchableOpacity onPress={openMonthPicker} style={styles.monthLabelBtn} activeOpacity={0.7}>
+                            <Text style={[styles.monthNavText, { color: Colors.text }]}>
+                                {format(selectedDate, 'MMM yyyy')}
+                            </Text>
+                            <ChevronDown color={Colors.textMuted} size={14} style={{ marginLeft: 3 }} />
+                        </TouchableOpacity>
+
+                        <TouchableOpacity onPress={() => stepMonth(1)} style={styles.monthStepBtn} accessibilityLabel="Next month">
+                            <ChevronRight color={Colors.textMuted} size={16} />
+                        </TouchableOpacity>
+                    </View>
                 </View>
-                <FlatList
-                    ref={monthListRef}
-                    data={MONTHS}
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    style={styles.monthScroll}
-                    contentContainerStyle={styles.monthContent}
-                    keyExtractor={(item) => item}
-                    getItemLayout={getItemLayout}
-                    onScrollToIndexFailed={(info) => {
-                        const promise = new Promise((resolve) => setTimeout(resolve, 50));
-                        promise.then(() => {
-                            monthListRef.current?.scrollToIndex({
-                                index: info.index,
-                                animated: true,
-                                viewPosition: 0.5,
-                            });
-                        });
-                    }}
-                    renderItem={({ item, index }) => {
-                        const isSelected = selectedDate.getMonth() === index;
-                        return (
-                            <HoverCard
-                                key={item}
-                                style={[
-                                    styles.monthChip,
-                                    isSelected && { backgroundColor: Colors.primary, borderColor: Colors.primary }
-                                ]}
-                                onPress={() => selectMonth(index)}
-                            >
-                                <Text style={[
-                                    styles.monthText,
-                                    { color: isSelected ? Colors.white : Colors.textMuted }
-                                ]}>{item}</Text>
-                            </HoverCard>
-                        );
-                    }}
-                />
 
-                {/* Sleek Search Bar & Filter Controls */}
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 16, marginBottom: 8 }}>
-                    <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border, borderRadius: 12, paddingHorizontal: 12, height: 42 }}>
-                        <Search color={Colors.textMuted} size={18} />
+                {/* 2. COMMAND ACTION ROW: Search + Density + Filter + Export */}
+                <View style={styles.commandBarRow}>
+                    {/* Search Input */}
+                    <View style={[styles.searchBox, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+                        <Search color={Colors.textMuted} size={16} />
                         <TextInput
-                            style={{ flex: 1, fontSize: 15, color: Colors.text, marginLeft: 8, paddingVertical: 0 }}
-                            placeholder="Search transactions..."
+                            style={[styles.searchInput, { color: Colors.text }]}
+                            placeholder="Search note, category, account, ₹..."
                             placeholderTextColor={Colors.textMuted}
                             value={searchQuery}
                             onChangeText={setSearchQuery}
                         />
                         {searchQuery.length > 0 && (
-                            <TouchableOpacity onPress={() => setSearchQuery('')} style={{ padding: 4 }}>
-                                <X color={Colors.textMuted} size={16} />
+                            <TouchableOpacity onPress={() => setSearchQuery('')} style={{ padding: 2 }}>
+                                <X color={Colors.textMuted} size={14} />
                             </TouchableOpacity>
                         )}
                     </View>
 
+                    {/* Density View Toggle Button */}
                     <TouchableOpacity
-                        style={{ width: 42, height: 42, borderRadius: 12, backgroundColor: (selectedCategories.length > 0 || selectedAccounts.length > 0) ? Colors.primary + '20' : Colors.surface, borderWidth: 1, borderColor: (selectedCategories.length > 0 || selectedAccounts.length > 0) ? Colors.primary : Colors.border, justifyContent: 'center', alignItems: 'center' }}
-                        onPress={openModal}
+                        style={[
+                            styles.iconActionBtn,
+                            { backgroundColor: viewDensity === 'COMPACT' ? Colors.primary + '18' : Colors.surface, borderColor: viewDensity === 'COMPACT' ? Colors.primary : Colors.border }
+                        ]}
+                        onPress={() => setViewDensity(prev => prev === 'DETAILED' ? 'COMPACT' : 'DETAILED')}
+                        accessibilityLabel="Toggle list density"
                     >
-                        <SlidersHorizontal color={Colors.primary} size={18} />
+                        {viewDensity === 'COMPACT' ? (
+                            <List color={Colors.primary} size={16} />
+                        ) : (
+                            <LayoutList color={Colors.textMuted} size={16} />
+                        )}
                     </TouchableOpacity>
 
+                    {/* Filter Modal Trigger with Badge */}
                     <TouchableOpacity
-                        style={{ width: 42, height: 42, borderRadius: 12, backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border, justifyContent: 'center', alignItems: 'center' }}
-                        onPress={handleExportCSV}
+                        style={[
+                            styles.iconActionBtn,
+                            { backgroundColor: activeFilterCount > 0 ? Colors.primary + '18' : Colors.surface, borderColor: activeFilterCount > 0 ? Colors.primary : Colors.border }
+                        ]}
+                        onPress={openModal}
+                        accessibilityLabel="Filter options"
                     >
-                        <Download color={Colors.primary} size={18} />
+                        <SlidersHorizontal color={activeFilterCount > 0 ? Colors.primary : Colors.textMuted} size={16} />
+                        {activeFilterCount > 0 && (
+                            <View style={[styles.filterBadgeCircle, { backgroundColor: Colors.primary, borderColor: Colors.background }]}>
+                                <Text style={styles.filterBadgeText}>{activeFilterCount}</Text>
+                            </View>
+                        )}
+                    </TouchableOpacity>
+
+                    {/* CSV Export Button */}
+                    <TouchableOpacity
+                        style={[styles.iconActionBtn, { backgroundColor: Colors.surface, borderColor: Colors.border }]}
+                        onPress={handleExportCSV}
+                        accessibilityLabel="Export CSV"
+                    >
+                        <Download color={Colors.primary} size={16} />
                     </TouchableOpacity>
                 </View>
 
-                {/* Compact Horizontal Preset & Type Filter Bar */}
+                {/* 3. COMPACT ACCOUNT & TYPE FILTER PILLS STRIP */}
                 <ScrollView
                     horizontal
                     showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={{ paddingHorizontal: 16, gap: 6, paddingBottom: 8 }}
+                    contentContainerStyle={styles.filterStripContent}
                 >
-                    {/* Active Filters */}
-                    {selectedCategories.map(cat => (
-                        <TouchableOpacity
-                            key={`cat-${cat}`}
-                            style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16, backgroundColor: Colors.primary + '20', borderWidth: 1, borderColor: Colors.primary }}
-                            onPress={() => setSelectedCategories(selectedCategories.filter(c => c !== cat))}
-                        >
-                            <Text style={{ fontSize: 12, fontWeight: '600', color: Colors.primary }}>{cat}</Text>
-                            <X color={Colors.primary} size={12} />
-                        </TouchableOpacity>
-                    ))}
-                    {selectedAccounts.map(accId => (
-                        <TouchableOpacity
-                            key={`acc-${accId}`}
-                            style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16, backgroundColor: Colors.income + '20', borderWidth: 1, borderColor: Colors.income }}
-                            onPress={() => setSelectedAccounts(selectedAccounts.filter(a => a !== accId))}
-                        >
-                            <Text style={{ fontSize: 12, fontWeight: '600', color: Colors.income }}>{getAccountName(accId)}</Text>
-                            <X color={Colors.income} size={12} />
-                        </TouchableOpacity>
-                    ))}
+                    {/* Account Classification Pills */}
+                    {[
+                        { id: 'ALL', label: 'All Accounts' },
+                        { id: 'NON_CREDIT', label: '💵 Non-Credit' },
+                        { id: 'CREDIT', label: '💳 Credit' },
+                    ].map((item) => {
+                        const isSelected = creditFilter === item.id;
+                        return (
+                            <TouchableOpacity
+                                key={item.id}
+                                style={[
+                                    styles.miniFilterPill,
+                                    { borderColor: Colors.border, backgroundColor: Colors.surface },
+                                    isSelected && { backgroundColor: Colors.primary, borderColor: Colors.primary }
+                                ]}
+                                onPress={() => setCreditFilter(item.id as CreditFilterType)}
+                            >
+                                <Text style={[
+                                    styles.miniFilterPillText,
+                                    { color: isSelected ? '#fff' : Colors.textMuted, fontWeight: isSelected ? '700' : '500' }
+                                ]}>
+                                    {item.label}
+                                </Text>
+                            </TouchableOpacity>
+                        );
+                    })}
 
-                    {/* Type Filters */}
+                    <View style={[styles.stripDivider, { backgroundColor: Colors.border }]} />
+
+                    {/* Type Filter Pills */}
                     {['ALL', 'INCOME', 'EXPENSE', 'TRANSFER'].map((t) => (
                         <TouchableOpacity
                             key={t}
                             style={[
-                                { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.surface },
-                                filterType === t && { backgroundColor: Colors.primary, borderColor: Colors.primary }
+                                styles.miniFilterPill,
+                                { borderColor: Colors.border, backgroundColor: Colors.surface },
+                                filterType === t && { backgroundColor: Colors.primary + '18', borderColor: Colors.primary }
                             ]}
                             onPress={() => setFilterType(t as any)}
                         >
                             <Text style={[
-                                { fontSize: 12, fontWeight: '600', color: Colors.textMuted },
-                                filterType === t && { color: Colors.white }
+                                styles.miniFilterPillText,
+                                { color: filterType === t ? Colors.primary : Colors.textMuted, fontWeight: filterType === t ? '700' : '500' }
                             ]}>
-                                {t === 'TRANSFER' ? 'Transfer' : t.charAt(0) + t.slice(1).toLowerCase()}
+                                {t === 'ALL' ? 'All Types' : t === 'TRANSFER' ? 'Transfer' : t.charAt(0) + t.slice(1).toLowerCase()}
                             </Text>
                         </TouchableOpacity>
                     ))}
+
+                    <View style={[styles.stripDivider, { backgroundColor: Colors.border }]} />
 
                     {/* Date Presets */}
                     {[
@@ -761,14 +882,15 @@ export default function TransactionsHistory() {
                         <TouchableOpacity
                             key={preset.id}
                             style={[
-                                { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.surface },
-                                datePreset === preset.id && { backgroundColor: Colors.primary + '15', borderColor: Colors.primary }
+                                styles.miniFilterPill,
+                                { borderColor: Colors.border, backgroundColor: Colors.surface },
+                                datePreset === preset.id && { backgroundColor: Colors.primary + '18', borderColor: Colors.primary }
                             ]}
                             onPress={() => setDatePreset(preset.id as any)}
                         >
                             <Text style={[
-                                { fontSize: 12, fontWeight: '500', color: Colors.textMuted },
-                                datePreset === preset.id && { color: Colors.primary, fontWeight: '700' }
+                                styles.miniFilterPillText,
+                                { color: datePreset === preset.id ? Colors.primary : Colors.textMuted, fontWeight: datePreset === preset.id ? '700' : '500' }
                             ]}>
                                 {preset.label}
                             </Text>
@@ -776,81 +898,118 @@ export default function TransactionsHistory() {
                     ))}
                 </ScrollView>
 
-                {/* Month & Filter Total Summary Card */}
-                <View style={[styles.summaryCard, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
-                    <View style={styles.summaryCardHeader}>
-                        <View style={styles.summaryTitleGroup}>
-                            <Text style={[styles.summaryMonthTitle, { color: Colors.text }]}>
-                                {format(selectedDate, 'MMMM yyyy')} Summary
-                            </Text>
-                            {hasActiveFilters && (
-                                <View style={[styles.filteredBadge, { backgroundColor: Colors.primary + '15', borderColor: Colors.primary + '30' }]}>
-                                    <Text style={[styles.filteredBadgeText, { color: Colors.primary }]}>Filtered</Text>
-                                </View>
-                            )}
-                        </View>
-                        <Text style={[styles.summaryCountText, { color: Colors.textMuted }]}>
-                            {totals.count} {totals.count === 1 ? 'transaction' : 'transactions'}
-                        </Text>
-                    </View>
+                {/* Active Filter Dismissible Badges (Category & Account) */}
+                {(selectedCategories.length > 0 || selectedAccounts.length > 0) && (
+                    <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={{ paddingHorizontal: 16, gap: 6, paddingBottom: 6 }}
+                    >
+                        {selectedCategories.map(cat => (
+                            <TouchableOpacity
+                                key={`cat-${cat}`}
+                                style={[styles.activeBadge, { backgroundColor: Colors.primary + '18', borderColor: Colors.primary }]}
+                                onPress={() => setSelectedCategories(selectedCategories.filter(c => c !== cat))}
+                            >
+                                <Text style={[styles.activeBadgeText, { color: Colors.primary }]}>{cat}</Text>
+                                <X color={Colors.primary} size={11} />
+                            </TouchableOpacity>
+                        ))}
+                        {selectedAccounts.map(accId => (
+                            <TouchableOpacity
+                                key={`acc-${accId}`}
+                                style={[styles.activeBadge, { backgroundColor: Colors.income + '18', borderColor: Colors.income }]}
+                                onPress={() => setSelectedAccounts(selectedAccounts.filter(a => a !== accId))}
+                            >
+                                <Text style={[styles.activeBadgeText, { color: Colors.income }]}>{getAccountName(accId)}</Text>
+                                <X color={Colors.income} size={11} />
+                            </TouchableOpacity>
+                        ))}
+                    </ScrollView>
+                )}
 
-                    {filterType === 'EXPENSE' ? (
-                        <View style={styles.singleStatContainer}>
-                            <Text style={[styles.singleStatLabel, { color: Colors.textMuted }]}>Total Filtered Expense</Text>
-                            <Text style={[styles.singleStatAmount, { color: Colors.expense }]}>
-                                -₹{formatAmount(totals.expense)}
-                            </Text>
-                        </View>
-                    ) : filterType === 'INCOME' ? (
-                        <View style={styles.singleStatContainer}>
-                            <Text style={[styles.singleStatLabel, { color: Colors.textMuted }]}>Total Filtered Income</Text>
-                            <Text style={[styles.singleStatAmount, { color: Colors.income }]}>
+                {/* 4. SLEEK COMPACT FINANCIAL SUMMARY RIBBON */}
+                <View style={[styles.summaryRibbon, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+                    {/* Primary Stats Row */}
+                    <View style={styles.ribbonPrimaryRow}>
+                        <View style={styles.ribbonStatItem}>
+                            <Text style={[styles.ribbonStatLabel, { color: Colors.textMuted }]}>INCOME</Text>
+                            <Text style={[styles.ribbonStatValue, { color: Colors.income }]}>
                                 +₹{formatAmount(totals.income)}
                             </Text>
                         </View>
-                    ) : filterType === 'TRANSFER' ? (
-                        <View style={styles.singleStatContainer}>
-                            <Text style={[styles.singleStatLabel, { color: Colors.textMuted }]}>Total Filtered Transfers</Text>
-                            <Text style={[styles.singleStatAmount, { color: Colors.primary }]}>
-                                ₹{formatAmount(totals.transfer)}
+
+                        <View style={[styles.ribbonVerticalDivider, { backgroundColor: Colors.border }]} />
+
+                        <View style={styles.ribbonStatItem}>
+                            <Text style={[styles.ribbonStatLabel, { color: Colors.textMuted }]}>EXPENSE</Text>
+                            <Text style={[styles.ribbonStatValue, { color: Colors.expense }]}>
+                                -₹{formatAmount(totals.expense)}
                             </Text>
                         </View>
-                    ) : (
-                        <View style={styles.multiStatGrid}>
-                            <View style={styles.multiStatBox}>
-                                <Text style={[styles.multiStatLabel, { color: Colors.textMuted }]}>Income</Text>
-                                <Text style={[styles.multiStatAmount, { color: Colors.income }]}>
-                                    +₹{formatAmount(totals.income)}
+
+                        <View style={[styles.ribbonVerticalDivider, { backgroundColor: Colors.border }]} />
+
+                        <View style={styles.ribbonStatItem}>
+                            <Text style={[styles.ribbonStatLabel, { color: Colors.textMuted }]}>NET TOTAL</Text>
+                            <Text style={[
+                                styles.ribbonStatValue,
+                                { color: totals.net >= 0 ? Colors.income : Colors.expense }
+                            ]}>
+                                {totals.net >= 0 ? '+' : ''}₹{formatAmount(totals.net)}
+                            </Text>
+                        </View>
+
+                        <View style={[styles.ribbonVerticalDivider, { backgroundColor: Colors.border }]} />
+
+                        <View style={[styles.ribbonStatItem, { flex: 0.8 }]}>
+                            <Text style={[styles.ribbonStatLabel, { color: Colors.textMuted }]}>COUNT</Text>
+                            <Text style={[styles.ribbonStatValue, { color: Colors.text }]}>
+                                {totals.count} txns
+                            </Text>
+                        </View>
+                    </View>
+
+                    {/* Secondary Micro-Insight Strip */}
+                    {totals.expense > 0 && (
+                        <View style={[styles.ribbonInsightRow, { borderTopColor: Colors.border }]}>
+                            <View style={styles.microInsightGroup}>
+                                <Zap size={11} color="#F59E0B" />
+                                <Text style={[styles.microInsightText, { color: Colors.textMuted }]}>
+                                    Burn: <Text style={{ color: Colors.text, fontWeight: '700' }}>₹{formatAmount(insights.dailyAvg)}/d</Text>
                                 </Text>
                             </View>
-                            <View style={[styles.statDividerVertical, { backgroundColor: Colors.border }]} />
-                            <View style={styles.multiStatBox}>
-                                <Text style={[styles.multiStatLabel, { color: Colors.textMuted }]}>Expense</Text>
-                                <Text style={[styles.multiStatAmount, { color: Colors.expense }]}>
-                                    -₹{formatAmount(totals.expense)}
+
+                            <Text style={{ color: Colors.border, fontSize: 10 }}>•</Text>
+
+                            <View style={styles.microInsightGroup}>
+                                <Award size={11} color="#8B5CF6" />
+                                <Text style={[styles.microInsightText, { color: Colors.textMuted }]} numberOfLines={1}>
+                                    Top: <Text style={{ color: Colors.text, fontWeight: '700' }}>{insights.topCategoryName} ({insights.topCategoryPercent}%)</Text>
                                 </Text>
                             </View>
-                            <View style={[styles.statDividerVertical, { backgroundColor: Colors.border }]} />
-                            <View style={styles.multiStatBox}>
-                                <Text style={[styles.multiStatLabel, { color: Colors.textMuted }]}>Net Total</Text>
-                                <Text style={[
-                                    styles.multiStatAmount,
-                                    { color: totals.net >= 0 ? Colors.income : Colors.expense }
-                                ]}>
-                                    {totals.net >= 0 ? '+' : ''}₹{formatAmount(totals.net)}
+
+                            <Text style={{ color: Colors.border, fontSize: 10 }}>•</Text>
+
+                            <View style={styles.microInsightGroup}>
+                                <TrendingUp size={11} color={Colors.expense} />
+                                <Text style={[styles.microInsightText, { color: Colors.textMuted }]}>
+                                    Max: <Text style={{ color: Colors.expense, fontWeight: '700' }}>₹{formatAmount(insights.maxExpense)}</Text>
                                 </Text>
                             </View>
                         </View>
                     )}
                 </View>
             </View>
+
+            {/* MAIN FLATLIST */}
             <FlatList
-                data={filteredTransactions}
-                keyExtractor={(item) => item.id.toString()}
-                renderItem={renderItem}
+                data={groupedTransactions}
+                keyExtractor={(item) => item.key}
+                renderItem={renderGroup}
                 contentContainerStyle={[styles.listContent, { paddingBottom: bottomPadding }]}
-                initialNumToRender={12}
-                maxToRenderPerBatch={10}
+                initialNumToRender={10}
+                maxToRenderPerBatch={8}
                 windowSize={7}
                 removeClippedSubviews={Platform.OS !== 'web'}
                 ListEmptyComponent={
@@ -860,7 +1019,68 @@ export default function TransactionsHistory() {
                 }
             />
 
-            {/* Modal filter overlay */}
+            {/* POPUP MONTH / YEAR PICKER MODAL */}
+            <Modal
+                visible={isMonthPickerOpen}
+                animationType="fade"
+                transparent={true}
+                onRequestClose={() => setIsMonthPickerOpen(false)}
+            >
+                <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
+                    <View style={[styles.monthPickerCard, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+                        {/* Year Stepper Header */}
+                        <View style={[styles.pickerYearHeader, { borderBottomColor: Colors.border }]}>
+                            <TouchableOpacity onPress={() => setPickerYear(prev => prev - 1)} style={styles.yearArrowBtn}>
+                                <ChevronLeft color={Colors.text} size={20} />
+                            </TouchableOpacity>
+                            <Text style={[styles.pickerYearText, { color: Colors.text }]}>{pickerYear}</Text>
+                            <TouchableOpacity onPress={() => setPickerYear(prev => prev + 1)} style={styles.yearArrowBtn}>
+                                <ChevronRight color={Colors.text} size={20} />
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* 12 Months 4x3 Grid */}
+                        <View style={styles.monthGrid}>
+                            {MONTHS.map((m, idx) => {
+                                const isCurrent = selectedDate.getFullYear() === pickerYear && selectedDate.getMonth() === idx;
+                                return (
+                                    <TouchableOpacity
+                                        key={m}
+                                        style={[
+                                            styles.monthGridBtn,
+                                            { borderColor: Colors.border, backgroundColor: Colors.background },
+                                            isCurrent && { backgroundColor: Colors.primary, borderColor: Colors.primary }
+                                        ]}
+                                        onPress={() => selectPickerMonth(idx)}
+                                    >
+                                        <Text style={[
+                                            styles.monthGridText,
+                                            { color: isCurrent ? '#fff' : Colors.text, fontWeight: isCurrent ? '700' : '600' }
+                                        ]}>
+                                            {m}
+                                        </Text>
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </View>
+
+                        {/* Current Month Shortcut Button */}
+                        <TouchableOpacity
+                            style={[styles.thisMonthBtn, { backgroundColor: Colors.primary + '15', borderColor: Colors.primary }]}
+                            onPress={() => {
+                                const now = new Date();
+                                setSelectedDate(new Date(now.getFullYear(), now.getMonth(), 1));
+                                setDatePreset('THIS_MONTH');
+                                setIsMonthPickerOpen(false);
+                            }}
+                        >
+                            <Text style={[styles.thisMonthBtnText, { color: Colors.primary }]}>Jump to Current Month</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* COMPREHENSIVE FILTER MODAL */}
             <Modal
                 visible={isFilterModalOpen}
                 animationType="slide"
@@ -878,6 +1098,39 @@ export default function TransactionsHistory() {
                         </View>
 
                         <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+                            {/* Account Classification Section */}
+                            <View style={styles.modalSection}>
+                                <Text style={[styles.sectionTitle, { color: Colors.text }]}>Account Classification</Text>
+                                <View style={styles.chipsGrid}>
+                                    {[
+                                        { id: 'ALL', label: 'All Transactions' },
+                                        { id: 'NON_CREDIT', label: '💵 Non-Credit (Cash & Bank)' },
+                                        { id: 'CREDIT', label: '💳 Credit Cards' },
+                                    ].map(item => {
+                                        const isSelected = tempCreditFilter === item.id;
+                                        return (
+                                            <TouchableOpacity
+                                                key={`temp-grp-${item.id}`}
+                                                style={[
+                                                    styles.modalChip,
+                                                    { borderColor: Colors.border, backgroundColor: Colors.background },
+                                                    isSelected && { backgroundColor: Colors.primary + '15', borderColor: Colors.primary }
+                                                ]}
+                                                onPress={() => setTempCreditFilter(item.id as CreditFilterType)}
+                                            >
+                                                <Text style={[
+                                                    styles.modalChipText,
+                                                    { color: Colors.text },
+                                                    isSelected && { color: Colors.primary, fontWeight: '700' }
+                                                ]}>
+                                                    {item.label}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        );
+                                    })}
+                                </View>
+                            </View>
+
                             {/* Categories Section */}
                             <View style={styles.modalSection}>
                                 <Text style={[styles.sectionTitle, { color: Colors.text }]}>Categories</Text>
@@ -907,9 +1160,9 @@ export default function TransactionsHistory() {
                                 </View>
                             </View>
 
-                            {/* Accounts Section */}
+                            {/* Specific Accounts Section */}
                             <View style={styles.modalSection}>
-                                <Text style={[styles.sectionTitle, { color: Colors.text }]}>Accounts / Banks</Text>
+                                <Text style={[styles.sectionTitle, { color: Colors.text }]}>Specific Accounts / Cards</Text>
                                 <View style={styles.chipsGrid}>
                                     {accountsToSelect.map(acc => {
                                         const isSelected = tempAccounts.includes(acc.id);
@@ -955,8 +1208,6 @@ export default function TransactionsHistory() {
                     </View>
                 </View>
             </Modal>
-                </>
-            )}
         </View>
     );
 }
@@ -965,189 +1216,248 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
     },
-    header: {
-        padding: 20,
-        paddingBottom: 10,
+    compactHeaderWrapper: {
         borderBottomWidth: 1,
+        borderBottomColor: 'rgba(0,0,0,0.06)',
+        paddingBottom: 4,
     },
-    yearRow: {
+    topNavRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'center',
-        marginBottom: 10,
-    },
-    yearText: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        marginHorizontal: 20,
-    },
-    arrowBtn: {
-        padding: 4,
-    },
-    monthScroll: {
-        marginBottom: 16,
-        marginHorizontal: -20,
-    },
-    monthContent: {
-        paddingHorizontal: 20,
-        paddingTop: 8,
-        paddingBottom: 8,
-    },
-    monthChip: {
-        width: 64,
-        height: 36,
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderRadius: 12,
-        marginRight: 8,
-        borderWidth: 1,
-        borderColor: 'transparent',
-    },
-    monthText: {
-        fontSize: 14,
-        fontWeight: '600',
-    },
-    searchBar: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        borderRadius: 12,
+        justifyContent: 'space-between',
         paddingHorizontal: 16,
-        height: 44,
-        marginBottom: 16,
+        marginBottom: 8,
+    },
+    subtabContainer: {
+        flexDirection: 'row',
+        borderRadius: 10,
+        padding: 2.5,
         borderWidth: 1,
+    },
+    subtabBtn: {
+        paddingVertical: 5,
+        paddingHorizontal: 12,
+        borderRadius: 8,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    subtabText: {
+        fontSize: 12,
+        fontWeight: '700',
+    },
+    monthNavGroup: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderRadius: 10,
+        borderWidth: 1,
+        paddingHorizontal: 2,
+        height: 32,
+    },
+    monthStepBtn: {
+        paddingHorizontal: 6,
+        height: '100%',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    monthLabelBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 6,
+    },
+    monthNavText: {
+        fontSize: 12.5,
+        fontWeight: '700',
+    },
+    commandBarRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        gap: 6,
+        marginBottom: 8,
+    },
+    searchBox: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        height: 36,
+        borderRadius: 10,
+        borderWidth: 1,
+        paddingHorizontal: 10,
     },
     searchInput: {
         flex: 1,
-        marginLeft: 10,
-        fontSize: 16,
+        fontSize: 13,
+        marginLeft: 6,
+        paddingVertical: 0,
     },
-    filterRow: {
-        flexDirection: 'row',
-        gap: 10,
-        marginBottom: 16,
-    },
-    infoBanner: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 10,
-        borderRadius: 10,
-        borderWidth: 1,
-        gap: 8,
-    },
-    infoText: {
-        fontSize: 12,
-        fontWeight: '500',
-        flex: 1,
-    },
-
-    filterChip: {
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 20,
-        borderWidth: 1,
-    },
-    filterText: {
-        fontWeight: '600',
-    },
-    listContent: {
-        padding: 20,
-        paddingBottom: 100, // Space for tab bar
-    },
-    transactionItem: {
-        padding: 0, // Reset padding as internal views handle it
-        borderRadius: 16,
-        marginBottom: 12,
-        borderWidth: 1,
-        overflow: 'hidden', // Ensure header background doesn't bleed
-    },
-    cardHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingVertical: 10,
-        borderBottomWidth: 1,
-        gap: 8,
-    },
-    cardBody: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 16,
-    },
-    actionBlock: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginLeft: 'auto',
-        gap: 8,
-    },
-    actionIconButton: {
+    iconActionBtn: {
         width: 36,
         height: 36,
         borderRadius: 10,
         borderWidth: 1,
         justifyContent: 'center',
         alignItems: 'center',
+        position: 'relative',
     },
-    dateBlock: {
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingRight: 16,
-        borderRightWidth: 1,
-        width: 55,
-    },
-    iconContainer: {
-        marginHorizontal: 16,
-    },
-    iconCircle: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    txDetails: {
-        flex: 1,
-        paddingHorizontal: 12,
-    },
-    dateDay: {
-        fontSize: 20,
-        fontWeight: '600',
-        lineHeight: 22,
-    },
-    dateMonth: {
-        fontSize: 12,
-        fontWeight: '400',
-        textTransform: 'uppercase',
-    },
-    txCategory: {
-        fontSize: 16,
-        fontWeight: 'bold',
-    },
-    txNote: {
-        fontSize: 12,
-        marginTop: 2,
-    },
-    amountBlock: {
-        alignItems: 'flex-start',
-        flex: 1,
-    },
-    txAmount: {
-        fontSize: 16,
-        fontWeight: 'bold',
-    },
-    accountId: {
-        fontSize: 12,
-        marginTop: 2,
-        textTransform: 'capitalize',
-    },
-    deleteButton: {
-        marginLeft: 8,
-        padding: 8,
+    filterBadgeCircle: {
+        position: 'absolute',
+        top: -3,
+        right: -3,
+        minWidth: 16,
+        height: 16,
         borderRadius: 8,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 3,
+        borderWidth: 1.5,
+    },
+    filterBadgeText: {
+        fontSize: 9,
+        fontWeight: '800',
+        color: '#fff',
+    },
+    filterStripContent: {
+        paddingHorizontal: 16,
+        alignItems: 'center',
+        gap: 5,
+        paddingBottom: 6,
+    },
+    miniFilterPill: {
+        paddingHorizontal: 10,
+        paddingVertical: 4.5,
+        borderRadius: 12,
         borderWidth: 1,
     },
-    editButton: {
-        padding: 8,
-        borderRadius: 8,
+    miniFilterPillText: {
+        fontSize: 11.5,
+    },
+    stripDivider: {
+        width: 1,
+        height: 14,
+        marginHorizontal: 3,
+    },
+    activeBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 10,
+        borderWidth: 1,
+    },
+    activeBadgeText: {
+        fontSize: 10.5,
+        fontWeight: '600',
+    },
+    // Summary Ribbon Styles
+    summaryRibbon: {
+        marginHorizontal: 16,
+        marginBottom: 6,
+        borderRadius: 12,
+        borderWidth: 1,
+        paddingVertical: 6,
+        paddingHorizontal: 10,
+    },
+    ribbonPrimaryRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    ribbonStatItem: {
+        flex: 1,
+        alignItems: 'center',
+    },
+    ribbonStatLabel: {
+        fontSize: 9.5,
+        fontWeight: '700',
+        letterSpacing: 0.3,
+    },
+    ribbonStatValue: {
+        fontSize: 13,
+        fontWeight: '800',
+        marginTop: 1,
+    },
+    ribbonVerticalDivider: {
+        width: 1,
+        height: 20,
+    },
+    ribbonInsightRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-around',
+        borderTopWidth: 1,
+        paddingTop: 5,
+        marginTop: 5,
+    },
+    microInsightGroup: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 3,
+    },
+    microInsightText: {
+        fontSize: 10.5,
+    },
+    // List & Timeline Groups
+    listContent: {
+        paddingHorizontal: 16,
+        paddingTop: 10,
+    },
+    groupContainer: {
+        marginBottom: 14,
+    },
+    groupHeaderRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 6,
+        paddingHorizontal: 2,
+    },
+    groupHeaderLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 5,
+    },
+    groupDateText: {
+        fontSize: 12.5,
+        fontWeight: '700',
+    },
+    groupCountBadge: {
+        paddingHorizontal: 5,
+        paddingVertical: 1.5,
+        borderRadius: 6,
+        borderWidth: 1,
+    },
+    groupCountText: {
+        fontSize: 9.5,
+        fontWeight: '600',
+    },
+    groupHeaderRight: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+    },
+    groupExpenseText: {
+        fontSize: 11.5,
+        fontWeight: '700',
+    },
+    groupIncomeText: {
+        fontSize: 11.5,
+        fontWeight: '700',
+    },
+    groupItemsContainer: {
+        gap: 6,
+    },
+    transactionItem: {
+        borderRadius: 12,
+        borderWidth: 1,
+        overflow: 'hidden',
+    },
+    compactItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 10,
+        paddingVertical: 7.5,
+        borderRadius: 10,
         borderWidth: 1,
     },
     emptyState: {
@@ -1155,67 +1465,78 @@ const styles = StyleSheet.create({
         padding: 40,
     },
     emptyText: {
-        fontSize: 16,
-    },
-    // New Filter Styles
-    filterHeaderRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        height: 48,
-        marginBottom: 16,
-        gap: 8,
-    },
-    activeChipsScroll: {
-        flex: 1,
-    },
-    activeChipsContent: {
-        alignItems: 'center',
-        gap: 8,
-    },
-    noActiveFiltersText: {
         fontSize: 14,
-        fontStyle: 'italic',
     },
-    activeFilterChip: {
+    // Month Picker Modal
+    monthPickerCard: {
+        width: 300,
+        borderRadius: 20,
+        borderWidth: 1,
+        padding: 16,
+        alignSelf: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 16,
+        elevation: 8,
+    },
+    pickerYearHeader: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 16,
+        justifyContent: 'space-between',
+        paddingBottom: 12,
+        borderBottomWidth: 1,
+        marginBottom: 12,
+    },
+    pickerYearText: {
+        fontSize: 17,
+        fontWeight: '800',
+    },
+    yearArrowBtn: {
+        padding: 6,
+    },
+    monthGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+        justifyContent: 'space-between',
+    },
+    monthGridBtn: {
+        width: '30%',
+        paddingVertical: 10,
+        borderRadius: 10,
         borderWidth: 1,
-        gap: 4,
-    },
-    activeFilterChipText: {
-        fontSize: 12,
-        fontWeight: '600',
-    },
-    activeFilterChipIcon: {
-        marginLeft: 2,
-    },
-    filterIconButton: {
-        width: 44,
-        height: 44,
-        borderRadius: 12,
-        borderWidth: 1,
-        justifyContent: 'center',
         alignItems: 'center',
-        elevation: 2,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.1,
-        shadowRadius: 2,
+        justifyContent: 'center',
     },
-    // Modal Styles
+    monthGridText: {
+        fontSize: 13,
+    },
+    thisMonthBtn: {
+        marginTop: 14,
+        paddingVertical: 9,
+        borderRadius: 10,
+        borderWidth: 1,
+        alignItems: 'center',
+    },
+    thisMonthBtnText: {
+        fontSize: 12.5,
+        fontWeight: '700',
+    },
+    // Filter Modal Styles
     modalOverlay: {
         flex: 1,
         justifyContent: 'flex-end',
+        alignItems: 'center',
     },
     modalContent: {
+        width: '100%',
+        maxWidth: 600,
         borderTopLeftRadius: 24,
         borderTopRightRadius: 24,
         paddingTop: 16,
         paddingHorizontal: 20,
-        paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+        paddingBottom: Platform.OS === 'ios' ? 40 : 20,
         maxHeight: '80%',
         borderTopWidth: 1,
         shadowColor: '#000',
@@ -1228,26 +1549,26 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingBottom: 16,
+        paddingBottom: 14,
         borderBottomWidth: 1,
     },
     modalTitle: {
-        fontSize: 18,
+        fontSize: 17,
         fontWeight: 'bold',
     },
     modalCloseButton: {
         padding: 4,
     },
     modalBody: {
-        marginVertical: 16,
+        marginVertical: 14,
     },
     modalSection: {
-        marginBottom: 24,
+        marginBottom: 20,
     },
     sectionTitle: {
-        fontSize: 14,
+        fontSize: 12.5,
         fontWeight: '700',
-        marginBottom: 12,
+        marginBottom: 10,
         textTransform: 'uppercase',
         letterSpacing: 0.5,
     },
@@ -1258,116 +1579,42 @@ const styles = StyleSheet.create({
     },
     modalChip: {
         paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 16,
+        paddingVertical: 7,
+        borderRadius: 12,
         borderWidth: 1,
     },
     modalChipText: {
-        fontSize: 13,
+        fontSize: 12.5,
         fontWeight: '500',
     },
     modalFooter: {
         flexDirection: 'row',
-        gap: 12,
-        paddingTop: 16,
+        gap: 10,
+        paddingTop: 14,
         borderTopWidth: 1,
     },
     modalResetButton: {
         flex: 1,
-        height: 48,
-        borderRadius: 12,
+        height: 44,
+        borderRadius: 10,
         borderWidth: 1,
         justifyContent: 'center',
         alignItems: 'center',
     },
     modalResetButtonText: {
-        fontSize: 15,
+        fontSize: 13.5,
         fontWeight: '600',
     },
     modalApplyButton: {
         flex: 2,
-        height: 48,
-        borderRadius: 12,
+        height: 44,
+        borderRadius: 10,
         justifyContent: 'center',
         alignItems: 'center',
     },
     modalApplyButtonText: {
         color: '#fff',
-        fontSize: 15,
-        fontWeight: '700',
-    },
-    // Summary Card Styles
-    summaryCard: {
-        marginTop: 12,
-        padding: 14,
-        borderRadius: 14,
-        borderWidth: 1,
-    },
-    summaryCardHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 10,
-    },
-    summaryTitleGroup: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-    },
-    summaryMonthTitle: {
         fontSize: 14,
         fontWeight: '700',
-    },
-    filteredBadge: {
-        paddingHorizontal: 8,
-        paddingVertical: 2,
-        borderRadius: 10,
-        borderWidth: 1,
-    },
-    filteredBadgeText: {
-        fontSize: 11,
-        fontWeight: '700',
-    },
-    summaryCountText: {
-        fontSize: 12,
-        fontWeight: '500',
-    },
-    singleStatContainer: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingTop: 4,
-    },
-    singleStatLabel: {
-        fontSize: 13,
-        fontWeight: '500',
-    },
-    singleStatAmount: {
-        fontSize: 20,
-        fontWeight: '800',
-    },
-    multiStatGrid: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-around',
-        paddingTop: 4,
-    },
-    multiStatBox: {
-        flex: 1,
-        alignItems: 'center',
-    },
-    multiStatLabel: {
-        fontSize: 11,
-        fontWeight: '500',
-        marginBottom: 2,
-    },
-    multiStatAmount: {
-        fontSize: 14,
-        fontWeight: '700',
-    },
-    statDividerVertical: {
-        width: 1,
-        height: 24,
-        marginHorizontal: 4,
     },
 });

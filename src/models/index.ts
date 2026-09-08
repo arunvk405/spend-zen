@@ -125,11 +125,13 @@ export const EXPENSE_CATEGORIES: Category[] = [
     { name: 'Utilities', icon: 'file-text', color: '#FF5722', type: 'EXPENSE' },
     { name: 'Entertainment', icon: 'film', color: '#673AB7', type: 'EXPENSE' },
     { name: 'Investment/SIP', icon: 'trending-up', color: '#4CAF50', type: 'EXPENSE' },
+    { name: 'Credit Card Payment', icon: 'credit-card', color: '#6366F1', type: 'EXPENSE' },
     { name: 'Debt', icon: 'credit-card', color: '#000000', type: 'EXPENSE' },
     { name: 'Others', icon: 'package', color: '#9E9E9E', type: 'EXPENSE' },
 ];
 
 export const TRANSFER_CATEGORIES: Category[] = [
+    { name: 'Credit Card Payment', icon: 'credit-card', color: '#6366F1', type: 'TRANSFER' },
     { name: 'Self Transfer', icon: 'rotate-ccw', color: '#6366F1', type: 'TRANSFER' },
     { name: 'Bank Transfer', icon: 'landmark', color: '#3B82F6', type: 'TRANSFER' },
     { name: 'Cash Deposit', icon: 'wallet', color: '#10B981', type: 'TRANSFER' },

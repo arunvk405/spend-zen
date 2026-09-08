@@ -43,6 +43,7 @@ import { Image } from 'react-native';
 import { useFinance } from '../../src/context/FinanceContext';
 import { useAuth } from '../../src/context/AuthContext';
 import { useRouter } from 'expo-router';
+import packageJson from '../../package.json';
 const SettingsItem = ({ icon: Icon, label, onPress, color, value = undefined, toggle = false }: any) => {
     const Colors = useThemeColors();
     const [isHovered, setIsHovered] = useState(false);
@@ -287,7 +288,7 @@ export default function Settings() {
                             canvas.width = size;
                             canvas.height = size;
                             const ctx = canvas.getContext('2d');
-                            
+
                             // Square crop center math
                             const sourceSize = Math.min(img.width, img.height);
                             const sourceX = (img.width - sourceSize) / 2;
@@ -500,8 +501,8 @@ export default function Settings() {
     };
 
     return (
-        <ScrollView 
-            style={[styles.container, { backgroundColor: Colors.background }]} 
+        <ScrollView
+            style={[styles.container, { backgroundColor: Colors.background }]}
             contentContainerStyle={{ paddingTop: topScrollPadding, paddingBottom: bottomScrollPadding }}
             showsVerticalScrollIndicator={false}
         >
@@ -519,16 +520,16 @@ export default function Settings() {
                                     <ActivityIndicator color={Colors.primary} size="small" />
                                 ) : (profilePhoto || user?.photoURL) ? (
                                     Platform.OS === 'web' ? (
-                                        <img 
-                                            src={(profilePhoto || user?.photoURL) ?? undefined} 
-                                            style={{ width: 64, height: 64, borderRadius: 32, objectFit: 'cover' }} 
+                                        <img
+                                            src={(profilePhoto || user?.photoURL) ?? undefined}
+                                            style={{ width: 64, height: 64, borderRadius: 32, objectFit: 'cover' }}
                                             referrerPolicy="no-referrer"
                                             alt="Profile"
                                         />
                                     ) : (
-                                        <Image 
-                                            source={{ uri: (profilePhoto || user?.photoURL) ?? undefined }} 
-                                            style={{ width: 64, height: 64, borderRadius: 32 }} 
+                                        <Image
+                                            source={{ uri: (profilePhoto || user?.photoURL) ?? undefined }}
+                                            style={{ width: 64, height: 64, borderRadius: 32 }}
                                         />
                                     )
                                 ) : (
@@ -799,7 +800,7 @@ export default function Settings() {
                 <View style={[styles.card, { backgroundColor: Colors.surface }]}>
                     <SettingsItem
                         icon={Info}
-                        label="Version 2.0.0 (Spend Zen)"
+                        label={`Version ${packageJson.version} (Spend Zen)`}
                         color={Colors.textMuted}
                         onPress={() => { }}
                     />
@@ -1000,8 +1001,8 @@ export default function Settings() {
                                     <Text style={{ color: Colors.textMuted, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8, marginTop: 10, fontWeight: '600' }}>Select Card *</Text>
                                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
                                         {creditCards.filter(c => !c.usagePeriod || c.id === selectedCardId).map(c => (
-                                            <Pressable 
-                                                key={c.id} 
+                                            <Pressable
+                                                key={c.id}
                                                 onPress={() => setSelectedCardId(c.id)}
                                                 style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1.5, borderColor: selectedCardId === c.id ? Colors.primary : Colors.border, backgroundColor: selectedCardId === c.id ? Colors.primary + '20' : Colors.surface }}
                                             >
@@ -1056,33 +1057,33 @@ export default function Settings() {
                                 [...creditCards.filter(c => c.usagePeriod)]
                                     .sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime())
                                     .map((card) => (
-                                    <View key={card.id} style={[styles.noteItem, { backgroundColor: Colors.surface, borderBottomColor: Colors.border }]}>
-                                        <View style={styles.noteLeft}>
-                                            <Text style={[styles.noteDesc, { color: Colors.text }]}>{card.cardName}</Text>
-                                            <View style={{ backgroundColor: Colors.primary + '15', alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, marginTop: 4 }}>
-                                                <Text style={{ color: Colors.primary, fontWeight: '700', fontSize: 14 }}>Use: {card.usagePeriod}</Text>
+                                        <View key={card.id} style={[styles.noteItem, { backgroundColor: Colors.surface, borderBottomColor: Colors.border }]}>
+                                            <View style={styles.noteLeft}>
+                                                <Text style={[styles.noteDesc, { color: Colors.text }]}>{card.cardName}</Text>
+                                                <View style={{ backgroundColor: Colors.primary + '15', alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, marginTop: 4 }}>
+                                                    <Text style={{ color: Colors.primary, fontWeight: '700', fontSize: 14 }}>Use: {card.usagePeriod}</Text>
+                                                </View>
+                                            </View>
+                                            <View style={[styles.noteRight, { flexDirection: 'row', gap: 16, alignItems: 'center' }]}>
+                                                <View style={{ alignItems: 'flex-end', marginRight: 10 }}>
+                                                    <Text style={{ fontSize: 10, color: Colors.textMuted, textTransform: 'uppercase', fontWeight: '600', marginBottom: 2 }}>Due</Text>
+                                                    <Text style={{ color: Colors.expense, fontWeight: '700', fontSize: 14 }}>₹{card.dueAmount.toLocaleString()}</Text>
+                                                </View>
+                                                <TouchableOpacity onPress={() => {
+                                                    setSelectedCardId(card.id);
+                                                    setStrategyPeriod(card.usagePeriod || '');
+                                                    setIsAddingStrategy(true);
+                                                }}>
+                                                    <Edit3 size={16} color={Colors.primary} />
+                                                </TouchableOpacity>
+                                                <TouchableOpacity onPress={async () => {
+                                                    await updateCreditCard(card.id, { usagePeriod: '' });
+                                                }}>
+                                                    <Trash2 size={16} color={Colors.expense} />
+                                                </TouchableOpacity>
                                             </View>
                                         </View>
-                                        <View style={[styles.noteRight, { flexDirection: 'row', gap: 16, alignItems: 'center' }]}>
-                                            <View style={{ alignItems: 'flex-end', marginRight: 10 }}>
-                                                <Text style={{ fontSize: 10, color: Colors.textMuted, textTransform: 'uppercase', fontWeight: '600', marginBottom: 2 }}>Due</Text>
-                                                <Text style={{ color: Colors.expense, fontWeight: '700', fontSize: 14 }}>₹{card.dueAmount.toLocaleString()}</Text>
-                                            </View>
-                                            <TouchableOpacity onPress={() => {
-                                                setSelectedCardId(card.id);
-                                                setStrategyPeriod(card.usagePeriod || '');
-                                                setIsAddingStrategy(true);
-                                            }}>
-                                                <Edit3 size={16} color={Colors.primary} />
-                                            </TouchableOpacity>
-                                            <TouchableOpacity onPress={async () => {
-                                                await updateCreditCard(card.id, { usagePeriod: '' });
-                                            }}>
-                                                <Trash2 size={16} color={Colors.expense} />
-                                            </TouchableOpacity>
-                                        </View>
-                                    </View>
-                                ))
+                                    ))
                             )}
                         </ScrollView>
                     </KeyboardAvoidingView>

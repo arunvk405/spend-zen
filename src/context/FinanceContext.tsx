@@ -238,6 +238,22 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
                     needsRefresh = true;
                 }
 
+                // 4. Ensure Credit Card settlement records on credit cards are stored as TRANSFER
+                const cardSettlementTxs = txs.filter(t => 
+                    creditCardIds.has(t.accountId) && 
+                    t.category === 'Credit Card Payment' && 
+                    t.type !== 'TRANSFER'
+                );
+                if (cardSettlementTxs.length > 0) {
+                    for (const cardTx of cardSettlementTxs) {
+                        await updateTxDb(user.uid, cardTx.id, {
+                            type: 'TRANSFER',
+                            toAccountId: cardTx.accountId
+                        });
+                    }
+                    needsRefresh = true;
+                }
+
                 if (needsRefresh) {
                     const [b2, c2, t2] = await Promise.all([
                         getBankAccounts(user.uid), 
@@ -271,8 +287,10 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
             const creditIncomingMap: Record<string, number> = {};
 
             txs.forEach(t => {
-                const amount = Number(t.amount);
+                const amount = Number(t.amount) || 0;
+                const isCardAccount = creditCardIds.has(t.accountId) || t.accountId === 'credit';
                 
+                // Cash adjustments
                 if (t.accountId === 'cash') {
                     cash += t.type === 'INCOME' ? amount : -amount;
                 }
@@ -280,28 +298,43 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
                     cash += amount;
                 }
 
-                if (t.accountId) {
+                // Bank adjustments
+                if (t.accountId && t.accountId !== 'cash' && !isCardAccount) {
                     bankOutgoingMap[t.accountId] = (bankOutgoingMap[t.accountId] || 0) + (t.type === 'INCOME' ? amount : -amount);
                 }
-                if (t.toAccountId && t.type === 'TRANSFER') {
+                if (t.toAccountId && t.toAccountId !== 'cash' && !creditCardIds.has(t.toAccountId) && t.type === 'TRANSFER') {
                     bankIncomingMap[t.toAccountId] = (bankIncomingMap[t.toAccountId] || 0) + amount;
                 }
 
-                if (t.accountId) {
-                    creditOutgoingMap[t.accountId] = (creditOutgoingMap[t.accountId] || 0) + (t.type === 'EXPENSE' || t.type === 'TRANSFER' ? amount : -amount);
+                // Credit Card adjustments
+                // 1. Charges on credit card (regular purchases, cash advances)
+                if (t.accountId && creditCardIds.has(t.accountId)) {
+                    if (t.type === 'EXPENSE' && t.category !== 'Credit Card Payment') {
+                        creditOutgoingMap[t.accountId] = (creditOutgoingMap[t.accountId] || 0) + amount;
+                    } else if (t.type === 'TRANSFER' && t.toAccountId && t.toAccountId !== t.accountId && !creditCardIds.has(t.toAccountId)) {
+                        creditOutgoingMap[t.accountId] = (creditOutgoingMap[t.accountId] || 0) + amount;
+                    }
                 }
-                if (t.toAccountId && t.type === 'TRANSFER') {
+                // 2. Payments / Settlements into credit card (reduces due)
+                if (t.category === 'Credit Card Payment') {
+                    const cardTargetId = creditCardIds.has(t.accountId) ? t.accountId : t.toAccountId;
+                    if (cardTargetId && creditCardIds.has(cardTargetId)) {
+                        creditIncomingMap[cardTargetId] = (creditIncomingMap[cardTargetId] || 0) + amount;
+                    }
+                } else if (t.toAccountId && creditCardIds.has(t.toAccountId) && t.type === 'TRANSFER') {
                     creditIncomingMap[t.toAccountId] = (creditIncomingMap[t.toAccountId] || 0) + amount;
                 }
 
                 // Skip credit card transactions for net balance & monthly totals
-                if (creditCardIds.has(t.accountId) || t.accountId === 'credit') return;
+                if (isCardAccount) return;
 
-                // Monthly income/expense (non-credit, excluding transfers)
+                // Monthly income / expense (non-credit transactions)
                 if (isSameMonth(parseISO(t.date), now) && isSameYear(parseISO(t.date), now)) {
-                    if (t.type !== 'TRANSFER' && t.category !== 'Credit Card Payment' && t.category !== 'Self Transfer') {
-                        if (t.type === 'INCOME') income += amount;
-                        else if (t.type === 'EXPENSE') expense += amount;
+                    if (t.type === 'INCOME' && t.category !== 'Credit Card Payment') {
+                        income += amount;
+                    } else if (t.type === 'EXPENSE' && t.category !== 'Self Transfer') {
+                        // User's expense paid from salary/bank is counted as expense
+                        expense += amount;
                     }
                 }
             });
