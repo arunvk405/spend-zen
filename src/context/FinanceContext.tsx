@@ -246,7 +246,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 );
                 if (cardSettlementTxs.length > 0) {
                     for (const cardTx of cardSettlementTxs) {
-                        await updateTxDb(user.uid, cardTx.id, {
+                        await updateTxDb(String(cardTx.id), {
                             type: 'TRANSFER',
                             toAccountId: cardTx.accountId
                         });

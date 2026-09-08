@@ -10,7 +10,7 @@ import {
     Wallet, Landmark, CreditCard, TrendingUp, TrendingDown,
     ArrowRight, Briefcase, RotateCcw, Plus, AlertCircle, Pencil, X,
     PiggyBank, Gift, Laptop, Package, Utensils, Activity, Home, Car, User, PawPrint, FileText, Film,
-    Trash2, CheckCircle, ChevronDown, Bell, Sparkles, ChevronRight
+    Trash2, CheckCircle, ChevronDown, Bell, Sparkles, ChevronRight, ChevronLeft
 } from 'lucide-react-native';
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, TRANSFER_CATEGORIES } from '../../src/models';
 import { format, isSameMonth, isSameYear, parseISO, subWeeks, isSameWeek } from 'date-fns';
@@ -134,6 +134,162 @@ export default function HomeDashboard() {
     const [selectedSourceAccountId, setSelectedSourceAccountId] = useState<string | null>(null);
     const [clearing, setClearing] = useState(false);
     const [paymentAmount, setPaymentAmount] = useState('');
+
+    const bankScrollRef = React.useRef<ScrollView>(null);
+    const creditScrollRef = React.useRef<ScrollView>(null);
+
+    const scrollBank = (direction: 'left' | 'right') => {
+        const scrollAmount = 220;
+        if (bankScrollRef.current) {
+            if (Platform.OS === 'web') {
+                const node = (bankScrollRef.current as any)?.getScrollableNode?.() || (bankScrollRef.current as any);
+                if (node) {
+                    if (typeof node.scrollBy === 'function') {
+                        node.scrollBy({ left: direction === 'left' ? -scrollAmount : scrollAmount, behavior: 'smooth' });
+                        return;
+                    } else if (node.scrollLeft !== undefined) {
+                        node.scrollLeft += direction === 'left' ? -scrollAmount : scrollAmount;
+                        return;
+                    }
+                }
+            }
+            bankScrollRef.current.scrollTo({
+                x: direction === 'left' ? -scrollAmount : scrollAmount,
+                animated: true
+            });
+        }
+    };
+
+    const scrollCredit = (direction: 'left' | 'right') => {
+        const scrollAmount = 240;
+        if (creditScrollRef.current) {
+            if (Platform.OS === 'web') {
+                const node = (creditScrollRef.current as any)?.getScrollableNode?.() || (creditScrollRef.current as any);
+                if (node) {
+                    if (typeof node.scrollBy === 'function') {
+                        node.scrollBy({ left: direction === 'left' ? -scrollAmount : scrollAmount, behavior: 'smooth' });
+                        return;
+                    } else if (node.scrollLeft !== undefined) {
+                        node.scrollLeft += direction === 'left' ? -scrollAmount : scrollAmount;
+                        return;
+                    }
+                }
+            }
+            creditScrollRef.current.scrollTo({
+                x: direction === 'left' ? -scrollAmount : scrollAmount,
+                animated: true
+            });
+        }
+    };
+
+    // Desktop / Laptop mouse drag & wheel scrolling setup
+    React.useEffect(() => {
+        if (Platform.OS !== 'web') return;
+
+        const getDomElement = (ref: React.RefObject<any>) => {
+            if (!ref?.current) return null;
+            if (typeof ref.current.getScrollableNode === 'function') {
+                return ref.current.getScrollableNode();
+            }
+            if (typeof HTMLElement !== 'undefined' && ref.current instanceof HTMLElement) {
+                return ref.current;
+            }
+            if (ref.current._inputRef) {
+                return ref.current._inputRef;
+            }
+            return ref.current;
+        };
+
+        const setupScrollListeners = (ref: React.RefObject<any>) => {
+            const node = getDomElement(ref);
+            if (!node || typeof node.addEventListener !== 'function') return () => {};
+
+            let isDown = false;
+            let startX = 0;
+            let startScrollLeft = 0;
+            let didDrag = false;
+
+            const onMouseDown = (e: MouseEvent) => {
+                if (e.button !== 0) return;
+                isDown = true;
+                didDrag = false;
+                startX = e.pageX - node.offsetLeft;
+                startScrollLeft = node.scrollLeft;
+                node.style.cursor = 'grabbing';
+                node.style.userSelect = 'none';
+            };
+
+            const onMouseLeave = () => {
+                if (isDown) {
+                    isDown = false;
+                    node.style.cursor = 'grab';
+                    node.style.removeProperty('user-select');
+                }
+            };
+
+            const onMouseUp = () => {
+                if (isDown) {
+                    isDown = false;
+                    node.style.cursor = 'grab';
+                    node.style.removeProperty('user-select');
+                }
+            };
+
+            const onMouseMove = (e: MouseEvent) => {
+                if (!isDown) return;
+                e.preventDefault();
+                const x = e.pageX - node.offsetLeft;
+                const walk = (x - startX) * 1.3;
+                if (Math.abs(walk) > 4) {
+                    didDrag = true;
+                }
+                node.scrollLeft = startScrollLeft - walk;
+            };
+
+            const onClickCapture = (e: MouseEvent) => {
+                if (didDrag) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    didDrag = false;
+                }
+            };
+
+            const onWheel = (e: WheelEvent) => {
+                if (node.scrollWidth > node.clientWidth) {
+                    if (Math.abs(e.deltaY) > Math.abs(e.deltaX) && e.deltaY !== 0) {
+                        e.preventDefault();
+                        node.scrollLeft += e.deltaY;
+                    }
+                }
+            };
+
+            node.style.cursor = 'grab';
+
+            node.addEventListener('mousedown', onMouseDown);
+            node.addEventListener('mouseleave', onMouseLeave);
+            node.addEventListener('mouseup', onMouseUp);
+            node.addEventListener('mousemove', onMouseMove);
+            node.addEventListener('click', onClickCapture, true);
+            node.addEventListener('wheel', onWheel, { passive: false });
+
+            return () => {
+                node.removeEventListener('mousedown', onMouseDown);
+                node.removeEventListener('mouseleave', onMouseLeave);
+                node.removeEventListener('mouseup', onMouseUp);
+                node.removeEventListener('mousemove', onMouseMove);
+                node.removeEventListener('click', onClickCapture, true);
+                node.removeEventListener('wheel', onWheel);
+            };
+        };
+
+        const cleanupBank = setupScrollListeners(bankScrollRef);
+        const cleanupCredit = setupScrollListeners(creditScrollRef);
+
+        return () => {
+            cleanupBank?.();
+            cleanupCredit?.();
+        };
+    }, [bankAccounts, creditCards]);
 
     const triggerNewQuote = React.useCallback(() => {
         Animated.timing(fadeAnim, {
@@ -956,8 +1112,28 @@ export default function HomeDashboard() {
         <View style={{ marginBottom: 16 }}>
             <View style={s.sectionHeader}>
                 <Text style={[s.sectionTitle, { color: Colors.text }]}>Bank Accounts</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                     <Text style={[s.sectionTotal, { color: Colors.income }]}>₹{totalBankBalance.toLocaleString('en-IN')}</Text>
+
+                    {bankAccounts.length >= 1 && (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                            <TouchableOpacity
+                                onPress={() => scrollBank('left')}
+                                style={[s.scrollArrowBtn, { borderColor: Colors.border, backgroundColor: Colors.surface }]}
+                                accessibilityLabel="Scroll bank accounts left"
+                            >
+                                <ChevronLeft size={14} color={Colors.text} />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                onPress={() => scrollBank('right')}
+                                style={[s.scrollArrowBtn, { borderColor: Colors.border, backgroundColor: Colors.surface }]}
+                                accessibilityLabel="Scroll bank accounts right"
+                            >
+                                <ChevronRight size={14} color={Colors.text} />
+                            </TouchableOpacity>
+                        </View>
+                    )}
+
                     <TouchableOpacity
                         onPress={() => router.push('/manage-accounts')}
                         style={[s.addAccountBtn, { backgroundColor: Colors.primary }]}
@@ -976,7 +1152,12 @@ export default function HomeDashboard() {
                     <Text style={[s.emptyText, { color: Colors.textMuted }]}>Add your first bank account</Text>
                 </TouchableOpacity>
             ) : (
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.hScroll}>
+                <ScrollView
+                    ref={bankScrollRef}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={s.hScroll}
+                >
                     {bankAccounts.map(acc => (
                         <HoverCard
                             key={acc.id}
@@ -1007,10 +1188,30 @@ export default function HomeDashboard() {
         <View style={{ marginBottom: 16 }}>
             <View style={s.sectionHeader}>
                 <Text style={[s.sectionTitle, { color: Colors.text }]}>Credit Cards</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                     {totalCreditDue > 0 && (
                         <Text style={[s.sectionTotal, { color: Colors.expense }]}>Due ₹{totalCreditDue.toLocaleString('en-IN')}</Text>
                     )}
+
+                    {creditCards.length >= 1 && (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                            <TouchableOpacity
+                                onPress={() => scrollCredit('left')}
+                                style={[s.scrollArrowBtn, { borderColor: Colors.border, backgroundColor: Colors.surface }]}
+                                accessibilityLabel="Scroll credit cards left"
+                            >
+                                <ChevronLeft size={14} color={Colors.text} />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                onPress={() => scrollCredit('right')}
+                                style={[s.scrollArrowBtn, { borderColor: Colors.border, backgroundColor: Colors.surface }]}
+                                accessibilityLabel="Scroll credit cards right"
+                            >
+                                <ChevronRight size={14} color={Colors.text} />
+                            </TouchableOpacity>
+                        </View>
+                    )}
+
                     <TouchableOpacity
                         onPress={() => router.push('/manage-accounts?tab=credit')}
                         style={[s.addAccountBtn, { backgroundColor: '#EF4444' }]}
@@ -1029,7 +1230,12 @@ export default function HomeDashboard() {
                     <Text style={[s.emptyText, { color: Colors.textMuted }]}>Add your first credit card</Text>
                 </TouchableOpacity>
             ) : (
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.hScroll}>
+                <ScrollView
+                    ref={creditScrollRef}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={s.hScroll}
+                >
                     {creditCards.map(card => (
                         <HoverCard
                             key={card.id}
@@ -2082,6 +2288,18 @@ const s = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
+    scrollArrowBtn: {
+        width: 26,
+        height: 26,
+        borderRadius: 13,
+        borderWidth: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        ...Platform.select({
+            web: { cursor: 'pointer' },
+            default: {}
+        })
+    } as any,
 
     // Category Budgets
     budgetContainerCard: {
