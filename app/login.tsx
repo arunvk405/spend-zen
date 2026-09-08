@@ -60,16 +60,16 @@ export default function LoginScreen() {
     return (
         <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={[styles.container, { backgroundColor: '#F8FAFC' }]}
+            style={[styles.container, { backgroundColor: Colors.background }]}
         >
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                <View style={[styles.card, { backgroundColor: '#FFFFFF', borderColor: '#E2E8F0' }]}>
+                <View style={[styles.card, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
                     <View style={styles.headerSection}>
                         <View style={styles.logoRow}>
                             <Logo size={50} horizontal={true} />
                         </View>
-                        <Text style={[styles.title, { color: '#0F172A' }]}>Welcome Back</Text>
-                        <Text style={[styles.subtitle, { color: '#64748B' }]}>
+                        <Text style={[styles.title, { color: Colors.text }]}>Welcome Back</Text>
+                        <Text style={[styles.subtitle, { color: Colors.textMuted }]}>
                             Login to continue your journey
                         </Text>
                     </View>
@@ -77,13 +77,13 @@ export default function LoginScreen() {
                     <View style={styles.form}>
                         {/* Email Field */}
                         <View style={styles.inputGroup}>
-                            <Text style={[styles.inputLabel, { color: '#475569' }]}>Email address</Text>
-                            <View style={[styles.inputWrapper, { borderColor: '#E2E8F0' }]}>
-                                <Mail size={18} color="#94A3B8" style={styles.inputIcon} />
+                            <Text style={[styles.inputLabel, { color: Colors.textMuted }]}>Email address</Text>
+                            <View style={[styles.inputWrapper, { borderColor: Colors.border, backgroundColor: Colors.surfaceElevated }]}>
+                                <Mail size={18} color={Colors.textMuted} style={styles.inputIcon} />
                                 <TextInput
-                                    style={[styles.input, { color: '#1E293B' }]}
+                                    style={[styles.input, { color: Colors.text }]}
                                     placeholder="Email address"
-                                    placeholderTextColor="#94A3B8"
+                                    placeholderTextColor={Colors.textMuted}
                                     keyboardType="email-address"
                                     autoCapitalize="none"
                                     value={email}
@@ -94,13 +94,13 @@ export default function LoginScreen() {
 
                         {/* Password Field */}
                         <View style={styles.inputGroup}>
-                            <Text style={[styles.inputLabel, { color: '#475569' }]}>Password</Text>
-                            <View style={[styles.inputWrapper, { borderColor: '#E2E8F0' }]}>
-                                <Lock size={18} color="#94A3B8" style={styles.inputIcon} />
+                            <Text style={[styles.inputLabel, { color: Colors.textMuted }]}>Password</Text>
+                            <View style={[styles.inputWrapper, { borderColor: Colors.border, backgroundColor: Colors.surfaceElevated }]}>
+                                <Lock size={18} color={Colors.textMuted} style={styles.inputIcon} />
                                 <TextInput
-                                    style={[styles.input, { color: '#1E293B' }]}
+                                    style={[styles.input, { color: Colors.text }]}
                                     placeholder="Password"
-                                    placeholderTextColor="#94A3B8"
+                                    placeholderTextColor={Colors.textMuted}
                                     secureTextEntry
                                     value={password}
                                     onChangeText={setPassword}
@@ -109,7 +109,7 @@ export default function LoginScreen() {
                         </View>
 
                         <TouchableOpacity
-                            style={[styles.button, { backgroundColor: '#0F172A' }]}
+                            style={[styles.button, { backgroundColor: Colors.primary }]}
                             onPress={handleLogin}
                             disabled={loading}
                         >
@@ -121,13 +121,13 @@ export default function LoginScreen() {
                         </TouchableOpacity>
 
                         <View style={styles.divider}>
-                            <View style={[styles.dividerLine, { backgroundColor: '#F1F5F9' }]} />
-                            <Text style={[styles.dividerText, { color: '#94A3B8' }]}>OR CONTINUE WITH</Text>
-                            <View style={[styles.dividerLine, { backgroundColor: '#F1F5F9' }]} />
+                            <View style={[styles.dividerLine, { backgroundColor: Colors.border }]} />
+                            <Text style={[styles.dividerText, { color: Colors.textMuted }]}>OR CONTINUE WITH</Text>
+                            <View style={[styles.dividerLine, { backgroundColor: Colors.border }]} />
                         </View>
 
                         <TouchableOpacity
-                            style={[styles.socialButton, { borderColor: '#E2E8F0', backgroundColor: '#FFFFFF' }]}
+                            style={[styles.socialButton, { borderColor: Colors.border, backgroundColor: Colors.surface }]}
                             onPress={loginWithGoogle}
                             disabled={loading}
                         >
@@ -136,12 +136,12 @@ export default function LoginScreen() {
                                 style={styles.googleIcon}
                                 resizeMode="contain"
                             />
-                            <Text style={[styles.socialButtonText, { color: '#0F172A' }]}>Continue with Google</Text>
+                            <Text style={[styles.socialButtonText, { color: Colors.text }]}>Continue with Google</Text>
                         </TouchableOpacity>
 
                         <Link href="/signup" asChild>
                             <TouchableOpacity style={styles.createAccountBtn}>
-                                <Text style={[styles.createAccountText, { color: '#0F172A' }]}>Create an Account</Text>
+                                <Text style={[styles.createAccountText, { color: Colors.text }]}>Create an Account</Text>
                             </TouchableOpacity>
                         </Link>
                     </View>

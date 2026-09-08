@@ -75,16 +75,16 @@ export default function SignupScreen() {
     return (
         <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={[styles.container, { backgroundColor: '#F8FAFC' }]}
+            style={[styles.container, { backgroundColor: Colors.background }]}
         >
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                <View style={[styles.card, { backgroundColor: '#FFFFFF', borderColor: '#E2E8F0' }]}>
+                <View style={[styles.card, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
                     <View style={styles.headerSection}>
                         <View style={styles.logoRow}>
                             <Logo size={50} horizontal={true} />
                         </View>
-                        <Text style={[styles.title, { color: '#0F172A' }]}>Create Account</Text>
-                        <Text style={[styles.subtitle, { color: '#64748B' }]}>
+                        <Text style={[styles.title, { color: Colors.text }]}>Create Account</Text>
+                        <Text style={[styles.subtitle, { color: Colors.textMuted }]}>
                             Join Spend Zen and start tracking
                         </Text>
                     </View>
@@ -92,13 +92,13 @@ export default function SignupScreen() {
                     <View style={styles.form}>
                         {/* Name Field */}
                         <View style={styles.inputGroup}>
-                            <Text style={[styles.inputLabel, { color: '#475569' }]}>Full Name</Text>
-                            <View style={[styles.inputWrapper, { borderColor: '#E2E8F0' }]}>
-                                <User size={18} color="#94A3B8" style={styles.inputIcon} />
+                            <Text style={[styles.inputLabel, { color: Colors.textMuted }]}>Full Name</Text>
+                            <View style={[styles.inputWrapper, { borderColor: Colors.border, backgroundColor: Colors.surfaceElevated }]}>
+                                <User size={18} color={Colors.textMuted} style={styles.inputIcon} />
                                 <TextInput
-                                    style={[styles.input, { color: '#1E293B' }]}
+                                    style={[styles.input, { color: Colors.text }]}
                                     placeholder="Full Name"
-                                    placeholderTextColor="#94A3B8"
+                                    placeholderTextColor={Colors.textMuted}
                                     value={name}
                                     onChangeText={setName}
                                 />
@@ -107,13 +107,13 @@ export default function SignupScreen() {
 
                         {/* Email Field */}
                         <View style={styles.inputGroup}>
-                            <Text style={[styles.inputLabel, { color: '#475569' }]}>Email address</Text>
-                            <View style={[styles.inputWrapper, { borderColor: '#E2E8F0' }]}>
-                                <Mail size={18} color="#94A3B8" style={styles.inputIcon} />
+                            <Text style={[styles.inputLabel, { color: Colors.textMuted }]}>Email address</Text>
+                            <View style={[styles.inputWrapper, { borderColor: Colors.border, backgroundColor: Colors.surfaceElevated }]}>
+                                <Mail size={18} color={Colors.textMuted} style={styles.inputIcon} />
                                 <TextInput
-                                    style={[styles.input, { color: '#1E293B' }]}
+                                    style={[styles.input, { color: Colors.text }]}
                                     placeholder="Email address"
-                                    placeholderTextColor="#94A3B8"
+                                    placeholderTextColor={Colors.textMuted}
                                     keyboardType="email-address"
                                     autoCapitalize="none"
                                     value={email}
@@ -124,13 +124,13 @@ export default function SignupScreen() {
 
                         {/* Password Field */}
                         <View style={styles.inputGroup}>
-                            <Text style={[styles.inputLabel, { color: '#475569' }]}>Password</Text>
-                            <View style={[styles.inputWrapper, { borderColor: '#E2E8F0' }]}>
-                                <Lock size={18} color="#94A3B8" style={styles.inputIcon} />
+                            <Text style={[styles.inputLabel, { color: Colors.textMuted }]}>Password</Text>
+                            <View style={[styles.inputWrapper, { borderColor: Colors.border, backgroundColor: Colors.surfaceElevated }]}>
+                                <Lock size={18} color={Colors.textMuted} style={styles.inputIcon} />
                                 <TextInput
-                                    style={[styles.input, { color: '#1E293B' }]}
+                                    style={[styles.input, { color: Colors.text }]}
                                     placeholder="Password"
-                                    placeholderTextColor="#94A3B8"
+                                    placeholderTextColor={Colors.textMuted}
                                     secureTextEntry
                                     value={password}
                                     onChangeText={setPassword}
@@ -139,7 +139,7 @@ export default function SignupScreen() {
                         </View>
 
                         <TouchableOpacity
-                            style={[styles.button, { backgroundColor: '#0F172A' }]}
+                            style={[styles.button, { backgroundColor: Colors.primary }]}
                             onPress={handleSignup}
                             disabled={loading}
                         >
@@ -151,10 +151,10 @@ export default function SignupScreen() {
                         </TouchableOpacity>
 
                         <View style={styles.footer}>
-                            <Text style={[styles.footerText, { color: '#64748B' }]}>
+                            <Text style={[styles.footerText, { color: Colors.textMuted }]}>
                                 Already have an account?
                                 <Link href="/login" asChild>
-                                    <Text style={{ color: '#2563EB', fontWeight: '800' }}> Login</Text>
+                                    <Text style={{ color: Colors.primary, fontWeight: '800' }}> Login</Text>
                                 </Link>
                             </Text>
                         </View>

@@ -1,13 +1,20 @@
-import React, { useMemo, useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, Dimensions, ScrollView, TouchableOpacity, Pressable, Platform, Modal } from 'react-native';
+import React, { useMemo, useState, useEffect } from 'react';
+import {
+    View, Text, StyleSheet, ScrollView, TouchableOpacity,
+    Pressable, Platform, Modal, useWindowDimensions
+} from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { parseISO, isSameMonth, isSameYear, format, subMonths, getDaysInMonth, getDate, getDay } from 'date-fns';
+import {
+    ChevronLeft, ChevronRight, ChevronDown, ArrowUpCircle, ArrowDownCircle,
+    Info, Tag, TrendingUp, TrendingDown, Activity, Zap, Award, Target,
+    Calendar, ShoppingBag, X, SlidersHorizontal, ArrowUpRight, PieChart
+} from 'lucide-react-native';
 
 import { useThemeColors } from '../../src/theme/colors';
 import InteractiveDonut from '../../src/components/InteractiveDonut';
 import { useFinance } from '../../src/context/FinanceContext';
-import { parseISO, isSameMonth, isSameYear, format, subMonths, getDaysInMonth, getDate, getDay } from 'date-fns';
-import { ChevronLeft, ChevronRight, ChevronDown, ArrowUpCircle, ArrowDownCircle, Wallet, Info, Tag, TrendingUp, TrendingDown, Activity, Zap, Award, Target, Calendar, ShoppingBag, X, SlidersHorizontal } from 'lucide-react-native';
 
 const HoverCard = ({ children, style, onPress, disabled = false }: any) => {
     const [isHovered, setIsHovered] = useState(false);
@@ -19,8 +26,8 @@ const HoverCard = ({ children, style, onPress, disabled = false }: any) => {
             onHoverOut={() => setIsHovered(false)}
             style={({ pressed }) => [
                 style,
-                isHovered ? { shadowOpacity: 0.12, shadowRadius: 16, elevation: 8, transform: [{ translateY: -4 }] } : undefined,
-                pressed ? { transform: [{ scale: 0.98 }] } : undefined,
+                isHovered && Platform.OS === 'web' ? { transform: [{ translateY: -2 }] } : undefined,
+                pressed ? { transform: [{ scale: 0.99 }] } : undefined,
                 Platform.OS === 'web' ? { transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)' } : undefined
             ] as any}
         >
@@ -28,8 +35,6 @@ const HoverCard = ({ children, style, onPress, disabled = false }: any) => {
         </Pressable>
     );
 };
-
-const screenWidth = Dimensions.get('window').width;
 
 const MONTHS = [
     'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -45,7 +50,12 @@ export default function Reports({ initialDate, onSubTabChange }: ReportsProps = 
     const Colors = useThemeColors();
     const router = useRouter();
     const insets = useSafeAreaInsets();
-    const topMargin = Math.max(insets.top, Platform.OS === 'web' ? 10 : 6);
+    const { width: windowWidth } = useWindowDimensions();
+    const isDesktop = windowWidth >= 920;
+    const isTablet = windowWidth >= 640 && windowWidth < 920;
+
+    const topMargin = Math.max(insets.top, Platform.OS === 'web' ? 12 : 8);
+    const bottomScrollPadding = Math.max(insets.bottom + 90, 120);
 
     const { transactions, bankAccounts, creditCards, cashAccountName, categoryBudgets } = useFinance();
     
@@ -521,543 +531,667 @@ export default function Reports({ initialDate, onSubTabChange }: ReportsProps = 
     return (
         <ScrollView
             style={[styles.container, { backgroundColor: Colors.background }]}
-            contentContainerStyle={{ paddingBottom: 100 }}
+            contentContainerStyle={{ paddingBottom: bottomScrollPadding }}
             showsVerticalScrollIndicator={false}
         >
-            {/* UNIFIED COMPACT HEADER */}
-            <View style={[styles.compactHeaderWrapper, { backgroundColor: Colors.background, paddingTop: topMargin }]}>
-                {/* 1. TOP NAV: Subtabs + Interactive Month Stepper */}
-                <View style={styles.topNavRow}>
-                    <View style={[styles.subtabContainer, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
-                        <TouchableOpacity
-                            style={styles.subtabBtn}
-                            onPress={() => handleSubTabClick('HISTORY')}
-                        >
-                            <Text style={[styles.subtabText, { color: Colors.textMuted }]}>
-                                📜 History
-                            </Text>
-                        </TouchableOpacity>
+            {/* CONTAINER SHELL (Responsive max-width for desktop/laptop) */}
+            <View style={[styles.mainWrapper, { paddingTop: topMargin }, isDesktop && styles.desktopContainer]}>
+                
+                {/* ── 1. UNIFIED COMMAND HEADER (Subtabs + Month Stepper + Account Pills) ── */}
+                <View style={[styles.headerCard, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+                    
+                    {/* Top Row: Navigation Subtabs + Month Stepper */}
+                    <View style={styles.topNavRow}>
+                        {/* Subtabs Switcher */}
+                        <View style={[styles.subtabContainer, { backgroundColor: Colors.surfaceElevated, borderColor: Colors.border }]}>
+                            <TouchableOpacity
+                                style={styles.subtabBtn}
+                                onPress={() => handleSubTabClick('HISTORY')}
+                                activeOpacity={0.7}
+                            >
+                                <Text style={[styles.subtabText, { color: Colors.textMuted }]}>
+                                    📜 History
+                                </Text>
+                            </TouchableOpacity>
 
+                            <TouchableOpacity
+                                style={[styles.subtabBtn, { backgroundColor: Colors.primary }]}
+                                onPress={() => handleSubTabClick('REPORTS')}
+                                activeOpacity={0.8}
+                            >
+                                <Text style={[styles.subtabText, { color: '#ffffff' }]}>
+                                    📊 Reports
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Interactive Month Stepper & Picker Modal Trigger */}
+                        <View style={[styles.monthNavGroup, { backgroundColor: Colors.surfaceElevated, borderColor: Colors.border }]}>
+                            <TouchableOpacity onPress={() => stepMonth(-1)} style={styles.monthStepBtn} accessibilityLabel="Previous month" activeOpacity={0.6}>
+                                <ChevronLeft color={Colors.textMuted} size={16} />
+                            </TouchableOpacity>
+
+                            <TouchableOpacity onPress={openMonthPicker} style={styles.monthLabelBtn} activeOpacity={0.7}>
+                                <Text style={[styles.monthNavText, { color: Colors.text }]}>
+                                    {format(selectedDate, 'MMM yyyy')}
+                                </Text>
+                                <ChevronDown color={Colors.textMuted} size={14} style={{ marginLeft: 3 }} />
+                            </TouchableOpacity>
+
+                            <TouchableOpacity onPress={() => stepMonth(1)} style={styles.monthStepBtn} accessibilityLabel="Next month" activeOpacity={0.6}>
+                                <ChevronRight color={Colors.textMuted} size={16} />
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+
+                    {/* Bottom Row: 3-Tab Account Segment + Filter Trigger */}
+                    <View style={styles.accountControlRow}>
+                        {/* Primary 3-tab Segmented Pill */}
+                        <View style={[styles.segmentContainer, { backgroundColor: Colors.surfaceElevated, borderColor: Colors.border }]}>
+                            {[
+                                { id: 'all', label: 'All Accounts' },
+                                { id: 'group_cash_bank', label: '💵 Non-Credit' },
+                                { id: 'group_credit', label: '💳 Credit' },
+                            ].map((item) => {
+                                const isSelected = selectedAccount === item.id;
+                                return (
+                                    <TouchableOpacity
+                                        key={item.id}
+                                        style={[
+                                            styles.segmentBtn,
+                                            isSelected && { backgroundColor: Colors.primary }
+                                        ]}
+                                        onPress={() => setSelectedAccount(item.id)}
+                                        activeOpacity={0.7}
+                                    >
+                                        <Text style={[
+                                            styles.segmentText,
+                                            { color: isSelected ? '#ffffff' : Colors.textMuted, fontWeight: isSelected ? '700' : '600' }
+                                        ]}>
+                                            {item.label}
+                                        </Text>
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </View>
+
+                        {/* Custom Account Filter Trigger with Badge */}
                         <TouchableOpacity
-                            style={[styles.subtabBtn, { backgroundColor: Colors.primary }]}
-                            onPress={() => handleSubTabClick('REPORTS')}
+                            style={[
+                                styles.iconActionBtn,
+                                {
+                                    backgroundColor: isCustomFilterActive ? Colors.primary + '18' : Colors.surfaceElevated,
+                                    borderColor: isCustomFilterActive ? Colors.primary : Colors.border
+                                }
+                            ]}
+                            onPress={() => {
+                                setTempSelectedAccount(selectedAccount);
+                                setIsFilterModalOpen(true);
+                            }}
+                            accessibilityLabel="Filter by specific account"
+                            activeOpacity={0.7}
                         >
-                            <Text style={[styles.subtabText, { color: '#fff' }]}>
-                                📊 Reports
-                            </Text>
+                            <SlidersHorizontal color={isCustomFilterActive ? Colors.primary : Colors.textMuted} size={16} />
+                            {isCustomFilterActive && (
+                                <View style={[styles.filterBadgeCircle, { backgroundColor: Colors.primary, borderColor: Colors.surface }]}>
+                                    <Text style={styles.filterBadgeText}>1</Text>
+                                </View>
+                            )}
                         </TouchableOpacity>
                     </View>
 
-                    {/* Month Stepper & Modal Trigger */}
-                    <View style={[styles.monthNavGroup, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
-                        <TouchableOpacity onPress={() => stepMonth(-1)} style={styles.monthStepBtn} accessibilityLabel="Previous month">
-                            <ChevronLeft color={Colors.textMuted} size={16} />
-                        </TouchableOpacity>
-
-                        <TouchableOpacity onPress={openMonthPicker} style={styles.monthLabelBtn} activeOpacity={0.7}>
-                            <Text style={[styles.monthNavText, { color: Colors.text }]}>
-                                {format(selectedDate, 'MMM yyyy')}
-                            </Text>
-                            <ChevronDown color={Colors.textMuted} size={14} style={{ marginLeft: 3 }} />
-                        </TouchableOpacity>
-
-                        <TouchableOpacity onPress={() => stepMonth(1)} style={styles.monthStepBtn} accessibilityLabel="Next month">
-                            <ChevronRight color={Colors.textMuted} size={16} />
-                        </TouchableOpacity>
-                    </View>
+                    {/* Active Specific Account Chip (shown if a custom bank/card is chosen from modal) */}
+                    {isCustomFilterActive && (
+                        <View style={styles.activeBadgeRow}>
+                            <TouchableOpacity
+                                style={[styles.activeBadge, { backgroundColor: Colors.primary + '18', borderColor: Colors.primary }]}
+                                onPress={() => setSelectedAccount('all')}
+                                activeOpacity={0.7}
+                            >
+                                <Text style={[styles.activeBadgeText, { color: Colors.primary }]}>
+                                    Filtered: {getAccountName(selectedAccount)}
+                                </Text>
+                                <X color={Colors.primary} size={12} />
+                            </TouchableOpacity>
+                        </View>
+                    )}
                 </View>
 
-                {/* 2. ACCOUNT 3-TAB SEGMENT + FILTER BUTTON */}
-                <View style={styles.accountControlRow}>
-                    {/* Primary 3-tab Segmented Pill */}
-                    <View style={[styles.segmentContainer, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
-                        {[
-                            { id: 'all', label: 'All Accounts' },
-                            { id: 'group_cash_bank', label: '💵 Non-Credit' },
-                            { id: 'group_credit', label: '💳 Credit' },
-                        ].map((item) => {
-                            const isSelected = selectedAccount === item.id;
-                            return (
-                                <TouchableOpacity
-                                    key={item.id}
-                                    style={[
-                                        styles.segmentBtn,
-                                        isSelected && { backgroundColor: Colors.primary }
-                                    ]}
-                                    onPress={() => setSelectedAccount(item.id)}
-                                >
-                                    <Text style={[
-                                        styles.segmentText,
-                                        { color: isSelected ? '#fff' : Colors.textMuted, fontWeight: isSelected ? '700' : '600' }
-                                    ]}>
-                                        {item.label}
-                                    </Text>
-                                </TouchableOpacity>
-                            );
-                        })}
-                    </View>
-
-                    {/* Filter Modal Trigger with Badge */}
-                    <TouchableOpacity
-                        style={[
-                            styles.iconActionBtn,
-                            {
-                                backgroundColor: isCustomFilterActive ? Colors.primary + '18' : Colors.surface,
-                                borderColor: isCustomFilterActive ? Colors.primary : Colors.border
-                            }
-                        ]}
-                        onPress={() => {
-                            setTempSelectedAccount(selectedAccount);
-                            setIsFilterModalOpen(true);
-                        }}
-                        accessibilityLabel="Filter by specific account"
-                    >
-                        <SlidersHorizontal color={isCustomFilterActive ? Colors.primary : Colors.textMuted} size={16} />
-                        {isCustomFilterActive && (
-                            <View style={[styles.filterBadgeCircle, { backgroundColor: Colors.primary, borderColor: Colors.background }]}>
-                                <Text style={styles.filterBadgeText}>1</Text>
-                            </View>
-                        )}
-                    </TouchableOpacity>
-                </View>
-
-                {/* Active Specific Account Badge (shown if a specific bank/card is chosen from modal) */}
-                {isCustomFilterActive && (
-                    <View style={{ flexDirection: 'row', paddingHorizontal: 16, paddingBottom: 6 }}>
-                        <TouchableOpacity
-                            style={[styles.activeBadge, { backgroundColor: Colors.primary + '18', borderColor: Colors.primary }]}
-                            onPress={() => setSelectedAccount('all')}
-                        >
-                            <Text style={[styles.activeBadgeText, { color: Colors.primary }]}>
-                                Account: {getAccountName(selectedAccount)}
-                            </Text>
-                            <X color={Colors.primary} size={11} />
-                        </TouchableOpacity>
-                    </View>
-                )}
-
-                {/* 3. COMPACT FINANCIAL RIBBON (Income / Expense / Savings) */}
-                <View style={[styles.summaryRibbon, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
-                    <View style={styles.ribbonStatItem}>
-                        <Text style={[styles.ribbonStatLabel, { color: Colors.textMuted }]}>INCOME</Text>
-                        <Text style={[styles.ribbonStatValue, { color: Colors.income }]}>
+                {/* ── 2. EXECUTIVE FINANCIAL PERFORMANCE BANNER ── */}
+                <View style={[styles.ribbonCard, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+                    <View style={styles.ribbonItem}>
+                        <View style={styles.ribbonItemHeader}>
+                            <View style={[styles.ribbonDot, { backgroundColor: Colors.income }]} />
+                            <Text style={[styles.ribbonStatLabel, { color: Colors.textMuted }]}>INCOME</Text>
+                        </View>
+                        <Text style={[styles.ribbonStatValue, { color: Colors.income }]} numberOfLines={1}>
                             +₹{stats.income.toLocaleString('en-IN')}
                         </Text>
-                    </View>
-
-                    <View style={[styles.ribbonVerticalDivider, { backgroundColor: Colors.border }]} />
-
-                    <View style={styles.ribbonStatItem}>
-                        <Text style={[styles.ribbonStatLabel, { color: Colors.textMuted }]}>EXPENSE</Text>
-                        <Text style={[styles.ribbonStatValue, { color: Colors.expense }]}>
-                            -₹{stats.expense.toLocaleString('en-IN')}
+                        <Text style={[styles.ribbonSubtext, { color: Colors.textMuted }]}>
+                            {incomeBreakdown.length} Source{incomeBreakdown.length !== 1 ? 's' : ''}
                         </Text>
                     </View>
 
-                    <View style={[styles.ribbonVerticalDivider, { backgroundColor: Colors.border }]} />
+                    <View style={[styles.ribbonDivider, { backgroundColor: Colors.border }]} />
 
-                    <View style={styles.ribbonStatItem}>
-                        <Text style={[styles.ribbonStatLabel, { color: Colors.textMuted }]}>SAVINGS</Text>
+                    <View style={styles.ribbonItem}>
+                        <View style={styles.ribbonItemHeader}>
+                            <View style={[styles.ribbonDot, { backgroundColor: Colors.expense }]} />
+                            <Text style={[styles.ribbonStatLabel, { color: Colors.textMuted }]}>EXPENSE</Text>
+                        </View>
+                        <Text style={[styles.ribbonStatValue, { color: Colors.expense }]} numberOfLines={1}>
+                            -₹{stats.expense.toLocaleString('en-IN')}
+                        </Text>
+                        <Text style={[styles.ribbonSubtext, { color: Colors.textMuted }]}>
+                            {expDiffPct > 0 ? `+${expDiffPct}% MoM` : `${expDiffPct}% MoM`}
+                        </Text>
+                    </View>
+
+                    <View style={[styles.ribbonDivider, { backgroundColor: Colors.border }]} />
+
+                    <View style={styles.ribbonItem}>
+                        <View style={styles.ribbonItemHeader}>
+                            <View style={[styles.ribbonDot, { backgroundColor: stats.net >= 0 ? Colors.income : Colors.expense }]} />
+                            <Text style={[styles.ribbonStatLabel, { color: Colors.textMuted }]}>NET SAVINGS</Text>
+                        </View>
                         <Text style={[
                             styles.ribbonStatValue,
                             { color: stats.net >= 0 ? Colors.income : Colors.expense }
-                        ]}>
+                        ]} numberOfLines={1}>
                             {stats.net >= 0 ? '+' : ''}₹{stats.net.toLocaleString('en-IN')}
                         </Text>
-                    </View>
-                </View>
-            </View>
-
-            {/* Visual Analytics: Financial Health & Month-over-Month Comparison */}
-            <HoverCard disabled={true} style={[styles.card, { backgroundColor: Colors.surface }]}>
-                <View style={styles.cardHeader}>
-                    <View>
-                        <Text style={[styles.cardTitle, { color: Colors.text }]}>Financial Performance & Trends</Text>
-                        <Text style={{ fontSize: 11.5, color: Colors.textMuted, marginTop: 1 }}>
-                            vs {format(subMonths(selectedDate, 1), 'MMMM yyyy')}
-                        </Text>
-                    </View>
-                    <Activity size={18} color={Colors.primary} />
-                </View>
-
-                {/* Health Badge & Savings Rate Bar */}
-                <View style={{ marginBottom: 12, backgroundColor: Colors.background, padding: 10, borderRadius: 14 }}>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                            <Award size={15} color={financialHealth.color} />
-                            <Text style={{ fontSize: 12.5, fontWeight: '700', color: Colors.text }}>{financialHealth.label}</Text>
-                        </View>
-                        <Text style={{ fontSize: 12.5, fontWeight: 'bold', color: financialHealth.color }}>
+                        <Text style={[styles.ribbonSubtext, { color: financialHealth.color }]}>
                             {financialHealth.rate}% Savings Rate
                         </Text>
                     </View>
-                    <View style={{ height: 6, backgroundColor: Colors.border + '40', borderRadius: 3, overflow: 'hidden' }}>
-                        <View style={{ height: '100%', width: `${Math.min(100, Math.max(0, financialHealth.rate))}%`, backgroundColor: financialHealth.color, borderRadius: 3 }} />
-                    </View>
                 </View>
 
-                {/* MoM Comparison Pills */}
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                    <View style={{ flex: 1, backgroundColor: Colors.background, padding: 10, borderRadius: 14 }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 2 }}>
-                            {expDiffPct > 0 ? (
-                                <TrendingUp size={13} color={Colors.expense} />
-                            ) : (
-                                <TrendingDown size={13} color={Colors.income} />
-                            )}
-                            <Text style={{ fontSize: 11, fontWeight: '600', color: Colors.textMuted }}>Expense Trend</Text>
-                        </View>
-                        <Text style={{ fontSize: 14, fontWeight: 'bold', color: expDiffPct > 0 ? Colors.expense : Colors.income }}>
-                            {expDiffPct > 0 ? `+${expDiffPct}%` : `${expDiffPct}%`}
-                        </Text>
-                        <Text style={{ fontSize: 9.5, color: Colors.textMuted, marginTop: 1 }}>
-                            Last Mo: ₹{previousMonthStats.expense.toLocaleString()}
-                        </Text>
-                    </View>
+                {/* ── 3. RESPONSIVE BENTO GRID (2 COLUMNS ON DESKTOP, 1 COLUMN ON MOBILE) ── */}
+                <View style={[styles.bentoContainer, isDesktop ? styles.bentoGridDesktop : styles.bentoGridMobile]}>
 
-                    <View style={{ flex: 1, backgroundColor: Colors.background, padding: 10, borderRadius: 14 }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 2 }}>
-                            <Zap size={13} color={Colors.primary} />
-                            <Text style={{ fontSize: 11, fontWeight: '600', color: Colors.textMuted }}>Daily Avg Burn</Text>
-                        </View>
-                        <Text style={{ fontSize: 14, fontWeight: 'bold', color: Colors.text }}>
-                            ₹{dailySpendingData.avgDaily.toLocaleString()}/day
-                        </Text>
-                        <Text style={{ fontSize: 9.5, color: Colors.textMuted, marginTop: 1 }}>
-                            Peak: {dailySpendingData.peakDay ? `Day ${dailySpendingData.peakDay} (₹${dailySpendingData.maxSpending.toLocaleString()})` : 'None'}
-                        </Text>
-                    </View>
-                </View>
+                    {/* ════════ LEFT COLUMN: Trends, Daily Bars & Spending Habits ════════ */}
+                    <View style={[styles.bentoColumn, isDesktop ? { flex: 1.05 } : undefined]}>
 
-                {/* Daily Spending Bar Chart with Clear Legend & Interactive Inspector */}
-                <View style={{ marginTop: 14 }}>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                        <Text style={{ fontSize: 12.5, fontWeight: '700', color: Colors.text }}>
-                            Daily Expense Activity
-                        </Text>
-                        <View style={{ backgroundColor: Colors.background, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 }}>
-                            <Text style={{ fontSize: 10.5, fontWeight: '600', color: selectedDayInfo ? Colors.primary : Colors.textMuted }}>
-                                {selectedDayInfo
-                                    ? `Day ${selectedDayInfo.day}: ₹${selectedDayInfo.amount.toLocaleString()}`
-                                    : dailySpendingData.peakDay > 0
-                                        ? `Peak: Day ${dailySpendingData.peakDay} (₹${dailySpendingData.maxSpending.toLocaleString()})`
-                                        : 'Tap bar to inspect'}
-                            </Text>
-                        </View>
-                    </View>
-
-                    {/* Color Legend */}
-                    <View style={{ flexDirection: 'row', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                            <View style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: Colors.primary }} />
-                            <Text style={{ fontSize: 9.5, color: Colors.textMuted }}>Daily Expense</Text>
-                        </View>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                            <View style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: Colors.expense }} />
-                            <Text style={{ fontSize: 9.5, color: Colors.textMuted }}>Peak Day</Text>
-                        </View>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                            <View style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: Colors.border + '60' }} />
-                            <Text style={{ fontSize: 9.5, color: Colors.textMuted }}>No Expense</Text>
-                        </View>
-                    </View>
-
-                    <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: 50, gap: 2 }}>
-                        {dailySpendingData.dailyTotals.map((amt, idx) => {
-                            const barHeight = dailySpendingData.maxSpending > 0 ? Math.max(4, (amt / dailySpendingData.maxSpending) * 46) : 4;
-                            const isPeak = idx + 1 === dailySpendingData.peakDay && amt > 0;
-                            const isSelected = selectedDayInfo && selectedDayInfo.day === idx + 1;
-                            return (
-                                <TouchableOpacity
-                                    key={`day-${idx}`}
-                                    onPress={() => setSelectedDayInfo({ day: idx + 1, amount: amt })}
-                                    style={{
-                                        flex: 1,
-                                        height: barHeight,
-                                        backgroundColor: isPeak ? Colors.expense : (amt > 0 ? Colors.primary : Colors.border + '50'),
-                                        borderRadius: 2,
-                                        opacity: selectedDayInfo ? (isSelected ? 1 : 0.4) : 1
-                                    }}
-                                />
-                            );
-                        })}
-                    </View>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 3 }}>
-                        <Text style={{ fontSize: 8.5, color: Colors.textMuted }}>Day 1</Text>
-                        <Text style={{ fontSize: 8.5, color: Colors.textMuted }}>Day 15</Text>
-                        <Text style={{ fontSize: 8.5, color: Colors.textMuted }}>Day {dailySpendingData.daysInMonth}</Text>
-                    </View>
-                </View>
-            </HoverCard>
-
-            {/* 🏆 Top 3 Purchases of the Month & 📅 Weekday vs Weekend Analysis */}
-            <View style={{ flexDirection: 'row', gap: 8, marginHorizontal: 16, marginTop: 4, marginBottom: 8 }}>
-                {/* Top Purchases Card */}
-                <View style={{ flex: 1, backgroundColor: Colors.surface, borderRadius: 16, padding: 12, borderColor: Colors.border, borderWidth: 1 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 8 }}>
-                        <ShoppingBag size={14} color={Colors.primary} />
-                        <Text style={{ fontSize: 12, fontWeight: '700', color: Colors.text }}>Top Purchases</Text>
-                    </View>
-                    {topPurchases.length > 0 ? (
-                        topPurchases.map((tx, idx) => (
-                            <View key={`top-${tx.id || idx}`} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                                <View style={{ flex: 1, marginRight: 4 }}>
-                                    <Text style={{ fontSize: 11, fontWeight: '700', color: Colors.text }} numberOfLines={1}>
-                                        #{idx + 1} {tx.category}
-                                    </Text>
-                                    <Text style={{ fontSize: 9, color: Colors.textMuted }} numberOfLines={1}>
-                                        {format(parseISO(tx.date), 'MMM dd')} {tx.note ? `• ${tx.note}` : ''}
+                        {/* Card 1: Financial Health & Month-Over-Month Performance */}
+                        <HoverCard disabled={true} style={[styles.card, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+                            <View style={styles.cardHeader}>
+                                <View>
+                                    <Text style={[styles.cardTitle, { color: Colors.text }]}>Performance & Velocity</Text>
+                                    <Text style={[styles.cardSubtitle, { color: Colors.textMuted }]}>
+                                        Activity & comparison vs {format(subMonths(selectedDate, 1), 'MMMM yyyy')}
                                     </Text>
                                 </View>
-                                <Text style={{ fontSize: 11, fontWeight: 'bold', color: Colors.expense }}>
-                                    ₹{Number(tx.amount).toLocaleString()}
+                                <View style={[styles.cardHeaderIconBadge, { backgroundColor: Colors.primary + '18' }]}>
+                                    <Activity size={16} color={Colors.primary} />
+                                </View>
+                            </View>
+
+                            {/* Savings Rate Progress Meter */}
+                            <View style={[styles.healthTrackBox, { backgroundColor: Colors.surfaceElevated, borderColor: Colors.border }]}>
+                                <View style={styles.healthHeaderRow}>
+                                    <View style={styles.healthLabelGroup}>
+                                        <Award size={15} color={financialHealth.color} />
+                                        <Text style={[styles.healthTitleText, { color: Colors.text }]}>{financialHealth.label}</Text>
+                                    </View>
+                                    <Text style={[styles.healthRateText, { color: financialHealth.color }]}>
+                                        {financialHealth.rate}% Savings Rate
+                                    </Text>
+                                </View>
+                                <View style={[styles.progressTrack, { backgroundColor: Colors.border }]}>
+                                    <View
+                                        style={[
+                                            styles.progressFill,
+                                            {
+                                                width: `${Math.min(100, Math.max(0, financialHealth.rate))}%`,
+                                                backgroundColor: financialHealth.color
+                                            }
+                                        ]}
+                                    />
+                                </View>
+                            </View>
+
+                            {/* Quick Metrics (Expense Trend + Daily Avg Burn) */}
+                            <View style={styles.dualPillRow}>
+                                <View style={[styles.pillCard, { backgroundColor: Colors.surfaceElevated, borderColor: Colors.border }]}>
+                                    <View style={styles.pillCardHeader}>
+                                        {expDiffPct > 0 ? (
+                                            <TrendingUp size={13} color={Colors.expense} />
+                                        ) : (
+                                            <TrendingDown size={13} color={Colors.income} />
+                                        )}
+                                        <Text style={[styles.pillCardLabel, { color: Colors.textMuted }]}>Expense Trend</Text>
+                                    </View>
+                                    <Text style={[styles.pillCardValue, { color: expDiffPct > 0 ? Colors.expense : Colors.income }]}>
+                                        {expDiffPct > 0 ? `+${expDiffPct}%` : `${expDiffPct}%`}
+                                    </Text>
+                                    <Text style={[styles.pillCardSub, { color: Colors.textMuted }]}>
+                                        Last Mo: ₹{previousMonthStats.expense.toLocaleString('en-IN')}
+                                    </Text>
+                                </View>
+
+                                <View style={[styles.pillCard, { backgroundColor: Colors.surfaceElevated, borderColor: Colors.border }]}>
+                                    <View style={styles.pillCardHeader}>
+                                        <Zap size={13} color={Colors.primary} />
+                                        <Text style={[styles.pillCardLabel, { color: Colors.textMuted }]}>Daily Avg Burn</Text>
+                                    </View>
+                                    <Text style={[styles.pillCardValue, { color: Colors.text }]}>
+                                        ₹{dailySpendingData.avgDaily.toLocaleString('en-IN')}/day
+                                    </Text>
+                                    <Text style={[styles.pillCardSub, { color: Colors.textMuted }]}>
+                                        {dailySpendingData.peakDay > 0 ? `Peak: Day ${dailySpendingData.peakDay} (₹${dailySpendingData.maxSpending.toLocaleString('en-IN')})` : 'Stable pacing'}
+                                    </Text>
+                                </View>
+                            </View>
+
+                            {/* Interactive Daily Spending Activity Bar Chart */}
+                            <View style={styles.chartSection}>
+                                <View style={styles.chartHeaderRow}>
+                                    <Text style={[styles.chartSectionTitle, { color: Colors.text }]}>
+                                        Daily Spending Activity
+                                    </Text>
+                                    <View style={[styles.inspectorChip, { backgroundColor: Colors.surfaceElevated, borderColor: Colors.border }]}>
+                                        <Text style={[styles.inspectorChipText, { color: selectedDayInfo ? Colors.primary : Colors.textMuted }]}>
+                                            {selectedDayInfo
+                                                ? `Day ${selectedDayInfo.day}: ₹${selectedDayInfo.amount.toLocaleString('en-IN')}`
+                                                : dailySpendingData.peakDay > 0
+                                                    ? `Peak: Day ${dailySpendingData.peakDay} (₹${dailySpendingData.maxSpending.toLocaleString('en-IN')})`
+                                                    : 'Tap bar to inspect'}
+                                        </Text>
+                                    </View>
+                                </View>
+
+                                {/* Legend Indicators */}
+                                <View style={styles.legendRow}>
+                                    <View style={styles.legendItem}>
+                                        <View style={[styles.legendSquare, { backgroundColor: Colors.primary }]} />
+                                        <Text style={[styles.legendText, { color: Colors.textMuted }]}>Expense</Text>
+                                    </View>
+                                    <View style={styles.legendItem}>
+                                        <View style={[styles.legendSquare, { backgroundColor: Colors.expense }]} />
+                                        <Text style={[styles.legendText, { color: Colors.textMuted }]}>Peak Day</Text>
+                                    </View>
+                                    <View style={styles.legendItem}>
+                                        <View style={[styles.legendSquare, { backgroundColor: Colors.border }]} />
+                                        <Text style={[styles.legendText, { color: Colors.textMuted }]}>Zero</Text>
+                                    </View>
+                                </View>
+
+                                {/* Bar Chart Grid */}
+                                <View style={styles.barsContainer}>
+                                    {dailySpendingData.dailyTotals.map((amt, idx) => {
+                                        const barHeight = dailySpendingData.maxSpending > 0
+                                            ? Math.max(4, (amt / dailySpendingData.maxSpending) * 52)
+                                            : 4;
+                                        const isPeak = idx + 1 === dailySpendingData.peakDay && amt > 0;
+                                        const isSelected = selectedDayInfo && selectedDayInfo.day === idx + 1;
+                                        return (
+                                            <TouchableOpacity
+                                                key={`day-${idx}`}
+                                                onPress={() => setSelectedDayInfo({ day: idx + 1, amount: amt })}
+                                                style={[
+                                                    styles.dayBar,
+                                                    {
+                                                        height: barHeight,
+                                                        backgroundColor: isPeak ? Colors.expense : (amt > 0 ? Colors.primary : Colors.border),
+                                                        opacity: selectedDayInfo ? (isSelected ? 1 : 0.35) : 1
+                                                    }
+                                                ]}
+                                                activeOpacity={0.8}
+                                            />
+                                        );
+                                    })}
+                                </View>
+
+                                {/* Axis Labels */}
+                                <View style={styles.axisLabelsRow}>
+                                    <Text style={[styles.axisLabel, { color: Colors.textMuted }]}>Day 1</Text>
+                                    <Text style={[styles.axisLabel, { color: Colors.textMuted }]}>Day 15</Text>
+                                    <Text style={[styles.axisLabel, { color: Colors.textMuted }]}>Day {dailySpendingData.daysInMonth}</Text>
+                                </View>
+                            </View>
+                        </HoverCard>
+
+                        {/* Card 2: Top Purchases & Weekday vs Weekend Split */}
+                        <View style={[styles.dualCardRow, isTablet || isDesktop ? styles.dualCardRowWide : undefined]}>
+                            
+                            {/* Top 3 Purchases */}
+                            <View style={[styles.card, styles.flex1, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+                                <View style={styles.miniCardHeader}>
+                                    <View style={[styles.miniHeaderIcon, { backgroundColor: Colors.expense + '18' }]}>
+                                        <ShoppingBag size={14} color={Colors.expense} />
+                                    </View>
+                                    <Text style={[styles.miniCardTitle, { color: Colors.text }]}>Top Purchases</Text>
+                                </View>
+
+                                {topPurchases.length > 0 ? (
+                                    <View style={styles.topPurchasesList}>
+                                        {topPurchases.map((tx, idx) => (
+                                            <TouchableOpacity
+                                                key={`top-${tx.id || idx}`}
+                                                style={[styles.topPurchaseItem, { borderBottomColor: Colors.border }]}
+                                                onPress={() => navigateToHistory({ name: tx.category }, 'EXPENSE')}
+                                                activeOpacity={0.7}
+                                            >
+                                                <View style={{ flex: 1, marginRight: 6 }}>
+                                                    <Text style={[styles.topPurchaseCategory, { color: Colors.text }]} numberOfLines={1}>
+                                                        #{idx + 1} {tx.category}
+                                                    </Text>
+                                                    <Text style={[styles.topPurchaseMeta, { color: Colors.textMuted }]} numberOfLines={1}>
+                                                        {format(parseISO(tx.date), 'MMM dd')} {tx.note ? `• ${tx.note}` : ''}
+                                                    </Text>
+                                                </View>
+                                                <Text style={[styles.topPurchaseAmount, { color: Colors.expense }]}>
+                                                    ₹{Number(tx.amount).toLocaleString('en-IN')}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                ) : (
+                                    <View style={styles.miniEmptyBox}>
+                                        <Text style={[styles.miniEmptyText, { color: Colors.textMuted }]}>No major expenses recorded</Text>
+                                    </View>
+                                )}
+                            </View>
+
+                            {/* Weekday vs Weekend Distribution */}
+                            <View style={[styles.card, styles.flex1, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+                                <View style={styles.miniCardHeader}>
+                                    <View style={[styles.miniHeaderIcon, { backgroundColor: Colors.primary + '18' }]}>
+                                        <Calendar size={14} color={Colors.primary} />
+                                    </View>
+                                    <Text style={[styles.miniCardTitle, { color: Colors.text }]}>Day Distribution</Text>
+                                </View>
+
+                                <View style={styles.daySplitContent}>
+                                    {/* Weekdays */}
+                                    <View style={styles.daySplitItem}>
+                                        <View style={styles.daySplitHeader}>
+                                            <Text style={[styles.daySplitLabel, { color: Colors.textMuted }]}>Mon–Fri (Weekdays)</Text>
+                                            <Text style={[styles.daySplitPct, { color: Colors.text }]}>{weekdayWeekendStats.weekdayPct}%</Text>
+                                        </View>
+                                        <View style={[styles.splitTrack, { backgroundColor: Colors.border }]}>
+                                            <View style={[styles.splitFill, { width: `${weekdayWeekendStats.weekdayPct}%`, backgroundColor: Colors.primary }]} />
+                                        </View>
+                                        <Text style={[styles.daySplitAmount, { color: Colors.textMuted }]}>
+                                            ₹{weekdayWeekendStats.weekday.toLocaleString('en-IN')}
+                                        </Text>
+                                    </View>
+
+                                    {/* Weekends */}
+                                    <View style={styles.daySplitItem}>
+                                        <View style={styles.daySplitHeader}>
+                                            <Text style={[styles.daySplitLabel, { color: Colors.textMuted }]}>Sat–Sun (Weekends)</Text>
+                                            <Text style={[styles.daySplitPct, { color: Colors.text }]}>{weekdayWeekendStats.weekendPct}%</Text>
+                                        </View>
+                                        <View style={[styles.splitTrack, { backgroundColor: Colors.border }]}>
+                                            <View style={[styles.splitFill, { width: `${weekdayWeekendStats.weekendPct}%`, backgroundColor: '#F59E0B' }]} />
+                                        </View>
+                                        <Text style={[styles.daySplitAmount, { color: Colors.textMuted }]}>
+                                            ₹{weekdayWeekendStats.weekend.toLocaleString('en-IN')}
+                                        </Text>
+                                    </View>
+                                </View>
+                            </View>
+                        </View>
+
+                        {/* Card 3: Context-Aware Financial Insight */}
+                        <View style={[
+                            styles.insightCard,
+                            {
+                                backgroundColor: Colors.surface,
+                                borderColor: Colors.border,
+                                borderLeftColor: stats.net >= 0 ? Colors.income : Colors.expense
+                            }
+                        ]}>
+                            <View style={[
+                                styles.insightIconBadge,
+                                { backgroundColor: (stats.net >= 0 ? Colors.income : Colors.expense) + '18' }
+                            ]}>
+                                {stats.net >= 0 ? (
+                                    <ArrowUpCircle color={Colors.income} size={20} />
+                                ) : (
+                                    <ArrowDownCircle color={Colors.expense} size={20} />
+                                )}
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={[styles.insightTitle, { color: Colors.text }]}>
+                                    {stats.net >= 0 ? 'Surplus Momentum' : 'Cash Flow Deficit Warning'}
+                                </Text>
+                                <Text style={[styles.insightMessage, { color: Colors.textMuted }]}>
+                                    {stats.net >= 0
+                                        ? `Great discipline! You retained ₹${stats.net.toLocaleString('en-IN')} (${financialHealth.rate}% savings rate) this month. Consider funneling this surplus into emergency buffers or long-term investments.`
+                                        : `You are in deficit by ₹${Math.abs(stats.net).toLocaleString('en-IN')} this month. Review your top spending categories above to bring cash burn back in line with incoming earnings.`
+                                    }
                                 </Text>
                             </View>
-                        ))
-                    ) : (
-                        <Text style={{ fontSize: 10, color: Colors.textMuted, marginTop: 2 }}>No major purchases</Text>
-                    )}
-                </View>
-
-                {/* Weekday vs Weekend Card */}
-                <View style={{ flex: 1, backgroundColor: Colors.surface, borderRadius: 16, padding: 12, borderColor: Colors.border, borderWidth: 1 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 8 }}>
-                        <Calendar size={14} color={Colors.primary} />
-                        <Text style={{ fontSize: 12, fontWeight: '700', color: Colors.text }}>Day Split</Text>
-                    </View>
-                    <View style={{ gap: 6 }}>
-                        <View>
-                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 }}>
-                                <Text style={{ fontSize: 9.5, color: Colors.textMuted }}>Mon-Fri (Weekdays)</Text>
-                                <Text style={{ fontSize: 9.5, fontWeight: '700', color: Colors.text }}>{weekdayWeekendStats.weekdayPct}%</Text>
-                            </View>
-                            <View style={{ height: 5, backgroundColor: Colors.border + '40', borderRadius: 2.5, overflow: 'hidden' }}>
-                                <View style={{ height: '100%', width: `${weekdayWeekendStats.weekdayPct}%`, backgroundColor: Colors.primary, borderRadius: 2.5 }} />
-                            </View>
-                            <Text style={{ fontSize: 8.5, color: Colors.textMuted, marginTop: 1 }}>₹{weekdayWeekendStats.weekday.toLocaleString()}</Text>
-                        </View>
-
-                        <View>
-                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 }}>
-                                <Text style={{ fontSize: 9.5, color: Colors.textMuted }}>Sat-Sun (Weekends)</Text>
-                                <Text style={{ fontSize: 9.5, fontWeight: '700', color: Colors.text }}>{weekdayWeekendStats.weekendPct}%</Text>
-                            </View>
-                            <View style={{ height: 5, backgroundColor: Colors.border + '40', borderRadius: 2.5, overflow: 'hidden' }}>
-                                <View style={{ height: '100%', width: `${weekdayWeekendStats.weekendPct}%`, backgroundColor: '#F59E0B', borderRadius: 2.5 }} />
-                            </View>
-                            <Text style={{ fontSize: 8.5, color: Colors.textMuted, marginTop: 1 }}>₹{weekdayWeekendStats.weekend.toLocaleString()}</Text>
                         </View>
                     </View>
-                </View>
-            </View>
 
-            {/* 🎯 Category Budget Tracker */}
-            {budgetProgressList.length > 0 && (
-                <HoverCard disabled={true} style={[styles.card, { backgroundColor: Colors.surface, marginTop: 4 }]}>
-                    <View style={styles.cardHeader}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                            <Target size={16} color={Colors.primary} />
-                            <Text style={[styles.cardTitle, { color: Colors.text }]}>Category Budget Tracker</Text>
-                        </View>
-                    </View>
-                    <View style={{ gap: 10 }}>
-                        {budgetProgressList.map(item => (
-                            <View key={`bgt-${item.category}`}>
-                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
-                                    <Text style={{ fontSize: 11.5, fontWeight: '700', color: Colors.text }}>{item.category}</Text>
-                                    <Text style={{ fontSize: 10.5, fontWeight: 'bold', color: item.color }}>
-                                        ₹{item.spent.toLocaleString()} / ₹{item.budget.toLocaleString()} ({item.pct}%)
+                    {/* ════════ RIGHT COLUMN: Expense Donut, Budget Tracker & Income Sources ════════ */}
+                    <View style={[styles.bentoColumn, isDesktop ? { flex: 0.95 } : undefined]}>
+
+                        {/* Card 4: Expense Breakdown (Donut Chart + Ranked Categories) */}
+                        <HoverCard disabled={true} style={[styles.card, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+                            <View style={styles.cardHeader}>
+                                <View>
+                                    <Text style={[styles.cardTitle, { color: Colors.text }]}>Expense Distribution</Text>
+                                    <Text style={[styles.cardSubtitle, { color: Colors.textMuted }]}>
+                                        {format(selectedDate, 'MMMM yyyy')} • ₹{stats.expense.toLocaleString('en-IN')} Total
                                     </Text>
                                 </View>
-                                <View style={{ height: 6, backgroundColor: Colors.border + '40', borderRadius: 3, overflow: 'hidden' }}>
-                                    <View style={{ height: '100%', width: `${Math.min(100, item.pct)}%`, backgroundColor: item.color, borderRadius: 3 }} />
+                                <View style={[styles.cardHeaderIconBadge, { backgroundColor: Colors.expense + '18' }]}>
+                                    <Tag size={16} color={Colors.expense} />
                                 </View>
                             </View>
-                        ))}
-                    </View>
-                </HoverCard>
-            )}
 
-            {/* Context-Aware Financial Mindset Recommendation */}
-            <View style={{
-                backgroundColor: Colors.surface,
-                borderRadius: 16,
-                padding: 12,
-                marginHorizontal: 16,
-                marginBottom: 12,
-                borderWidth: 1,
-                borderColor: Colors.border,
-                borderLeftWidth: 4,
-                borderLeftColor: stats.net >= 0 ? Colors.income : Colors.expense,
-                flexDirection: 'row',
-                gap: 10,
-                alignItems: 'center'
-            }}>
-                <View style={{
-                    backgroundColor: (stats.net >= 0 ? Colors.income : Colors.expense) + '15',
-                    padding: 8,
-                    borderRadius: 10,
-                    justifyContent: 'center',
-                    alignItems: 'center'
-                }}>
-                    {stats.net >= 0 ? (
-                        <ArrowUpCircle color={Colors.income} size={18} />
-                    ) : (
-                        <ArrowDownCircle color={Colors.expense} size={18} />
-                    )}
-                </View>
-                <View style={{ flex: 1 }}>
-                    <Text style={{
-                        color: Colors.text,
-                        fontSize: 12,
-                        fontWeight: '600',
-                        lineHeight: 16
-                    }}>
-                        {stats.net >= 0 ? (
-                            `Great job! You saved ₹${stats.net.toLocaleString()} this month. Keep up this healthy savings pace!`
-                        ) : (
-                            `You're in the red by ₹${Math.abs(stats.net).toLocaleString()} this month. Check your high-expense categories to balance your cashflow.`
+                            {expenseBreakdown.length > 0 ? (
+                                <>
+                                    {/* Donut Chart */}
+                                    <View style={styles.chartWrapper}>
+                                        <InteractiveDonut
+                                            data={expenseBreakdown}
+                                            size={Math.min(windowWidth - 64, 280)}
+                                            innerRadius={65}
+                                            onSelect={setSelectedExpenseCat as any}
+                                            selectedItem={expenseBreakdown.find(b => b.name === selectedExpenseCat) || null}
+                                            colors={Colors}
+                                            onCenterPress={(item) => navigateToHistory(item.name, 'EXPENSE')}
+                                        />
+                                    </View>
+
+                                    {/* Category Progress List */}
+                                    <View style={styles.breakdownList}>
+                                        {expenseBreakdown.map((item) => (
+                                            <TouchableOpacity
+                                                key={item.name}
+                                                style={[
+                                                    styles.breakdownItem,
+                                                    { backgroundColor: selectedExpenseCat === item.name ? item.color + '15' : Colors.surfaceElevated, borderColor: selectedExpenseCat === item.name ? item.color : Colors.border }
+                                                ]}
+                                                onPress={() => navigateToHistory({ name: item.name }, 'EXPENSE')}
+                                                activeOpacity={0.7}
+                                            >
+                                                <View style={styles.breakdownItemHeader}>
+                                                    <View style={styles.breakdownLeftGroup}>
+                                                        <View style={[styles.colorIndicator, { backgroundColor: item.color }]} />
+                                                        <Text style={[styles.itemName, { color: Colors.text }]} numberOfLines={1}>
+                                                            {item.name}
+                                                        </Text>
+                                                    </View>
+                                                    <View style={styles.breakdownRightGroup}>
+                                                        <Text style={[styles.itemAmount, { color: Colors.text }]}>
+                                                            ₹{item.amount.toLocaleString('en-IN')}
+                                                        </Text>
+                                                        <ArrowUpRight size={13} color={Colors.textMuted} />
+                                                    </View>
+                                                </View>
+
+                                                <View style={[styles.progressBg, { backgroundColor: Colors.border }]}>
+                                                    <View style={[styles.progressFill, { width: `${item.percent}%`, backgroundColor: item.color }]} />
+                                                </View>
+
+                                                <View style={styles.percentFooter}>
+                                                    <Text style={[styles.itemPercent, { color: Colors.textMuted }]}>
+                                                        {item.percent.toFixed(1)}% of total expenses
+                                                    </Text>
+                                                </View>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                </>
+                            ) : (
+                                <View style={styles.emptyContainer}>
+                                    <Info size={36} color={Colors.textMuted} />
+                                    <Text style={[styles.emptyText, { color: Colors.textMuted }]}>
+                                        No expenses recorded for this month.
+                                    </Text>
+                                </View>
+                            )}
+                        </HoverCard>
+
+                        {/* Card 5: Category Budget vs Actual Tracker (if budgets set) */}
+                        {budgetProgressList.length > 0 && (
+                            <HoverCard disabled={true} style={[styles.card, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+                                <View style={styles.cardHeader}>
+                                    <View>
+                                        <Text style={[styles.cardTitle, { color: Colors.text }]}>Budget vs Actual</Text>
+                                        <Text style={[styles.cardSubtitle, { color: Colors.textMuted }]}>
+                                            Category spend against monthly budget targets
+                                        </Text>
+                                    </View>
+                                    <View style={[styles.cardHeaderIconBadge, { backgroundColor: Colors.primary + '18' }]}>
+                                        <Target size={16} color={Colors.primary} />
+                                    </View>
+                                </View>
+
+                                <View style={styles.budgetList}>
+                                    {budgetProgressList.map(item => (
+                                        <View key={`bgt-${item.category}`} style={[styles.budgetItemCard, { backgroundColor: Colors.surfaceElevated, borderColor: Colors.border }]}>
+                                            <View style={styles.budgetItemHeader}>
+                                                <Text style={[styles.budgetItemName, { color: Colors.text }]}>{item.category}</Text>
+                                                <Text style={[styles.budgetItemSpend, { color: item.color }]}>
+                                                    ₹{item.spent.toLocaleString('en-IN')} / ₹{item.budget.toLocaleString('en-IN')} ({item.pct}%)
+                                                </Text>
+                                            </View>
+                                            <View style={[styles.progressBg, { backgroundColor: Colors.border }]}>
+                                                <View style={[styles.progressFill, { width: `${Math.min(100, item.pct)}%`, backgroundColor: item.color }]} />
+                                            </View>
+                                            <View style={styles.budgetStatusRow}>
+                                                <Text style={[styles.budgetStatusText, { color: item.color }]}>
+                                                    {item.pct > 100 ? `Over budget by ₹${(item.spent - item.budget).toLocaleString('en-IN')}` : `₹${(item.budget - item.spent).toLocaleString('en-IN')} remaining`}
+                                                </Text>
+                                            </View>
+                                        </View>
+                                    ))}
+                                </View>
+                            </HoverCard>
                         )}
-                    </Text>
+
+                        {/* Card 6: Income Sources Breakdown */}
+                        <HoverCard disabled={true} style={[styles.card, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+                            <View style={styles.cardHeader}>
+                                <View>
+                                    <Text style={[styles.cardTitle, { color: Colors.text }]}>Income Sources</Text>
+                                    <Text style={[styles.cardSubtitle, { color: Colors.textMuted }]}>
+                                        {format(selectedDate, 'MMMM yyyy')} • ₹{stats.income.toLocaleString('en-IN')} Total
+                                    </Text>
+                                </View>
+                                <View style={[styles.cardHeaderIconBadge, { backgroundColor: Colors.income + '18' }]}>
+                                    <ArrowUpCircle size={16} color={Colors.income} />
+                                </View>
+                            </View>
+
+                            {incomeBreakdown.length > 0 ? (
+                                <>
+                                    {incomeBreakdown.length > 1 && (
+                                        <View style={styles.chartWrapper}>
+                                            <InteractiveDonut
+                                                data={incomeBreakdown}
+                                                size={Math.min(windowWidth - 64, 240)}
+                                                innerRadius={55}
+                                                onSelect={setSelectedIncomeCat as any}
+                                                selectedItem={incomeBreakdown.find(b => b.name === selectedIncomeCat) || null}
+                                                colors={Colors}
+                                                onCenterPress={(item) => navigateToHistory({ name: item.name, accountId: (item as any).accountId }, 'INCOME')}
+                                            />
+                                        </View>
+                                    )}
+
+                                    <View style={styles.breakdownList}>
+                                        {incomeBreakdown.map((item) => (
+                                            <TouchableOpacity
+                                                key={item.name}
+                                                style={[
+                                                    styles.breakdownItem,
+                                                    { backgroundColor: selectedIncomeCat === item.name ? item.color + '15' : Colors.surfaceElevated, borderColor: selectedIncomeCat === item.name ? item.color : Colors.border }
+                                                ]}
+                                                onPress={() => navigateToHistory({ name: item.name, accountId: item.accountId }, 'INCOME')}
+                                                activeOpacity={0.7}
+                                            >
+                                                <View style={styles.breakdownItemHeader}>
+                                                    <View style={styles.breakdownLeftGroup}>
+                                                        <View style={[styles.colorIndicator, { backgroundColor: item.color }]} />
+                                                        <Text style={[styles.itemName, { color: Colors.text }]} numberOfLines={1}>
+                                                            {item.name}
+                                                        </Text>
+                                                    </View>
+                                                    <View style={styles.breakdownRightGroup}>
+                                                        <Text style={[styles.itemAmount, { color: Colors.income }]}>
+                                                            +₹{item.amount.toLocaleString('en-IN')}
+                                                        </Text>
+                                                        <ArrowUpRight size={13} color={Colors.textMuted} />
+                                                    </View>
+                                                </View>
+                                                <View style={[styles.progressBg, { backgroundColor: Colors.border }]}>
+                                                    <View style={[styles.progressFill, { width: `${item.percent}%`, backgroundColor: item.color }]} />
+                                                </View>
+                                                <View style={styles.percentFooter}>
+                                                    <Text style={[styles.itemPercent, { color: Colors.textMuted }]}>
+                                                        {item.percent.toFixed(1)}% of total income
+                                                    </Text>
+                                                </View>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                </>
+                            ) : (
+                                <View style={styles.emptyContainer}>
+                                    <Info size={36} color={Colors.textMuted} />
+                                    <Text style={[styles.emptyText, { color: Colors.textMuted }]}>
+                                        No income streams recorded for this month.
+                                    </Text>
+                                </View>
+                            )}
+                        </HoverCard>
+
+                    </View>
                 </View>
             </View>
 
-            {/* Expense Breakdown */}
-            <HoverCard disabled={true} style={[styles.card, { backgroundColor: Colors.surface }]}>
-                <View style={styles.cardHeader}>
-                    <View>
-                        <Text style={[styles.cardTitle, { color: Colors.text }]}>Expense Breakdown</Text>
-                        <Text style={{ fontSize: 11, color: Colors.textMuted, marginTop: 1 }}>{format(selectedDate, 'MMMM yyyy')}</Text>
-                    </View>
-                    <Tag size={16} color={Colors.expense} />
-                </View>
-                
-                {expenseBreakdown.length > 0 ? (
-                    <>
-                        <View style={styles.chartWrapper}>
-                            <InteractiveDonut 
-                                data={expenseBreakdown}
-                                size={Math.min(screenWidth - 64, 300)}
-                                innerRadius={60}
-                                onSelect={setSelectedExpenseCat as any}
-                                selectedItem={expenseBreakdown.find(b => b.name === selectedExpenseCat) || null}
-                                colors={Colors}
-                                onCenterPress={(item) => navigateToHistory(item.name, 'EXPENSE')}
-                            />
-                        </View>
-
-                        <View style={styles.breakdownList}>
-                            {expenseBreakdown.map((item) => (
-                                <TouchableOpacity 
-                                    key={item.name} 
-                                    style={[
-                                        styles.breakdownItem, 
-                                        selectedExpenseCat === item.name && { backgroundColor: item.color + '10', borderRadius: 10, padding: 6, marginHorizontal: -6 }
-                                    ]}
-                                    onPress={() => navigateToHistory({ name: item.name }, 'EXPENSE')}
-                                >
-                                    <View style={styles.itemHeader}>
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                            <View style={[styles.colorIndicator, { backgroundColor: item.color }]} />
-                                            <Text style={[styles.itemName, { color: Colors.text }]}>{item.name}</Text>
-                                        </View>
-                                        <Text style={[styles.itemAmount, { color: Colors.text }]}>₹{item.amount.toLocaleString()}</Text>
-                                    </View>
-                                    <View style={[styles.progressBg, { backgroundColor: Colors.border + '30' }]}>
-                                        <View style={[styles.progressFill, { width: `${item.percent}%`, backgroundColor: item.color }]} />
-                                    </View>
-                                    <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 2 }}>
-                                        <Text style={styles.itemPercent}>{item.percent.toFixed(1)}%</Text>
-                                    </View>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                    </>
-                ) : (
-                    <View style={styles.emptyContainer}>
-                        <Info size={36} color={Colors.textMuted} />
-                        <Text style={styles.emptyText}>No expenses recorded for this period.</Text>
-                    </View>
-                )}
-            </HoverCard>
-
-            {/* Income Sources */}
-            <HoverCard disabled={true} style={[styles.card, { backgroundColor: Colors.surface }]}>
-                <View style={styles.cardHeader}>
-                    <View>
-                        <Text style={[styles.cardTitle, { color: Colors.text }]}>Income Sources</Text>
-                        <Text style={{ fontSize: 11, color: Colors.textMuted, marginTop: 1 }}>{format(selectedDate, 'MMMM yyyy')}</Text>
-                    </View>
-                    <ArrowUpCircle size={16} color={Colors.income} />
-                </View>
-                
-                {incomeBreakdown.length > 0 ? (
-                    <>
-                        <View style={styles.chartWrapper}>
-                            <InteractiveDonut 
-                                data={incomeBreakdown}
-                                size={Math.min(screenWidth - 64, 300)}
-                                innerRadius={60}
-                                onSelect={setSelectedIncomeCat as any}
-                                selectedItem={incomeBreakdown.find(b => b.name === selectedIncomeCat) || null}
-                                colors={Colors}
-                                onCenterPress={(item) => navigateToHistory({ name: item.name, accountId: (item as any).accountId }, 'INCOME')}
-                            />
-                        </View>
-
-                        <View style={styles.breakdownList}>
-                            {incomeBreakdown.map((item) => (
-                                <TouchableOpacity 
-                                    key={item.name} 
-                                    style={[
-                                        styles.breakdownItem,
-                                        selectedIncomeCat === item.name && { backgroundColor: item.color + '10', borderRadius: 10, padding: 6, marginHorizontal: -6 }
-                                    ]}
-                                    onPress={() => navigateToHistory({ name: item.name, accountId: item.accountId }, 'INCOME')}
-                                >
-                                    <View style={styles.itemHeader}>
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                            <View style={[styles.colorIndicator, { backgroundColor: item.color }]} />
-                                            <Text style={[styles.itemName, { color: Colors.text }]}>{item.name}</Text>
-                                        </View>
-                                        <Text style={[styles.itemAmount, { color: Colors.text }]}>₹{item.amount.toLocaleString()}</Text>
-                                    </View>
-                                    <View style={[styles.progressBg, { backgroundColor: Colors.border + '30' }]}>
-                                        <View style={[styles.progressFill, { width: `${item.percent}%`, backgroundColor: item.color }]} />
-                                    </View>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                    </>
-                ) : (
-                    <View style={styles.emptyContainer}>
-                        <Info size={36} color={Colors.textMuted} />
-                        <Text style={styles.emptyText}>No income recorded for this period.</Text>
-                    </View>
-                )}
-            </HoverCard>
-
-            {/* FILTER MODAL FOR REPORTS */}
+            {/* ── 4. FILTER BY SPECIFIC ACCOUNT MODAL ── */}
             <Modal
                 visible={isFilterModalOpen}
                 animationType="slide"
                 transparent={true}
                 onRequestClose={() => setIsFilterModalOpen(false)}
             >
-                <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
+                <View style={styles.modalOverlay}>
                     <View style={[styles.modalContent, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
                         {/* Modal Header */}
                         <View style={[styles.modalHeader, { borderBottomColor: Colors.border }]}>
-                            <Text style={[styles.modalTitle, { color: Colors.text }]}>Filter by Account</Text>
-                            <TouchableOpacity onPress={() => setIsFilterModalOpen(false)} style={styles.modalCloseButton}>
-                                <X color={Colors.textMuted} size={22} />
+                            <View>
+                                <Text style={[styles.modalTitle, { color: Colors.text }]}>Filter by Account</Text>
+                                <Text style={[styles.modalSubtitle, { color: Colors.textMuted }]}>Select account scope for reports</Text>
+                            </View>
+                            <TouchableOpacity onPress={() => setIsFilterModalOpen(false)} style={styles.modalCloseButton} activeOpacity={0.7}>
+                                <X color={Colors.textMuted} size={20} />
                             </TouchableOpacity>
                         </View>
 
                         <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
                             {/* Classification Section */}
                             <View style={styles.modalSection}>
-                                <Text style={[styles.sectionTitle, { color: Colors.text }]}>Account Classification</Text>
+                                <Text style={[styles.sectionTitle, { color: Colors.textMuted }]}>Account Groups</Text>
                                 <View style={styles.chipsGrid}>
                                     {[
                                         { id: 'all', label: 'All Accounts' },
@@ -1070,10 +1204,11 @@ export default function Reports({ initialDate, onSubTabChange }: ReportsProps = 
                                                 key={`temp-grp-${item.id}`}
                                                 style={[
                                                     styles.modalChip,
-                                                    { borderColor: Colors.border, backgroundColor: Colors.background },
-                                                    isSelected && { backgroundColor: Colors.primary + '15', borderColor: Colors.primary }
+                                                    { borderColor: Colors.border, backgroundColor: Colors.surfaceElevated },
+                                                    isSelected && { backgroundColor: Colors.primary + '20', borderColor: Colors.primary }
                                                 ]}
                                                 onPress={() => setTempSelectedAccount(item.id)}
+                                                activeOpacity={0.7}
                                             >
                                                 <Text style={[
                                                     styles.modalChipText,
@@ -1090,7 +1225,7 @@ export default function Reports({ initialDate, onSubTabChange }: ReportsProps = 
 
                             {/* Specific Bank Accounts & Cards */}
                             <View style={styles.modalSection}>
-                                <Text style={[styles.sectionTitle, { color: Colors.text }]}>Specific Bank Account / Card</Text>
+                                <Text style={[styles.sectionTitle, { color: Colors.textMuted }]}>Specific Bank Accounts & Cards</Text>
                                 <View style={styles.chipsGrid}>
                                     {accountsToSelect.map(acc => {
                                         const isSelected = tempSelectedAccount === acc.id;
@@ -1099,10 +1234,11 @@ export default function Reports({ initialDate, onSubTabChange }: ReportsProps = 
                                                 key={`temp-acc-${acc.id}`}
                                                 style={[
                                                     styles.modalChip,
-                                                    { borderColor: Colors.border, backgroundColor: Colors.background },
-                                                    isSelected && { backgroundColor: Colors.income + '15', borderColor: Colors.income }
+                                                    { borderColor: Colors.border, backgroundColor: Colors.surfaceElevated },
+                                                    isSelected && { backgroundColor: Colors.income + '20', borderColor: Colors.income }
                                                 ]}
                                                 onPress={() => setTempSelectedAccount(acc.id)}
+                                                activeOpacity={0.7}
                                             >
                                                 <Text style={[
                                                     styles.modalChipText,
@@ -1121,43 +1257,45 @@ export default function Reports({ initialDate, onSubTabChange }: ReportsProps = 
                         {/* Modal Footer */}
                         <View style={[styles.modalFooter, { borderTopColor: Colors.border }]}>
                             <TouchableOpacity
-                                style={[styles.modalResetButton, { borderColor: Colors.border }]}
+                                style={[styles.modalResetButton, { borderColor: Colors.border, backgroundColor: Colors.surfaceElevated }]}
                                 onPress={handleResetModal}
+                                activeOpacity={0.7}
                             >
                                 <Text style={[styles.modalResetButtonText, { color: Colors.textMuted }]}>Reset All</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
                                 style={[styles.modalApplyButton, { backgroundColor: Colors.primary }]}
                                 onPress={handleApplyModal}
+                                activeOpacity={0.8}
                             >
-                                <Text style={styles.modalApplyButtonText}>Apply Filter</Text>
+                                <Text style={styles.modalApplyButtonText}>Apply Scope</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
                 </View>
             </Modal>
 
-            {/* POPUP MONTH / YEAR PICKER MODAL */}
+            {/* ── 5. MONTH & YEAR PICKER MODAL ── */}
             <Modal
                 visible={isMonthPickerOpen}
                 animationType="fade"
                 transparent={true}
                 onRequestClose={() => setIsMonthPickerOpen(false)}
             >
-                <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
+                <View style={styles.modalOverlay}>
                     <View style={[styles.monthPickerCard, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
                         {/* Year Stepper Header */}
                         <View style={[styles.pickerYearHeader, { borderBottomColor: Colors.border }]}>
-                            <TouchableOpacity onPress={() => setPickerYear(prev => prev - 1)} style={styles.yearArrowBtn}>
+                            <TouchableOpacity onPress={() => setPickerYear(prev => prev - 1)} style={styles.yearArrowBtn} activeOpacity={0.7}>
                                 <ChevronLeft color={Colors.text} size={20} />
                             </TouchableOpacity>
                             <Text style={[styles.pickerYearText, { color: Colors.text }]}>{pickerYear}</Text>
-                            <TouchableOpacity onPress={() => setPickerYear(prev => prev + 1)} style={styles.yearArrowBtn}>
+                            <TouchableOpacity onPress={() => setPickerYear(prev => prev + 1)} style={styles.yearArrowBtn} activeOpacity={0.7}>
                                 <ChevronRight color={Colors.text} size={20} />
                             </TouchableOpacity>
                         </View>
 
-                        {/* 12 Months 4x3 Grid */}
+                        {/* 12 Months Grid */}
                         <View style={styles.monthGrid}>
                             {MONTHS.map((m, idx) => {
                                 const isCurrent = selectedDate.getFullYear() === pickerYear && selectedDate.getMonth() === idx;
@@ -1166,14 +1304,15 @@ export default function Reports({ initialDate, onSubTabChange }: ReportsProps = 
                                         key={m}
                                         style={[
                                             styles.monthGridBtn,
-                                            { borderColor: Colors.border, backgroundColor: Colors.background },
+                                            { borderColor: Colors.border, backgroundColor: Colors.surfaceElevated },
                                             isCurrent && { backgroundColor: Colors.primary, borderColor: Colors.primary }
                                         ]}
                                         onPress={() => selectPickerMonth(idx)}
+                                        activeOpacity={0.7}
                                     >
                                         <Text style={[
                                             styles.monthGridText,
-                                            { color: isCurrent ? '#fff' : Colors.text, fontWeight: isCurrent ? '700' : '600' }
+                                            { color: isCurrent ? '#ffffff' : Colors.text, fontWeight: isCurrent ? '700' : '600' }
                                         ]}>
                                             {m}
                                         </Text>
@@ -1184,12 +1323,13 @@ export default function Reports({ initialDate, onSubTabChange }: ReportsProps = 
 
                         {/* Current Month Shortcut Button */}
                         <TouchableOpacity
-                            style={[styles.thisMonthBtn, { backgroundColor: Colors.primary + '15', borderColor: Colors.primary }]}
+                            style={[styles.thisMonthBtn, { backgroundColor: Colors.primary + '18', borderColor: Colors.primary }]}
                             onPress={() => {
                                 const now = new Date();
                                 setSelectedDate(new Date(now.getFullYear(), now.getMonth(), 1));
                                 setIsMonthPickerOpen(false);
                             }}
+                            activeOpacity={0.8}
                         >
                             <Text style={[styles.thisMonthBtnText, { color: Colors.primary }]}>Jump to Current Month</Text>
                         </TouchableOpacity>
@@ -1201,34 +1341,49 @@ export default function Reports({ initialDate, onSubTabChange }: ReportsProps = 
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1 },
-    compactHeaderWrapper: {
-        borderBottomWidth: 1,
-        borderBottomColor: 'rgba(0,0,0,0.06)',
-        paddingBottom: 4,
+    container: {
+        flex: 1,
+    },
+    mainWrapper: {
+        width: '100%',
+        paddingHorizontal: 16,
+    },
+    desktopContainer: {
+        maxWidth: 1280,
+        alignSelf: 'center',
+        paddingHorizontal: 24,
+    },
+    
+    // Command Header
+    headerCard: {
+        borderRadius: 16,
+        borderWidth: 1,
+        padding: 12,
+        marginBottom: 12,
+        gap: 10,
     },
     topNavRow: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        paddingHorizontal: 16,
-        marginBottom: 8,
+        flexWrap: 'wrap',
+        gap: 8,
     },
     subtabContainer: {
         flexDirection: 'row',
         borderRadius: 10,
-        padding: 2.5,
+        padding: 3,
         borderWidth: 1,
     },
     subtabBtn: {
-        paddingVertical: 5,
-        paddingHorizontal: 12,
+        paddingVertical: 6,
+        paddingHorizontal: 14,
         borderRadius: 8,
         justifyContent: 'center',
         alignItems: 'center',
     },
     subtabText: {
-        fontSize: 12,
+        fontSize: 12.5,
         fontWeight: '700',
     },
     monthNavGroup: {
@@ -1237,10 +1392,10 @@ const styles = StyleSheet.create({
         borderRadius: 10,
         borderWidth: 1,
         paddingHorizontal: 2,
-        height: 32,
+        height: 36,
     },
     monthStepBtn: {
-        paddingHorizontal: 6,
+        paddingHorizontal: 8,
         height: '100%',
         justifyContent: 'center',
         alignItems: 'center',
@@ -1248,24 +1403,22 @@ const styles = StyleSheet.create({
     monthLabelBtn: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 6,
+        paddingHorizontal: 8,
     },
     monthNavText: {
-        fontSize: 12.5,
+        fontSize: 13,
         fontWeight: '700',
     },
     accountControlRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 16,
         gap: 8,
-        marginBottom: 8,
     },
     segmentContainer: {
         flex: 1,
         flexDirection: 'row',
         borderRadius: 10,
-        padding: 2.5,
+        padding: 3,
         borderWidth: 1,
     },
     segmentBtn: {
@@ -1302,128 +1455,474 @@ const styles = StyleSheet.create({
     filterBadgeText: {
         fontSize: 9,
         fontWeight: '800',
-        color: '#fff',
+        color: '#ffffff',
+    },
+    activeBadgeRow: {
+        flexDirection: 'row',
+        paddingTop: 2,
     },
     activeBadge: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 4,
-        paddingHorizontal: 8,
-        paddingVertical: 3,
-        borderRadius: 10,
+        gap: 6,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 8,
         borderWidth: 1,
     },
     activeBadgeText: {
-        fontSize: 10.5,
+        fontSize: 11.5,
         fontWeight: '600',
     },
-    summaryRibbon: {
-        marginHorizontal: 16,
-        marginBottom: 6,
-        borderRadius: 12,
+
+    // Ribbon
+    ribbonCard: {
+        borderRadius: 16,
         borderWidth: 1,
-        paddingVertical: 7,
-        paddingHorizontal: 10,
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        marginBottom: 14,
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-around',
+        justifyContent: 'space-between',
     },
-    ribbonStatItem: {
+    ribbonItem: {
         flex: 1,
         alignItems: 'center',
     },
+    ribbonItemHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 5,
+        marginBottom: 2,
+    },
+    ribbonDot: {
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+    },
     ribbonStatLabel: {
-        fontSize: 9.5,
+        fontSize: 10,
         fontWeight: '700',
-        letterSpacing: 0.3,
+        letterSpacing: 0.4,
     },
     ribbonStatValue: {
-        fontSize: 13,
+        fontSize: 15,
         fontWeight: '800',
         marginTop: 1,
     },
-    ribbonVerticalDivider: {
-        width: 1,
-        height: 20,
+    ribbonSubtext: {
+        fontSize: 10,
+        fontWeight: '600',
+        marginTop: 2,
     },
+    ribbonDivider: {
+        width: 1,
+        height: 32,
+    },
+
+    // Bento Grid Layout
+    bentoContainer: {
+        width: '100%',
+    },
+    bentoGridDesktop: {
+        flexDirection: 'row',
+        gap: 16,
+        alignItems: 'flex-start',
+    },
+    bentoGridMobile: {
+        flexDirection: 'column',
+        gap: 14,
+    },
+    bentoColumn: {
+        gap: 14,
+    },
+
+    // Cards
     card: {
-        marginHorizontal: 16,
-        marginBottom: 10,
-        borderRadius: 18,
-        padding: 14,
+        borderRadius: 16,
         borderWidth: 1,
-        borderColor: 'rgba(0,0,0,0.06)',
+        padding: 16,
+    },
+    flex1: {
+        flex: 1,
     },
     cardHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'flex-start',
-        marginBottom: 12,
+        marginBottom: 14,
     },
     cardTitle: {
-        fontSize: 14.5,
+        fontSize: 15,
         fontWeight: '700',
     },
-    chartWrapper: {
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginVertical: 10,
-        minHeight: 220,
+    cardSubtitle: {
+        fontSize: 11.5,
+        marginTop: 2,
     },
-    breakdownList: {
-        marginTop: 8,
+    cardHeaderIconBadge: {
+        width: 32,
+        height: 32,
+        borderRadius: 10,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+
+    // Health Track
+    healthTrackBox: {
+        padding: 12,
+        borderRadius: 12,
+        borderWidth: 1,
+        marginBottom: 12,
+    },
+    healthHeaderRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    healthLabelGroup: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+    },
+    healthTitleText: {
+        fontSize: 13,
+        fontWeight: '700',
+    },
+    healthRateText: {
+        fontSize: 13,
+        fontWeight: '800',
+    },
+    progressTrack: {
+        height: 6,
+        borderRadius: 3,
+        overflow: 'hidden',
+    },
+    progressFill: {
+        height: '100%',
+        borderRadius: 3,
+    },
+
+    // Dual Pills
+    dualPillRow: {
+        flexDirection: 'row',
+        gap: 10,
+        marginBottom: 14,
+    },
+    pillCard: {
+        flex: 1,
+        padding: 12,
+        borderRadius: 12,
+        borderWidth: 1,
+    },
+    pillCardHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 5,
+        marginBottom: 4,
+    },
+    pillCardLabel: {
+        fontSize: 11,
+        fontWeight: '600',
+    },
+    pillCardValue: {
+        fontSize: 15,
+        fontWeight: '800',
+    },
+    pillCardSub: {
+        fontSize: 10,
+        marginTop: 3,
+    },
+
+    // Daily Spending Chart Section
+    chartSection: {
+        marginTop: 4,
+    },
+    chartHeaderRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    chartSectionTitle: {
+        fontSize: 13,
+        fontWeight: '700',
+    },
+    inspectorChip: {
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 8,
+        borderWidth: 1,
+    },
+    inspectorChipText: {
+        fontSize: 11,
+        fontWeight: '600',
+    },
+    legendRow: {
+        flexDirection: 'row',
+        gap: 12,
+        marginBottom: 10,
+    },
+    legendItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 5,
+    },
+    legendSquare: {
+        width: 8,
+        height: 8,
+        borderRadius: 2,
+    },
+    legendText: {
+        fontSize: 10,
+        fontWeight: '500',
+    },
+    barsContainer: {
+        flexDirection: 'row',
+        alignItems: 'flex-end',
+        height: 56,
+        gap: 2,
+    },
+    dayBar: {
+        flex: 1,
+        borderRadius: 2,
+    },
+    axisLabelsRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginTop: 6,
+    },
+    axisLabel: {
+        fontSize: 9.5,
+        fontWeight: '500',
+    },
+
+    // Dual Cards (Top Purchases & Day Split)
+    dualCardRow: {
+        flexDirection: 'column',
+        gap: 14,
+    },
+    dualCardRowWide: {
+        flexDirection: 'row',
+        gap: 14,
+    },
+    miniCardHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        marginBottom: 10,
+    },
+    miniHeaderIcon: {
+        width: 24,
+        height: 24,
+        borderRadius: 6,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    miniCardTitle: {
+        fontSize: 13,
+        fontWeight: '700',
+    },
+    topPurchasesList: {
         gap: 8,
     },
-    breakdownItem: {
-        paddingVertical: 3,
+    topPurchaseItem: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingBottom: 6,
+        borderBottomWidth: 0.5,
     },
-    itemHeader: {
+    topPurchaseCategory: {
+        fontSize: 12,
+        fontWeight: '700',
+    },
+    topPurchaseMeta: {
+        fontSize: 10,
+        marginTop: 1,
+    },
+    topPurchaseAmount: {
+        fontSize: 12.5,
+        fontWeight: '800',
+    },
+    miniEmptyBox: {
+        paddingVertical: 14,
+        alignItems: 'center',
+    },
+    miniEmptyText: {
+        fontSize: 11,
+    },
+
+    // Day Split
+    daySplitContent: {
+        gap: 10,
+    },
+    daySplitItem: {
+        gap: 3,
+    },
+    daySplitHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
     },
-    colorIndicator: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-    },
-    itemName: {
-        fontSize: 12.5,
+    daySplitLabel: {
+        fontSize: 10.5,
         fontWeight: '600',
     },
-    itemAmount: {
-        fontSize: 12.5,
+    daySplitPct: {
+        fontSize: 10.5,
         fontWeight: '700',
     },
-    itemPercent: {
-        fontSize: 10.5,
-        color: '#6c757d',
+    splitTrack: {
+        height: 6,
+        borderRadius: 3,
+        overflow: 'hidden',
+    },
+    splitFill: {
+        height: '100%',
+        borderRadius: 3,
+    },
+    daySplitAmount: {
+        fontSize: 9.5,
+        fontWeight: '500',
+        marginTop: 1,
+    },
+
+    // Context Insight Card
+    insightCard: {
+        borderRadius: 16,
+        borderWidth: 1,
+        borderLeftWidth: 4,
+        padding: 14,
+        flexDirection: 'row',
+        gap: 12,
+        alignItems: 'center',
+    },
+    insightIconBadge: {
+        width: 36,
+        height: 36,
+        borderRadius: 10,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    insightTitle: {
+        fontSize: 13,
+        fontWeight: '700',
+        marginBottom: 2,
+    },
+    insightMessage: {
+        fontSize: 11.5,
+        lineHeight: 16,
+    },
+
+    // Donut & Breakdowns
+    chartWrapper: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginVertical: 12,
+        minHeight: 220,
+    },
+    breakdownList: {
+        gap: 8,
+    },
+    breakdownItem: {
+        padding: 10,
+        borderRadius: 12,
+        borderWidth: 1,
+        gap: 6,
+    },
+    breakdownItemHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    breakdownLeftGroup: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        flex: 1,
+        marginRight: 8,
+    },
+    colorIndicator: {
+        width: 9,
+        height: 9,
+        borderRadius: 4.5,
+    },
+    itemName: {
+        fontSize: 13,
+        fontWeight: '700',
+    },
+    breakdownRightGroup: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
+    itemAmount: {
+        fontSize: 13,
+        fontWeight: '800',
     },
     progressBg: {
         height: 5,
         borderRadius: 2.5,
-        width: '100%',
         overflow: 'hidden',
-        marginTop: 3,
     },
-    progressFill: {
-        height: 5,
-        borderRadius: 2.5,
+    percentFooter: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+    },
+    itemPercent: {
+        fontSize: 10.5,
+        fontWeight: '600',
     },
     emptyContainer: {
         alignItems: 'center',
         justifyContent: 'center',
-        paddingVertical: 30,
-        gap: 8,
+        paddingVertical: 36,
+        gap: 10,
     },
     emptyText: {
         textAlign: 'center',
-        color: '#6c757d',
         fontSize: 13,
     },
+
+    // Budget Tracker
+    budgetList: {
+        gap: 10,
+    },
+    budgetItemCard: {
+        padding: 12,
+        borderRadius: 12,
+        borderWidth: 1,
+        gap: 6,
+    },
+    budgetItemHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    budgetItemName: {
+        fontSize: 12.5,
+        fontWeight: '700',
+    },
+    budgetItemSpend: {
+        fontSize: 11.5,
+        fontWeight: '800',
+    },
+    budgetStatusRow: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+    },
+    budgetStatusText: {
+        fontSize: 10,
+        fontWeight: '600',
+    },
+
     // Filter Modal Styles
     modalOverlay: {
         flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.65)',
         justifyContent: 'flex-end',
         alignItems: 'center',
     },
@@ -1432,16 +1931,13 @@ const styles = StyleSheet.create({
         maxWidth: 600,
         borderTopLeftRadius: 24,
         borderTopRightRadius: 24,
-        paddingTop: 16,
+        paddingTop: 18,
         paddingHorizontal: 20,
         paddingBottom: Platform.OS === 'ios' ? 40 : 20,
-        maxHeight: '80%',
+        maxHeight: '82%',
         borderTopWidth: 1,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: -4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 12,
-        elevation: 10,
+        borderLeftWidth: 1,
+        borderRightWidth: 1,
     },
     modalHeader: {
         flexDirection: 'row',
@@ -1452,10 +1948,15 @@ const styles = StyleSheet.create({
     },
     modalTitle: {
         fontSize: 17,
-        fontWeight: 'bold',
+        fontWeight: '800',
+    },
+    modalSubtitle: {
+        fontSize: 11.5,
+        marginTop: 2,
     },
     modalCloseButton: {
-        padding: 4,
+        padding: 6,
+        borderRadius: 8,
     },
     modalBody: {
         marginVertical: 14,
@@ -1464,7 +1965,7 @@ const styles = StyleSheet.create({
         marginBottom: 20,
     },
     sectionTitle: {
-        fontSize: 12.5,
+        fontSize: 11.5,
         fontWeight: '700',
         marginBottom: 10,
         textTransform: 'uppercase',
@@ -1477,13 +1978,13 @@ const styles = StyleSheet.create({
     },
     modalChip: {
         paddingHorizontal: 12,
-        paddingVertical: 7,
-        borderRadius: 12,
+        paddingVertical: 8,
+        borderRadius: 10,
         borderWidth: 1,
     },
     modalChipText: {
         fontSize: 12.5,
-        fontWeight: '500',
+        fontWeight: '600',
     },
     modalFooter: {
         flexDirection: 'row',
@@ -1500,8 +2001,8 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     modalResetButtonText: {
-        fontSize: 13.5,
-        fontWeight: '600',
+        fontSize: 13,
+        fontWeight: '700',
     },
     modalApplyButton: {
         flex: 2,
@@ -1511,37 +2012,36 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     modalApplyButtonText: {
-        color: '#fff',
-        fontSize: 14,
+        color: '#ffffff',
+        fontSize: 13.5,
         fontWeight: '700',
     },
+
     // Month Picker Modal
     monthPickerCard: {
-        width: 300,
+        width: 320,
         borderRadius: 20,
         borderWidth: 1,
-        padding: 16,
+        padding: 18,
         alignSelf: 'center',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.15,
-        shadowRadius: 16,
-        elevation: 8,
+        marginBottom: 'auto',
+        marginTop: 'auto',
     },
     pickerYearHeader: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        paddingBottom: 12,
+        paddingBottom: 14,
         borderBottomWidth: 1,
-        marginBottom: 12,
+        marginBottom: 14,
     },
     pickerYearText: {
-        fontSize: 17,
+        fontSize: 18,
         fontWeight: '800',
     },
     yearArrowBtn: {
-        padding: 6,
+        padding: 8,
+        borderRadius: 8,
     },
     monthGrid: {
         flexDirection: 'row',
@@ -1551,7 +2051,7 @@ const styles = StyleSheet.create({
     },
     monthGridBtn: {
         width: '30%',
-        paddingVertical: 10,
+        paddingVertical: 11,
         borderRadius: 10,
         borderWidth: 1,
         alignItems: 'center',
@@ -1561,8 +2061,8 @@ const styles = StyleSheet.create({
         fontSize: 13,
     },
     thisMonthBtn: {
-        marginTop: 14,
-        paddingVertical: 9,
+        marginTop: 16,
+        paddingVertical: 10,
         borderRadius: 10,
         borderWidth: 1,
         alignItems: 'center',

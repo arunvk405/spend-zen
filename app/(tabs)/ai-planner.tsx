@@ -8,11 +8,12 @@ import { useFinance } from '../../src/context/FinanceContext';
 import { useThemeColors } from '../../src/theme/colors';
 import {
     Sparkles, Target, AlertTriangle, ShieldCheck,
-    Calculator, MessageSquare, Send, Key, ChevronDown, TrendingUp,
-    Check, Trash2, Eye, EyeOff, ExternalLink, RotateCcw, IndianRupee
+    Calculator, MessageSquare, Send, ChevronDown, ChevronUp, TrendingUp,
+    Check, Trash2, Eye, EyeOff, ExternalLink, RotateCcw,
+    ShieldAlert, Lightbulb
 } from 'lucide-react-native';
 import {
-    generateLocalAIPlan, evaluateLocalAffordability, fetchGeminiAIPlan, fetchGeminiAIChatResponse,
+    generateLocalAIPlan, evaluateLocalAffordability, fetchGeminiAIChatResponse,
     FinancialContext, AIPlanResult, AffordabilityResult, ChatHistoryItem
 } from '../../src/services/aiService';
 
@@ -23,20 +24,30 @@ export interface ChatMessage {
     timestamp: string;
 }
 
+const PRESET_QUESTIONS = [
+    "How to cut expenses by 15%?",
+    "What is my emergency fund target?",
+    "Evaluate my credit card debt",
+    "How to grow my monthly savings?"
+];
+
+const PRESET_AMOUNTS = [5000, 15000, 45000, 80000];
+
 export default function AIPlannerScreen() {
     const Colors = useThemeColors();
     const { width: windowWidth } = useWindowDimensions();
-    const isTablet = windowWidth >= 768;
+    const isDesktop = windowWidth >= 920;
+    const isTablet = windowWidth >= 640 && windowWidth < 920;
     const insets = useSafeAreaInsets();
-    const topHeaderPadding = Math.max(insets.top + 8, Platform.OS === 'ios' ? 56 : 14);
-    const bottomScrollPadding = Math.max(insets.bottom + 85, 105);
+    const topHeaderPadding = Math.max(insets.top + 8, Platform.OS === 'ios' ? 52 : 14);
+    const bottomScrollPadding = Math.max(insets.bottom + 85, 110);
 
     const {
         monthlyIncome, monthlyExpenses, totalBalance, totalBankBalance,
         cashBalance, totalCreditDue, transactions
     } = useFinance();
 
-    // Gemini API Key State (Supports standard AIzaSy and new Google Auth Keys starting with AQ.)
+    // Gemini API Key State
     const [geminiApiKey, setGeminiApiKey] = useState<string>(() => {
         if (Platform.OS === 'web') {
             return (localStorage.getItem('spendzen_gemini_api_key') || '').trim();
@@ -60,7 +71,7 @@ export default function AIPlannerScreen() {
         if (Platform.OS === 'web') {
             localStorage.setItem('spendzen_gemini_api_key', trimmed);
         }
-        setSaveFeedback(trimmed ? '✅ Gemini Auth Key Saved & Active!' : 'Key Removed');
+        setSaveFeedback(trimmed ? 'Gemini Auth Key Saved & Active!' : 'Key Removed');
         setTimeout(() => setSaveFeedback(null), 3000);
     };
 
@@ -70,7 +81,7 @@ export default function AIPlannerScreen() {
         if (Platform.OS === 'web') {
             localStorage.removeItem('spendzen_gemini_api_key');
         }
-        setSaveFeedback('⚪ Key Removed. Reverted to Offline AI.');
+        setSaveFeedback('Key Removed. Reverted to Smart AI.');
         setTimeout(() => setSaveFeedback(null), 3000);
     };
 
@@ -116,14 +127,17 @@ export default function AIPlannerScreen() {
         {
             id: 'welcome',
             sender: 'ai',
-            text: "Hello! 👋 I'm your SpendZen AI Financial Advisor. Ask me anything about your budget, savings targets, credit card dues, or spending habits!",
+            text: "Hello! 👋 I'm your SpendZen AI Financial Advisor. Ask me anything about your budgets, savings goals, credit dues, or expense leaks.",
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         }
     ]);
 
-    const handleCalculateAffordability = () => {
-        const cost = parseFloat(purchaseCost);
+    const handleCalculateAffordability = (amountOverride?: number) => {
+        const cost = amountOverride !== undefined ? amountOverride : parseFloat(purchaseCost);
         if (isNaN(cost) || cost <= 0) return;
+        if (amountOverride !== undefined) {
+            setPurchaseCost(amountOverride.toString());
+        }
         const result = evaluateLocalAffordability(cost, financialContext);
         setAffordabilityResult(result);
     };
@@ -133,7 +147,7 @@ export default function AIPlannerScreen() {
             {
                 id: 'welcome-' + Date.now(),
                 sender: 'ai',
-                text: "Chat history cleared! 👋 How else can I assist with your financial goals today?",
+                text: "Chat history cleared! 👋 How else can I assist with your financial planning today?",
                 timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             }
         ]);
@@ -190,7 +204,7 @@ export default function AIPlannerScreen() {
             } else if (lower.includes("emergency") || lower.includes("fund")) {
                 const target6Mo = monthlyExpenses * 6;
                 const target3Mo = monthlyExpenses * 3;
-                answer = `Emergency Reserve Status:\n• 3-Month Target: ₹${target3Mo.toLocaleString()}\n• 6-Month Target: ₹${target6Mo.toLocaleString()}\n• Liquid Cash Available: ₹${totalBalance.toLocaleString()} (${Math.min(100, Math.round((totalBalance / target6Mo) * 100))}% of 6-mo goal).\nRecommendation: Keep 3 months liquid in high-yield savings and invest the rest.`;
+                answer = `Emergency Reserve Status:\n• 3-Month Target: ₹${target3Mo.toLocaleString()}\n• 6-Month Target: ₹${target6Mo.toLocaleString()}\n• Liquid Cash Available: ₹${totalBalance.toLocaleString()} (${Math.min(100, Math.round((totalBalance / Math.max(1, target6Mo)) * 100))}% of 6-mo goal).\nRecommendation: Keep 3 months liquid in high-yield savings and invest the rest.`;
             } else if (lower.includes("credit") || lower.includes("card") || lower.includes("debt")) {
                 if (totalCreditDue > 0) {
                     answer = `Credit Card Repayment Plan:\n• Current Statement Dues: ₹${totalCreditDue.toLocaleString()}\n• Immediate Recommendation: Pay 100% of dues before monthly billing date to prevent 3.5%/month finance charges.\n• Available Liquid Cash: ₹${totalBalance.toLocaleString()}`;
@@ -213,17 +227,30 @@ export default function AIPlannerScreen() {
         }, 400);
     };
 
-    const healthColor = aiPlan.healthScore >= 70 ? Colors.income : Colors.primary;
+    const healthColor = aiPlan.healthScore >= 70 ? Colors.income : aiPlan.healthScore >= 50 ? '#F59E0B' : Colors.expense;
 
     return (
         <View style={[styles.container, { backgroundColor: Colors.background }]}>
             {/* Header */}
             <View style={[styles.header, { backgroundColor: Colors.surface, borderBottomColor: Colors.border, paddingTop: topHeaderPadding }]}>
                 <View style={styles.headerInner}>
-                    <Sparkles color={Colors.primary} size={20} />
-                    <Text style={[styles.headerTitle, { color: Colors.text }]} numberOfLines={1}>
-                        SpendZen AI Financial Planner
-                    </Text>
+                    <View style={[styles.headerIconCircle, { backgroundColor: Colors.primary + '18' }]}>
+                        <Sparkles color={Colors.primary} size={18} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                        <Text style={[styles.headerTitle, { color: Colors.text }]} numberOfLines={1}>
+                            AI Financial Planner
+                        </Text>
+                        <Text style={[styles.headerSubtitle, { color: Colors.textMuted }]}>
+                            Smart Cashflow Optimization & Wealth Advisory
+                        </Text>
+                    </View>
+                    <View style={[styles.engineStatusPill, { backgroundColor: Colors.surfaceElevated, borderColor: Colors.border }]}>
+                        <View style={[styles.statusDot, { backgroundColor: geminiApiKey ? Colors.income : Colors.primary }]} />
+                        <Text style={[styles.statusPillText, { color: Colors.text }]}>
+                            {geminiApiKey ? 'Gemini Live' : 'Smart AI'}
+                        </Text>
+                    </View>
                 </View>
             </View>
 
@@ -232,43 +259,47 @@ export default function AIPlannerScreen() {
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
             >
-                {/* Centered content wrapper for web */}
-                <View style={styles.contentWrapper}>
-
-                    {/* SpendZen AI Engine & Optional Key Banner */}
-                    <View style={[styles.card, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+                <View style={styles.mainWrapper}>
+                    {/* Engine Settings Collapsible Drawer */}
+                    <View style={[styles.card, { backgroundColor: Colors.surface, borderColor: Colors.border, marginBottom: 16 }]}>
                         <TouchableOpacity
                             style={styles.keyRow}
                             onPress={() => setShowKeyInput(!showKeyInput)}
                             activeOpacity={0.7}
                         >
                             <View style={styles.keyLeft}>
-                                <Sparkles size={15} color={Colors.primary} />
-                                <Text style={[styles.keyLabel, { color: Colors.text }]} numberOfLines={1}>
-                                    SpendZen AI Engine {geminiApiKey ? '🟢 Gemini Live Active' : '🟢 Built-In Smart AI Active'}
-                                </Text>
-                            </View>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                <View style={{ backgroundColor: Colors.income + '20', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
-                                    <Text style={{ fontSize: 10, fontWeight: '700', color: Colors.income }}>
-                                        {geminiApiKey ? 'CUSTOM KEY' : 'FREE BUILT-IN'}
+                                <View style={[styles.engineIconBadge, { backgroundColor: (geminiApiKey ? Colors.income : Colors.primary) + '15' }]}>
+                                    <Sparkles size={15} color={geminiApiKey ? Colors.income : Colors.primary} />
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={[styles.keyLabel, { color: Colors.text }]} numberOfLines={1}>
+                                        SpendZen AI Intelligence Core
+                                    </Text>
+                                    <Text style={[styles.keySubLabel, { color: Colors.textMuted }]} numberOfLines={1}>
+                                        {geminiApiKey ? 'Connected to Google Gemini Live Model' : 'Running Offline Financial Engine (Unlimited & Free)'}
                                     </Text>
                                 </View>
-                                <ChevronDown size={16} color={Colors.textMuted} />
+                            </View>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                <View style={[styles.engineTag, { backgroundColor: (geminiApiKey ? Colors.income : Colors.primary) + '18' }]}>
+                                    <Text style={[styles.engineTagText, { color: geminiApiKey ? Colors.income : Colors.primary }]}>
+                                        {geminiApiKey ? 'PRO KEY ACTIVE' : 'FREE INCLUDED'}
+                                    </Text>
+                                </View>
+                                {showKeyInput ? <ChevronUp size={16} color={Colors.textMuted} /> : <ChevronDown size={16} color={Colors.textMuted} />}
                             </View>
                         </TouchableOpacity>
 
                         {showKeyInput && (
-                            <View style={{ marginTop: 12, gap: 10 }}>
+                            <View style={[styles.keyDrawerContent, { borderTopColor: Colors.border }]}>
                                 <Text style={[styles.hint, { color: Colors.textMuted }]}>
-                                    ✨ <Text style={{ fontWeight: '700', color: Colors.text }}>SpendZen Smart AI Engine</Text> is active out-of-the-box with free, unlimited financial calculations!
-                                    {"\n"}Optional: Connect a personal Google AI Studio API key (starts with <Text style={{ fontWeight: '700' }}>AIzaSy...</Text>) to use external Gemini REST models.
+                                    SpendZen performs all calculations locally. You can optionally link your personal <Text style={{ fontWeight: '700', color: Colors.text }}>Google AI Studio API key</Text> for multi-turn generative financial advice.
                                 </Text>
 
                                 <View style={styles.inputRow}>
                                     <TextInput
-                                        style={[styles.input, { backgroundColor: Colors.background, borderColor: Colors.border, color: Colors.text }]}
-                                        placeholder="Paste Gemini API Key (AIzaSy...)"
+                                        style={[styles.input, { backgroundColor: Colors.surfaceElevated, borderColor: Colors.border, color: Colors.text }]}
+                                        placeholder="Paste Gemini Key (AIzaSy...)"
                                         placeholderTextColor={Colors.textMuted}
                                         value={tempKey}
                                         onChangeText={setTempKey}
@@ -277,7 +308,7 @@ export default function AIPlannerScreen() {
                                         autoCorrect={false}
                                     />
                                     <TouchableOpacity
-                                        style={[styles.sendBtn, { backgroundColor: Colors.background, borderColor: Colors.border, borderWidth: 1 }]}
+                                        style={[styles.eyeBtn, { backgroundColor: Colors.surfaceElevated, borderColor: Colors.border }]}
                                         onPress={() => setShowPassword(!showPassword)}
                                         activeOpacity={0.7}
                                     >
@@ -285,10 +316,9 @@ export default function AIPlannerScreen() {
                                     </TouchableOpacity>
                                 </View>
 
-                                {/* Action Buttons: Save Key, Clear Key & Get Key Link */}
-                                <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                                <View style={styles.keyActionsRow}>
                                     <TouchableOpacity
-                                        style={[styles.actionBtn, { backgroundColor: Colors.primary, flexDirection: 'row', gap: 6 }]}
+                                        style={[styles.actionBtn, { backgroundColor: Colors.primary }]}
                                         onPress={handleSaveApiKey}
                                         activeOpacity={0.8}
                                     >
@@ -298,30 +328,30 @@ export default function AIPlannerScreen() {
 
                                     {geminiApiKey ? (
                                         <TouchableOpacity
-                                            style={[styles.actionBtn, { backgroundColor: Colors.surface, borderColor: Colors.border, borderWidth: 1, flexDirection: 'row', gap: 6 }]}
+                                            style={[styles.actionBtn, { backgroundColor: Colors.surfaceElevated, borderColor: Colors.expense + '40', borderWidth: 1 }]}
                                             onPress={handleClearApiKey}
                                             activeOpacity={0.8}
                                         >
-                                            <Trash2 size={14} color="#EF4444" />
-                                            <Text style={{ color: '#EF4444', fontWeight: '700', fontSize: 13 }}>Remove Key</Text>
+                                            <Trash2 size={14} color={Colors.expense} />
+                                            <Text style={{ color: Colors.expense, fontWeight: '700', fontSize: 13 }}>Disconnect</Text>
                                         </TouchableOpacity>
                                     ) : null}
 
                                     <TouchableOpacity
-                                        style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 'auto', paddingVertical: 6 }}
+                                        style={styles.aiStudioLink}
                                         onPress={handleOpenAIStudio}
                                         activeOpacity={0.7}
                                     >
-                                        <Text style={{ fontSize: 11, color: Colors.primary, fontWeight: '600', textDecorationLine: 'underline' }}>
-                                            Get Free Key (Google AI Studio)
+                                        <Text style={[styles.aiStudioLinkText, { color: Colors.primary }]}>
+                                            Get Free API Key
                                         </Text>
                                         <ExternalLink size={12} color={Colors.primary} />
                                     </TouchableOpacity>
                                 </View>
 
                                 {saveFeedback && (
-                                    <View style={{ backgroundColor: saveFeedback.includes('Active') ? Colors.income + '18' : Colors.border + '40', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, marginTop: 2 }}>
-                                        <Text style={{ fontSize: 11, fontWeight: '700', color: saveFeedback.includes('Active') ? Colors.income : Colors.textMuted }}>
+                                    <View style={[styles.feedbackBanner, { backgroundColor: Colors.surfaceElevated, borderColor: Colors.border }]}>
+                                        <Text style={{ fontSize: 12, fontWeight: '600', color: Colors.income }}>
                                             {saveFeedback}
                                         </Text>
                                     </View>
@@ -330,274 +360,346 @@ export default function AIPlannerScreen() {
                         )}
                     </View>
 
-                    {/* Health Score + Forecast — side-by-side on tablet */}
-                    <View style={[styles.row2Col, isTablet ? styles.row2ColTablet : undefined]}>
+                    {/* Responsive Bento Grid Container */}
+                    <View style={[styles.bentoGrid, isDesktop ? styles.bentoGridDesktop : styles.bentoGridMobile]}>
 
-                        {/* AI Financial Health Score */}
-                        <View style={[styles.card, styles.flexCard, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
-                            <Text style={[styles.sectionLabel, { color: Colors.textMuted }]}>AI Financial Health Score</Text>
-                            <View style={styles.scoreRow}>
-                                <Text style={[styles.scoreValue, { color: healthColor }]}>
-                                    {aiPlan.healthScore}
-                                    <Text style={[styles.scoreMax, { color: Colors.textMuted }]}> / 100</Text>
-                                </Text>
-                                <View style={[styles.scoreIcon, { backgroundColor: healthColor + '18' }]}>
-                                    <ShieldCheck size={26} color={healthColor} />
-                                </View>
-                            </View>
-                            <Text style={[styles.hint, { color: Colors.textMuted, fontStyle: 'italic', marginTop: 8 }]}>
-                                "{aiPlan.mindsetQuote}"
-                            </Text>
-                        </View>
+                        {/* ── LEFT COLUMN: Metrics, Allocations & Leak Detection ── */}
+                        <View style={[styles.bentoCol, isDesktop ? { flex: 1.08 } : undefined]}>
 
-                        {/* 6-Month Forecast */}
-                        <View style={[styles.card, styles.flexCard, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
-                            <View style={styles.cardTitleRow}>
-                                <TrendingUp size={17} color={Colors.income} />
-                                <Text style={[styles.cardTitle, { color: Colors.text }]}>6-Month Cash Flow Forecast</Text>
-                            </View>
-                            <Text style={[styles.hint, { color: Colors.textMuted, marginBottom: 10 }]}>
-                                Based on net surplus +₹{Math.max(0, monthlyIncome - monthlyExpenses).toLocaleString()}/mo:
-                            </Text>
-                            <View style={[styles.forecastBox, { backgroundColor: Colors.income + '12', borderColor: Colors.income + '30' }]}>
-                                <Text style={[styles.hint, { color: Colors.textMuted }]}>Forecasted Liquid Balance</Text>
-                                <Text style={[styles.forecastValue, { color: Colors.income }]}>
-                                    ₹{aiPlan.forecast6Mo.toLocaleString()}
-                                </Text>
-                            </View>
-                        </View>
-
-                    </View>
-
-                    {/* 50/30/20 Budget Allocator */}
-                    <View style={[styles.card, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
-                        <View style={styles.cardTitleRow}>
-                            <Target size={17} color={Colors.primary} />
-                            <Text style={[styles.cardTitle, { color: Colors.text }]}>50/30/20 AI Budget Recommendation</Text>
-                        </View>
-                        <Text style={[styles.hint, { color: Colors.textMuted, marginBottom: 14 }]}>
-                            Tailored targets based on your ₹{monthlyIncome.toLocaleString()} monthly income:
-                        </Text>
-
-                        <View style={[styles.allocGrid, isTablet ? styles.allocGridTablet : undefined]}>
-                            {[
-                                { label: 'Needs (50%)', value: aiPlan.needsTarget, fill: '50%', color: Colors.primary },
-                                { label: 'Wants (30%)', value: aiPlan.wantsTarget, fill: '30%', color: '#F59E0B' },
-                                { label: 'Savings & Invest (20%)', value: aiPlan.savingsTarget, fill: '20%', color: Colors.income },
-                            ].map(item => (
-                                <View key={item.label} style={isTablet ? styles.allocItemTablet : styles.allocItem}>
-                                    <View style={styles.allocRow}>
-                                        <Text style={[styles.allocLabel, { color: Colors.text }]}>{item.label}</Text>
-                                        <Text style={[styles.allocValue, { color: item.color }]}>₹{item.value.toLocaleString()}</Text>
+                            {/* Health Score + 6-Mo Forecast Dual Row */}
+                            <View style={[styles.scoreForecastRow, isTablet || isDesktop ? styles.scoreForecastRowWide : undefined]}>
+                                {/* Health Score Card */}
+                                <View style={[styles.card, styles.flex1, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+                                    <View style={styles.cardHeaderFlex}>
+                                        <Text style={[styles.metricCardLabel, { color: Colors.textMuted }]}>HEALTH SCORE</Text>
+                                        <View style={[styles.metricIconWrap, { backgroundColor: healthColor + '18' }]}>
+                                            <ShieldCheck size={18} color={healthColor} />
+                                        </View>
                                     </View>
-                                    <View style={[styles.progressTrack, { backgroundColor: Colors.border + '40' }]}>
-                                        <View style={[styles.progressFill, { width: item.fill as any, backgroundColor: item.color }]} />
+
+                                    <View style={styles.scoreNumberRow}>
+                                        <Text style={[styles.bigMetricNumber, { color: healthColor }]}>
+                                            {aiPlan.healthScore}
+                                        </Text>
+                                        <Text style={[styles.metricNumberMax, { color: Colors.textMuted }]}>/ 100</Text>
+                                    </View>
+
+                                    <View style={[styles.metricPill, { backgroundColor: healthColor + '15' }]}>
+                                        <Text style={[styles.metricPillText, { color: healthColor }]}>
+                                            {aiPlan.healthScore >= 70 ? 'Excellent Standing' : aiPlan.healthScore >= 50 ? 'Moderate Buffer' : 'Action Needed'}
+                                        </Text>
+                                    </View>
+
+                                    <Text style={[styles.metricQuote, { color: Colors.textMuted }]} numberOfLines={2}>
+                                        "{aiPlan.mindsetQuote}"
+                                    </Text>
+                                </View>
+
+                                {/* 6-Month Forecast Card */}
+                                <View style={[styles.card, styles.flex1, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+                                    <View style={styles.cardHeaderFlex}>
+                                        <Text style={[styles.metricCardLabel, { color: Colors.textMuted }]}>6-MO FORECAST</Text>
+                                        <View style={[styles.metricIconWrap, { backgroundColor: Colors.income + '18' }]}>
+                                            <TrendingUp size={18} color={Colors.income} />
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.scoreNumberRow}>
+                                        <Text style={[styles.bigMetricNumber, { color: Colors.income }]} numberOfLines={1}>
+                                            ₹{aiPlan.forecast6Mo.toLocaleString('en-IN')}
+                                        </Text>
+                                    </View>
+
+                                    <View style={[styles.metricPill, { backgroundColor: Colors.income + '15' }]}>
+                                        <Text style={[styles.metricPillText, { color: Colors.income }]}>
+                                            +₹{Math.max(0, monthlyIncome - monthlyExpenses).toLocaleString('en-IN')}/mo Surplus
+                                        </Text>
+                                    </View>
+
+                                    <Text style={[styles.metricQuote, { color: Colors.textMuted }]} numberOfLines={2}>
+                                        Projected liquid cash balance based on current spending rate.
+                                    </Text>
+                                </View>
+                            </View>
+
+                            {/* 50/30/20 Budget Allocator */}
+                            <View style={[styles.card, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+                                <View style={styles.cardTitleRow}>
+                                    <View style={[styles.sectionIconBadge, { backgroundColor: Colors.primary + '18' }]}>
+                                        <Target size={16} color={Colors.primary} />
+                                    </View>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={[styles.cardTitle, { color: Colors.text }]}>50/30/20 Budget Target</Text>
+                                        <Text style={[styles.cardSubtitle, { color: Colors.textMuted }]}>
+                                            Tailored targets on ₹{monthlyIncome.toLocaleString('en-IN')} monthly income
+                                        </Text>
                                     </View>
                                 </View>
-                            ))}
-                        </View>
-                    </View>
 
-                    {/* Spending Leaks & AI Recommendations */}
-                    <View style={[styles.card, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
-                        <View style={styles.cardTitleRow}>
-                            <AlertTriangle size={17} color="#F59E0B" />
-                            <Text style={[styles.cardTitle, { color: Colors.text }]}>AI Risk & Spending Leak Detector</Text>
-                        </View>
-                        <View style={{ gap: 10, marginTop: 4 }}>
-                            {aiPlan.leaks.map((leak, idx) => (
-                                <View key={`leak-${idx}`} style={[styles.infoBox, { backgroundColor: '#F59E0B10', borderColor: '#F59E0B30' }]}>
-                                    <Text style={[styles.infoText, { color: Colors.text }]}>• {leak}</Text>
-                                </View>
-                            ))}
-                            {aiPlan.recommendations.map((rec, idx) => (
-                                <View key={`rec-${idx}`} style={[styles.infoBox, { backgroundColor: Colors.primary + '10', borderColor: Colors.primary + '30' }]}>
-                                    <Text style={[styles.infoText, { color: Colors.text }]}>💡 {rec}</Text>
-                                </View>
-                            ))}
-                        </View>
-                    </View>
-
-                    {/* Purchase Affordability Calculator */}
-                    <View style={[styles.card, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
-                        <View style={styles.cardTitleRow}>
-                            <Calculator size={17} color={Colors.primary} />
-                            <Text style={[styles.cardTitle, { color: Colors.text }]}>Can I Afford This Purchase?</Text>
-                        </View>
-                        <Text style={[styles.hint, { color: Colors.textMuted, marginBottom: 12 }]}>
-                            Enter the cost of a phone, gadget, or trip to evaluate affordability safety:
-                        </Text>
-
-                        <View style={styles.inputRow}>
-                            <TextInput
-                                style={[styles.input, { backgroundColor: Colors.background, borderColor: Colors.border, color: Colors.text }]}
-                                placeholder="Enter amount (e.g. 45000)"
-                                placeholderTextColor={Colors.textMuted}
-                                keyboardType="numeric"
-                                value={purchaseCost}
-                                onChangeText={setPurchaseCost}
-                                returnKeyType="done"
-                                onSubmitEditing={handleCalculateAffordability}
-                            />
-                            <TouchableOpacity
-                                style={[styles.actionBtn, { backgroundColor: Colors.primary }]}
-                                onPress={handleCalculateAffordability}
-                                activeOpacity={0.8}
-                            >
-                                <Text style={styles.actionBtnText}>Calculate</Text>
-                            </TouchableOpacity>
-                        </View>
-
-                        {affordabilityResult && (
-                            <View style={[styles.resultCard, { backgroundColor: Colors.background, borderColor: Colors.border }]}>
-                                <View style={styles.resultHeader}>
-                                    <Text style={[styles.resultStatus, { color: affordabilityResult.affordableNow ? Colors.income : '#F59E0B', flex: 1 }]}>
-                                        {affordabilityResult.affordableNow ? '✅ Safe to Purchase Now' : `⏳ Target: ${affordabilityResult.targetDate}`}
-                                    </Text>
-                                    <Text style={[styles.hint, { color: Colors.textMuted }]}>
-                                        Score: {affordabilityResult.safetyScore}/100
-                                    </Text>
-                                </View>
-                                <Text style={[styles.infoText, { color: Colors.text }]}>
-                                    {affordabilityResult.advice}
-                                </Text>
-                            </View>
-                        )}
-                    </View>
-
-                    {/* Interactive AI Chat Coach */}
-                    <View style={[styles.card, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
-                        <View style={[styles.cardTitleRow, { justifyContent: 'space-between' }]}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                                <MessageSquare size={17} color={Colors.primary} />
-                                <Text style={[styles.cardTitle, { color: Colors.text }]}>Ask SpendZen AI Coach</Text>
-                                <View style={{ backgroundColor: Colors.primary + '20', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10 }}>
-                                    <Text style={{ fontSize: 10, fontWeight: '700', color: Colors.primary }}>
-                                        {chatMessages.length} msgs
-                                    </Text>
-                                </View>
-                            </View>
-                            {chatMessages.length > 1 && (
-                                <TouchableOpacity
-                                    onPress={handleClearChat}
-                                    style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4 }}
-                                    activeOpacity={0.7}
-                                >
-                                    <RotateCcw size={13} color={Colors.textMuted} />
-                                    <Text style={{ fontSize: 11, color: Colors.textMuted, fontWeight: '600' }}>Clear</Text>
-                                </TouchableOpacity>
-                            )}
-                        </View>
-
-                        {/* Preset chips */}
-                        <View style={styles.chipsRow}>
-                            {[
-                                "How to cut expenses by 15%?",
-                                "What is my emergency fund target?",
-                                "Evaluate my credit card debt"
-                            ].map(q => (
-                                <TouchableOpacity
-                                    key={q}
-                                    style={[styles.chip, { backgroundColor: Colors.background, borderColor: Colors.border }]}
-                                    onPress={() => handleAskQuestion(q)}
-                                    activeOpacity={0.7}
-                                >
-                                    <Text style={[styles.chipText, { color: Colors.primary }]} numberOfLines={1}>{q}</Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-
-                        {/* Real Interactive Chat History Thread */}
-                        <View style={[styles.chatContainer, { backgroundColor: Colors.background, borderColor: Colors.border }]}>
-                            <ScrollView
-                                style={styles.chatScroll}
-                                contentContainerStyle={{ paddingVertical: 12, paddingHorizontal: 10, gap: 10 }}
-                                nestedScrollEnabled={true}
-                                showsVerticalScrollIndicator={true}
-                            >
-                                {chatMessages.map(msg => (
-                                    <View
-                                        key={msg.id}
-                                        style={[
-                                            styles.messageWrapper,
-                                            msg.sender === 'user' ? styles.userMessageWrapper : styles.aiMessageWrapper
-                                        ]}
-                                    >
-                                        {msg.sender === 'ai' && (
-                                            <View style={[styles.avatarBadge, { backgroundColor: Colors.primary + '20' }]}>
-                                                <Sparkles size={12} color={Colors.primary} />
+                                <View style={styles.allocGrid}>
+                                    {[
+                                        { label: 'Needs (50%)', desc: 'Rent, groceries, utilities', value: aiPlan.needsTarget, fill: '50%', color: Colors.primary },
+                                        { label: 'Wants (30%)', desc: 'Dining, shopping, leisure', value: aiPlan.wantsTarget, fill: '30%', color: '#F59E0B' },
+                                        { label: 'Savings (20%)', desc: 'Emergency fund & investments', value: aiPlan.savingsTarget, fill: '20%', color: Colors.income },
+                                    ].map(item => (
+                                        <View key={item.label} style={[styles.allocCardItem, { backgroundColor: Colors.surfaceElevated, borderColor: Colors.border }]}>
+                                            <View style={styles.allocHeader}>
+                                                <View>
+                                                    <Text style={[styles.allocLabel, { color: Colors.text }]}>{item.label}</Text>
+                                                    <Text style={[styles.allocDesc, { color: Colors.textMuted }]}>{item.desc}</Text>
+                                                </View>
+                                                <Text style={[styles.allocValue, { color: item.color }]}>
+                                                    ₹{item.value.toLocaleString('en-IN')}
+                                                </Text>
                                             </View>
-                                        )}
-                                        <View
-                                            style={[
-                                                styles.messageBubble,
-                                                msg.sender === 'user'
-                                                    ? [styles.userBubble, { backgroundColor: Colors.primary }]
-                                                    : [styles.aiBubble, { backgroundColor: Colors.surface, borderColor: Colors.border }]
-                                            ]}
-                                        >
-                                            <Text
-                                                style={[
-                                                    styles.messageText,
-                                                    { color: msg.sender === 'user' ? '#FFFFFF' : Colors.text }
-                                                ]}
-                                            >
-                                                {msg.text}
-                                            </Text>
-                                            <Text
-                                                style={[
-                                                    styles.messageTime,
-                                                    { color: msg.sender === 'user' ? 'rgba(255,255,255,0.7)' : Colors.textMuted }
-                                                ]}
-                                            >
-                                                {msg.timestamp}
-                                            </Text>
+                                            <View style={[styles.progressTrack, { backgroundColor: Colors.border }]}>
+                                                <View style={[styles.progressFill, { width: item.fill as any, backgroundColor: item.color }]} />
+                                            </View>
                                         </View>
-                                    </View>
-                                ))}
+                                    ))}
+                                </View>
+                            </View>
 
-                                {isAsking && (
-                                    <View style={[styles.messageWrapper, styles.aiMessageWrapper]}>
-                                        <View style={[styles.avatarBadge, { backgroundColor: Colors.primary + '20' }]}>
-                                            <Sparkles size={12} color={Colors.primary} />
+                            {/* AI Risk & Spending Leak Detector */}
+                            <View style={[styles.card, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+                                <View style={styles.cardTitleRow}>
+                                    <View style={[styles.sectionIconBadge, { backgroundColor: '#F59E0B18' }]}>
+                                        <AlertTriangle size={16} color="#F59E0B" />
+                                    </View>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={[styles.cardTitle, { color: Colors.text }]}>Spending Leaks & Optimizations</Text>
+                                        <Text style={[styles.cardSubtitle, { color: Colors.textMuted }]}>
+                                            Automatic anomalies and recommended actions
+                                        </Text>
+                                    </View>
+                                </View>
+
+                                <View style={{ gap: 10 }}>
+                                    {aiPlan.leaks.map((leak, idx) => (
+                                        <View key={`leak-${idx}`} style={[styles.leakItemCard, { backgroundColor: '#F59E0B10', borderColor: '#F59E0B30' }]}>
+                                            <ShieldAlert size={16} color="#F59E0B" style={{ marginTop: 2 }} />
+                                            <Text style={[styles.leakItemText, { color: Colors.text }]}>{leak}</Text>
                                         </View>
-                                        <View style={[styles.messageBubble, styles.aiBubble, { backgroundColor: Colors.surface, borderColor: Colors.border, flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
-                                            <ActivityIndicator size="small" color={Colors.primary} />
-                                            <Text style={{ fontSize: 12, color: Colors.textMuted, fontStyle: 'italic' }}>
-                                                SpendZen AI is thinking...
-                                            </Text>
+                                    ))}
+                                    {aiPlan.recommendations.map((rec, idx) => (
+                                        <View key={`rec-${idx}`} style={[styles.leakItemCard, { backgroundColor: Colors.surfaceElevated, borderColor: Colors.border }]}>
+                                            <Lightbulb size={16} color={Colors.primary} style={{ marginTop: 2 }} />
+                                            <Text style={[styles.leakItemText, { color: Colors.text }]}>{rec}</Text>
                                         </View>
+                                    ))}
+                                </View>
+                            </View>
+
+                        </View>
+
+                        {/* ── RIGHT COLUMN: Affordability Calculator & AI Chat Coach ── */}
+                        <View style={[styles.bentoCol, isDesktop ? { flex: 0.95 } : undefined]}>
+
+                            {/* Purchase Affordability Simulator */}
+                            <View style={[styles.card, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+                                <View style={styles.cardTitleRow}>
+                                    <View style={[styles.sectionIconBadge, { backgroundColor: Colors.primary + '18' }]}>
+                                        <Calculator size={16} color={Colors.primary} />
+                                    </View>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={[styles.cardTitle, { color: Colors.text }]}>Purchase Affordability Check</Text>
+                                        <Text style={[styles.cardSubtitle, { color: Colors.textMuted }]}>
+                                            Evaluate if a gadget, travel, or major spend is safe
+                                        </Text>
+                                    </View>
+                                </View>
+
+                                <View style={styles.calcInputGroup}>
+                                    <View style={[styles.calcInputWrapper, { backgroundColor: Colors.surfaceElevated, borderColor: Colors.border }]}>
+                                        <Text style={[styles.calcCurrencyPrefix, { color: Colors.textMuted }]}>₹</Text>
+                                        <TextInput
+                                            style={[styles.calcInput, { color: Colors.text }]}
+                                            placeholder="Enter cost (e.g. 45000)"
+                                            placeholderTextColor={Colors.textMuted}
+                                            keyboardType="numeric"
+                                            value={purchaseCost}
+                                            onChangeText={setPurchaseCost}
+                                            returnKeyType="done"
+                                            onSubmitEditing={() => handleCalculateAffordability()}
+                                        />
+                                    </View>
+                                    <TouchableOpacity
+                                        style={[styles.calcSubmitBtn, { backgroundColor: Colors.primary }]}
+                                        onPress={() => handleCalculateAffordability()}
+                                        activeOpacity={0.8}
+                                    >
+                                        <Text style={styles.calcSubmitBtnText}>Evaluate</Text>
+                                    </TouchableOpacity>
+                                </View>
+
+                                {/* Quick Amount Chips */}
+                                <View style={styles.quickAmountChipsRow}>
+                                    {PRESET_AMOUNTS.map(amt => (
+                                        <TouchableOpacity
+                                            key={amt}
+                                            style={[styles.quickAmountChip, { backgroundColor: Colors.surfaceElevated, borderColor: Colors.border }]}
+                                            onPress={() => handleCalculateAffordability(amt)}
+                                            activeOpacity={0.7}
+                                        >
+                                            <Text style={[styles.quickAmountChipText, { color: Colors.text }]}>₹{amt >= 1000 ? `${amt / 1000}k` : amt}</Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+
+                                {affordabilityResult && (
+                                    <View style={[styles.verdictCard, { backgroundColor: Colors.surfaceElevated, borderColor: Colors.border }]}>
+                                        <View style={styles.verdictHeader}>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                                <View style={[styles.verdictStatusDot, { backgroundColor: affordabilityResult.affordableNow ? Colors.income : '#F59E0B' }]} />
+                                                <Text style={[styles.verdictStatusText, { color: affordabilityResult.affordableNow ? Colors.income : '#F59E0B' }]}>
+                                                    {affordabilityResult.affordableNow ? 'Safe to Purchase Now' : `Target Date: ${affordabilityResult.targetDate}`}
+                                                </Text>
+                                            </View>
+                                            <View style={[styles.safetyScorePill, { backgroundColor: (affordabilityResult.safetyScore >= 70 ? Colors.income : '#F59E0B') + '18' }]}>
+                                                <Text style={[styles.safetyScoreText, { color: affordabilityResult.safetyScore >= 70 ? Colors.income : '#F59E0B' }]}>
+                                                    Safety {affordabilityResult.safetyScore}/100
+                                                </Text>
+                                            </View>
+                                        </View>
+                                        <Text style={[styles.verdictAdviceText, { color: Colors.text }]}>
+                                            {affordabilityResult.advice}
+                                        </Text>
                                     </View>
                                 )}
-                            </ScrollView>
+                            </View>
+
+                            {/* Interactive AI Chat Coach */}
+                            <View style={[styles.card, styles.chatCardWrapper, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+                                <View style={[styles.cardTitleRow, { marginBottom: 12 }]}>
+                                    <View style={[styles.sectionIconBadge, { backgroundColor: Colors.primary + '18' }]}>
+                                        <MessageSquare size={16} color={Colors.primary} />
+                                    </View>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={[styles.cardTitle, { color: Colors.text }]}>Ask SpendZen AI Coach</Text>
+                                        <Text style={[styles.cardSubtitle, { color: Colors.textMuted }]}>
+                                            Real-time personalized guidance & financial advice
+                                        </Text>
+                                    </View>
+                                    {chatMessages.length > 1 && (
+                                        <TouchableOpacity
+                                            onPress={handleClearChat}
+                                            style={[styles.clearChatBtn, { backgroundColor: Colors.surfaceElevated, borderColor: Colors.border }]}
+                                            activeOpacity={0.7}
+                                        >
+                                            <RotateCcw size={12} color={Colors.textMuted} />
+                                            <Text style={[styles.clearChatText, { color: Colors.textMuted }]}>Reset</Text>
+                                        </TouchableOpacity>
+                                    )}
+                                </View>
+
+                                {/* Prompt Suggestion Chips */}
+                                <View style={styles.promptChipsWrapper}>
+                                    {PRESET_QUESTIONS.map(q => (
+                                        <TouchableOpacity
+                                            key={q}
+                                            style={[styles.promptChip, { backgroundColor: Colors.surfaceElevated, borderColor: Colors.border }]}
+                                            onPress={() => handleAskQuestion(q)}
+                                            activeOpacity={0.7}
+                                        >
+                                            <Text style={[styles.promptChipText, { color: Colors.primary }]} numberOfLines={1}>{q}</Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+
+                                {/* Conversation Scroll Thread */}
+                                <View style={[styles.chatBoxContainer, { backgroundColor: Colors.surfaceElevated, borderColor: Colors.border }]}>
+                                    <ScrollView
+                                        style={styles.chatScrollView}
+                                        contentContainerStyle={styles.chatScrollContent}
+                                        nestedScrollEnabled={true}
+                                        showsVerticalScrollIndicator={true}
+                                    >
+                                        {chatMessages.map(msg => (
+                                            <View
+                                                key={msg.id}
+                                                style={[
+                                                    styles.chatBubbleRow,
+                                                    msg.sender === 'user' ? styles.userBubbleRow : styles.aiBubbleRow
+                                                ]}
+                                            >
+                                                {msg.sender === 'ai' && (
+                                                    <View style={[styles.aiAvatarBadge, { backgroundColor: Colors.primary + '20' }]}>
+                                                        <Sparkles size={13} color={Colors.primary} />
+                                                    </View>
+                                                )}
+                                                <View
+                                                    style={[
+                                                        styles.chatBubble,
+                                                        msg.sender === 'user'
+                                                            ? [styles.userBubble, { backgroundColor: Colors.primary }]
+                                                            : [styles.aiBubble, { backgroundColor: Colors.surface, borderColor: Colors.border }]
+                                                    ]}
+                                                >
+                                                    <Text
+                                                        style={[
+                                                            styles.chatBubbleText,
+                                                            { color: msg.sender === 'user' ? '#FFFFFF' : Colors.text }
+                                                        ]}
+                                                    >
+                                                        {msg.text}
+                                                    </Text>
+                                                    <Text
+                                                        style={[
+                                                            styles.chatTimestamp,
+                                                            { color: msg.sender === 'user' ? 'rgba(255,255,255,0.7)' : Colors.textMuted }
+                                                        ]}
+                                                    >
+                                                        {msg.timestamp}
+                                                    </Text>
+                                                </View>
+                                            </View>
+                                        ))}
+
+                                        {isAsking && (
+                                            <View style={[styles.chatBubbleRow, styles.aiBubbleRow]}>
+                                                <View style={[styles.aiAvatarBadge, { backgroundColor: Colors.primary + '20' }]}>
+                                                    <Sparkles size={13} color={Colors.primary} />
+                                                </View>
+                                                <View style={[styles.chatBubble, styles.aiBubble, { backgroundColor: Colors.surface, borderColor: Colors.border, flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
+                                                    <ActivityIndicator size="small" color={Colors.primary} />
+                                                    <Text style={{ fontSize: 13, color: Colors.textMuted, fontStyle: 'italic' }}>
+                                                        SpendZen AI is thinking...
+                                                    </Text>
+                                                </View>
+                                            </View>
+                                        )}
+                                    </ScrollView>
+                                </View>
+
+                                {/* Chat Input Bar */}
+                                <View style={styles.chatInputBarRow}>
+                                    <TextInput
+                                        style={[styles.chatInputField, { backgroundColor: Colors.surfaceElevated, borderColor: Colors.border, color: Colors.text }]}
+                                        placeholder="Ask any finance question..."
+                                        placeholderTextColor={Colors.textMuted}
+                                        value={userQuestion}
+                                        onChangeText={setUserQuestion}
+                                        returnKeyType="send"
+                                        onSubmitEditing={() => handleAskQuestion()}
+                                        multiline={false}
+                                    />
+                                    <TouchableOpacity
+                                        style={[styles.chatSubmitBtn, { backgroundColor: Colors.primary, opacity: isAsking ? 0.6 : 1 }]}
+                                        onPress={() => handleAskQuestion()}
+                                        disabled={isAsking}
+                                        activeOpacity={0.8}
+                                    >
+                                        {isAsking
+                                            ? <ActivityIndicator color="#fff" size="small" />
+                                            : <Send size={16} color="#fff" />
+                                        }
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+
                         </View>
 
-                        {/* Sticky Input Bar */}
-                        <View style={styles.chatInputRow}>
-                            <TextInput
-                                style={[styles.chatInput, { backgroundColor: Colors.background, borderColor: Colors.border, color: Colors.text, fontSize: 16 }]}
-                                placeholder="Ask any financial planning question..."
-                                placeholderTextColor={Colors.textMuted}
-                                value={userQuestion}
-                                onChangeText={setUserQuestion}
-                                returnKeyType="send"
-                                onSubmitEditing={() => handleAskQuestion()}
-                                multiline={false}
-                            />
-                            <TouchableOpacity
-                                style={[styles.chatSendBtn, { backgroundColor: Colors.primary, opacity: isAsking ? 0.6 : 1 }]}
-                                onPress={() => handleAskQuestion()}
-                                disabled={isAsking}
-                                activeOpacity={0.8}
-                            >
-                                {isAsking
-                                    ? <ActivityIndicator color="#fff" size="small" />
-                                    : <Send size={16} color="#fff" />
-                                }
-                            </TouchableOpacity>
-                        </View>
                     </View>
-
                 </View>
             </ScrollView>
         </View>
@@ -610,214 +712,69 @@ const styles = StyleSheet.create({
     },
     header: {
         borderBottomWidth: 1,
-        paddingTop: Platform.OS === 'ios' ? 44 : 14,
         paddingBottom: 14,
         paddingHorizontal: 16,
     },
     headerInner: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 8,
+        gap: 12,
+        maxWidth: 1280,
+        marginHorizontal: 'auto',
         width: '100%',
+    },
+    headerIconCircle: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     headerTitle: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        flex: 1,
+        fontSize: 17,
+        fontWeight: '800',
+        letterSpacing: -0.3,
+    },
+    headerSubtitle: {
+        fontSize: 11,
+        fontWeight: '500',
+        marginTop: 1,
+    },
+    engineStatusPill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 20,
+        borderWidth: 1,
+    },
+    statusDot: {
+        width: 7,
+        height: 7,
+        borderRadius: 4,
+    },
+    statusPillText: {
+        fontSize: 11,
+        fontWeight: '700',
     },
     scrollContent: {
-        paddingBottom: 100,
+        paddingTop: 16,
+        paddingHorizontal: 16,
     },
-    contentWrapper: {
+    mainWrapper: {
+        maxWidth: 1280,
+        marginHorizontal: 'auto',
         width: '100%',
-        padding: 16,
-        gap: 16,
     },
     card: {
         borderRadius: 20,
-        padding: 16,
+        padding: 18,
         borderWidth: 1,
     },
-    flexCard: {
+    flex1: {
         flex: 1,
         minWidth: 0,
-    },
-    // Two-column row for tablet
-    row2Col: {
-        flexDirection: 'column',
-        gap: 16,
-    },
-    row2ColTablet: {
-        flexDirection: 'row',
-        alignItems: 'stretch',
-    },
-    cardTitleRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        marginBottom: 10,
-        flexWrap: 'wrap',
-    },
-    cardTitle: {
-        fontSize: 14,
-        fontWeight: '700',
-        flex: 1,
-        flexWrap: 'wrap',
-    },
-    sectionLabel: {
-        fontSize: 11,
-        fontWeight: '700',
-        textTransform: 'uppercase',
-        letterSpacing: 0.5,
-        marginBottom: 6,
-    },
-    scoreRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-    },
-    scoreValue: {
-        fontSize: 28,
-        fontWeight: 'bold',
-    },
-    scoreMax: {
-        fontSize: 16,
-        fontWeight: '400',
-    },
-    scoreIcon: {
-        padding: 10,
-        borderRadius: 14,
-    },
-    forecastBox: {
-        padding: 12,
-        borderRadius: 12,
-        borderWidth: 1,
-    },
-    forecastValue: {
-        fontSize: 22,
-        fontWeight: 'bold',
-        marginTop: 2,
-    },
-    // Budget alloc grid: 1-col mobile, 3-col tablet
-    allocGrid: {
-        gap: 14,
-    },
-    allocGridTablet: {
-        flexDirection: 'row',
-        gap: 16,
-    },
-    allocItem: {
-        width: '100%',
-    },
-    allocItemTablet: {
-        flex: 1,
-        minWidth: 0,
-    },
-    allocRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginBottom: 4,
-    },
-    allocLabel: {
-        fontSize: 12,
-        fontWeight: '600',
-    },
-    allocValue: {
-        fontSize: 12,
-        fontWeight: 'bold',
-    },
-    progressTrack: {
-        height: 8,
-        borderRadius: 4,
-        overflow: 'hidden',
-    },
-    progressFill: {
-        height: '100%',
-        borderRadius: 4,
-    },
-    infoBox: {
-        padding: 10,
-        borderRadius: 12,
-        borderWidth: 1,
-    },
-    infoText: {
-        fontSize: 12,
-        lineHeight: 19,
-    },
-    // Input row: input + button side-by-side, wraps on very small screens
-    inputRow: {
-        flexDirection: 'row',
-        gap: 10,
-        marginBottom: 4,
-        alignItems: 'center',
-    },
-    input: {
-        flex: 1,
-        minWidth: 0,
-        borderRadius: 12,
-        borderWidth: 1,
-        paddingHorizontal: 14,
-        paddingVertical: Platform.OS === 'ios' ? 12 : 10,
-        fontSize: 13,
-    },
-    actionBtn: {
-        borderRadius: 12,
-        paddingHorizontal: 16,
-        paddingVertical: 11,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    actionBtnText: {
-        color: '#fff',
-        fontWeight: '700',
-        fontSize: 13,
-    },
-    sendBtn: {
-        width: 44,
-        height: 44,
-        borderRadius: 12,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    resultCard: {
-        marginTop: 10,
-        padding: 12,
-        borderRadius: 12,
-        borderWidth: 1,
-    },
-    resultHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: 6,
-        flexWrap: 'wrap',
-        gap: 4,
-    },
-    resultStatus: {
-        fontSize: 12,
-        fontWeight: '700',
-    },
-    // Preset chips: wraps gracefully on narrow screens
-    chipsRow: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 8,
-        marginBottom: 12,
-    },
-    chip: {
-        paddingHorizontal: 10,
-        paddingVertical: 7,
-        borderRadius: 12,
-        borderWidth: 1,
-    },
-    chipText: {
-        fontSize: 11,
-        fontWeight: '600',
-        lineHeight: 15,
-    },
-    hint: {
-        fontSize: 11,
-        lineHeight: 16,
     },
     keyRow: {
         flexDirection: 'row',
@@ -827,69 +784,410 @@ const styles = StyleSheet.create({
     keyLeft: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 8,
+        gap: 10,
         flex: 1,
+    },
+    engineIconBadge: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     keyLabel: {
+        fontSize: 14,
+        fontWeight: '700',
+    },
+    keySubLabel: {
+        fontSize: 11,
+        fontWeight: '500',
+        marginTop: 1,
+    },
+    engineTag: {
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 8,
+    },
+    engineTagText: {
+        fontSize: 10,
+        fontWeight: '800',
+        letterSpacing: 0.5,
+    },
+    keyDrawerContent: {
+        marginTop: 14,
+        paddingTop: 14,
+        borderTopWidth: 1,
+        gap: 12,
+    },
+    inputRow: {
+        flexDirection: 'row',
+        gap: 8,
+        alignItems: 'center',
+    },
+    input: {
+        flex: 1,
+        height: 42,
+        borderRadius: 12,
+        borderWidth: 1,
+        paddingHorizontal: 14,
+        fontSize: 13,
+    },
+    eyeBtn: {
+        width: 42,
+        height: 42,
+        borderRadius: 12,
+        borderWidth: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    keyActionsRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        flexWrap: 'wrap',
+    },
+    actionBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        height: 38,
+        paddingHorizontal: 16,
+        borderRadius: 10,
+        justifyContent: 'center',
+    },
+    actionBtnText: {
+        color: '#fff',
+        fontWeight: '700',
+        fontSize: 13,
+    },
+    aiStudioLink: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        marginLeft: 'auto',
+        paddingVertical: 6,
+    },
+    aiStudioLinkText: {
+        fontSize: 12,
+        fontWeight: '700',
+        textDecorationLine: 'underline',
+    },
+    feedbackBanner: {
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 10,
+        borderWidth: 1,
+    },
+    bentoGrid: {
+        width: '100%',
+    },
+    bentoGridDesktop: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        gap: 18,
+    },
+    bentoGridMobile: {
+        flexDirection: 'column',
+        gap: 16,
+    },
+    bentoCol: {
+        width: '100%',
+        gap: 16,
+    },
+    scoreForecastRow: {
+        flexDirection: 'column',
+        gap: 14,
+    },
+    scoreForecastRowWide: {
+        flexDirection: 'row',
+        alignItems: 'stretch',
+    },
+    cardHeaderFlex: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    metricCardLabel: {
+        fontSize: 11,
+        fontWeight: '800',
+        letterSpacing: 0.8,
+        textTransform: 'uppercase',
+    },
+    metricIconWrap: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    scoreNumberRow: {
+        flexDirection: 'row',
+        alignItems: 'baseline',
+        gap: 4,
+        marginVertical: 4,
+    },
+    bigMetricNumber: {
+        fontSize: 26,
+        fontWeight: '800',
+        letterSpacing: -0.5,
+    },
+    metricNumberMax: {
+        fontSize: 15,
+        fontWeight: '500',
+    },
+    metricPill: {
+        alignSelf: 'flex-start',
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 6,
+        marginVertical: 6,
+    },
+    metricPillText: {
+        fontSize: 11,
+        fontWeight: '700',
+    },
+    metricQuote: {
+        fontSize: 12,
+        lineHeight: 16,
+        marginTop: 4,
+    },
+    sectionIconBadge: {
+        width: 32,
+        height: 32,
+        borderRadius: 10,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    cardTitleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        marginBottom: 14,
+    },
+    cardTitle: {
+        fontSize: 15,
+        fontWeight: '700',
+        letterSpacing: -0.2,
+    },
+    cardSubtitle: {
+        fontSize: 11,
+        fontWeight: '500',
+        marginTop: 1,
+    },
+    allocGrid: {
+        gap: 10,
+    },
+    allocCardItem: {
+        padding: 12,
+        borderRadius: 14,
+        borderWidth: 1,
+    },
+    allocHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        marginBottom: 8,
+    },
+    allocLabel: {
         fontSize: 13,
         fontWeight: '700',
+    },
+    allocDesc: {
+        fontSize: 11,
+        fontWeight: '500',
+        marginTop: 1,
+    },
+    allocValue: {
+        fontSize: 14,
+        fontWeight: '800',
+    },
+    progressTrack: {
+        height: 7,
+        borderRadius: 4,
+        overflow: 'hidden',
+    },
+    progressFill: {
+        height: '100%',
+        borderRadius: 4,
+    },
+    leakItemCard: {
+        flexDirection: 'row',
+        gap: 10,
+        padding: 12,
+        borderRadius: 14,
+        borderWidth: 1,
+        alignItems: 'flex-start',
+    },
+    leakItemText: {
+        fontSize: 12,
+        lineHeight: 18,
+        fontWeight: '500',
         flex: 1,
     },
-    chatContainer: {
-        height: 280,
+    calcInputGroup: {
+        flexDirection: 'row',
+        gap: 10,
+        alignItems: 'center',
+        marginBottom: 10,
+    },
+    calcInputWrapper: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        height: 44,
+        borderRadius: 12,
+        borderWidth: 1,
+        paddingHorizontal: 12,
+    },
+    calcCurrencyPrefix: {
+        fontSize: 16,
+        fontWeight: '700',
+        marginRight: 6,
+    },
+    calcInput: {
+        flex: 1,
+        fontSize: 14,
+        fontWeight: '600',
+        padding: 0,
+        ...Platform.select({
+            web: { outlineStyle: 'none' },
+            default: {}
+        })
+    } as any,
+    calcSubmitBtn: {
+        height: 44,
+        paddingHorizontal: 18,
+        borderRadius: 12,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    calcSubmitBtnText: {
+        color: '#fff',
+        fontWeight: '700',
+        fontSize: 13,
+    },
+    quickAmountChipsRow: {
+        flexDirection: 'row',
+        gap: 8,
+        marginBottom: 12,
+    },
+    quickAmountChip: {
+        flex: 1,
+        paddingVertical: 6,
+        borderRadius: 8,
+        borderWidth: 1,
+        alignItems: 'center',
+    },
+    quickAmountChipText: {
+        fontSize: 11,
+        fontWeight: '700',
+    },
+    verdictCard: {
+        padding: 14,
         borderRadius: 14,
+        borderWidth: 1,
+        marginTop: 4,
+    },
+    verdictHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 6,
+    },
+    verdictStatusDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+    },
+    verdictStatusText: {
+        fontSize: 13,
+        fontWeight: '800',
+    },
+    safetyScorePill: {
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 6,
+    },
+    safetyScoreText: {
+        fontSize: 11,
+        fontWeight: '700',
+    },
+    verdictAdviceText: {
+        fontSize: 12,
+        lineHeight: 18,
+        fontWeight: '500',
+    },
+    chatCardWrapper: {
+        minHeight: 460,
+    },
+    clearChatBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 8,
+        borderWidth: 1,
+    },
+    clearChatText: {
+        fontSize: 11,
+        fontWeight: '600',
+    },
+    promptChipsWrapper: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 6,
+        marginBottom: 12,
+    },
+    promptChip: {
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 10,
+        borderWidth: 1,
+    },
+    promptChipText: {
+        fontSize: 11,
+        fontWeight: '600',
+    },
+    chatBoxContainer: {
+        height: 290,
+        borderRadius: 16,
         borderWidth: 1,
         marginBottom: 12,
         overflow: 'hidden',
     },
-    chatInputRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-    },
-    chatInput: {
-        flex: 1,
-        height: 46,
-        borderRadius: 23,
-        paddingHorizontal: 16,
-        borderWidth: 1,
-        fontSize: 16,
-    },
-    chatSendBtn: {
-        width: 46,
-        height: 46,
-        borderRadius: 23,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    chatScroll: {
+    chatScrollView: {
         flex: 1,
     },
-    messageWrapper: {
+    chatScrollContent: {
+        padding: 12,
+        gap: 10,
+    },
+    chatBubbleRow: {
         flexDirection: 'row',
         alignItems: 'flex-end',
         gap: 6,
-        marginVertical: 2,
     },
-    userMessageWrapper: {
+    userBubbleRow: {
         justifyContent: 'flex-end',
     },
-    aiMessageWrapper: {
+    aiBubbleRow: {
         justifyContent: 'flex-start',
     },
-    avatarBadge: {
+    aiAvatarBadge: {
         width: 24,
         height: 24,
         borderRadius: 12,
-        alignItems: 'center',
         justifyContent: 'center',
-        marginBottom: 4,
+        alignItems: 'center',
+        marginBottom: 2,
     },
-    messageBubble: {
-        borderRadius: 16,
+    chatBubble: {
+        maxWidth: '85%',
         paddingHorizontal: 14,
         paddingVertical: 10,
-        maxWidth: '85%',
+        borderRadius: 16,
     },
     userBubble: {
         borderBottomRightRadius: 4,
@@ -898,13 +1196,43 @@ const styles = StyleSheet.create({
         borderBottomLeftRadius: 4,
         borderWidth: 1,
     },
-    messageText: {
+    chatBubbleText: {
         fontSize: 13,
         lineHeight: 19,
+        fontWeight: '500',
     },
-    messageTime: {
+    chatTimestamp: {
         fontSize: 10,
         marginTop: 4,
         alignSelf: 'flex-end',
+    },
+    chatInputBarRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    chatInputField: {
+        flex: 1,
+        height: 44,
+        borderRadius: 22,
+        paddingHorizontal: 16,
+        borderWidth: 1,
+        fontSize: 14,
+        fontWeight: '500',
+        ...Platform.select({
+            web: { outlineStyle: 'none' },
+            default: {}
+        })
+    } as any,
+    chatSubmitBtn: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    hint: {
+        fontSize: 12,
+        lineHeight: 18,
     },
 });

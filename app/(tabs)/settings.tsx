@@ -1,5 +1,9 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Share, Switch, TextInput, ActivityIndicator, Modal, FlatList, KeyboardAvoidingView, Pressable, Platform } from 'react-native';
+import {
+    View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Share,
+    Switch, TextInput, ActivityIndicator, Modal, FlatList, KeyboardAvoidingView,
+    Pressable, Platform, useWindowDimensions, Image
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColors, Typography } from '../../src/theme/colors';
 import { Logo } from '../../src/components/Logo';
@@ -28,7 +32,9 @@ import {
     Download,
     Upload,
     HelpCircle,
-    FileText
+    FileText,
+    Sparkles,
+    CheckCircle
 } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { format } from 'date-fns';
@@ -39,67 +45,88 @@ import { auth, storage } from '../../src/database/firebaseConfig';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { upsertUserProfile, getUserProfile } from '../../src/database/db';
-import { Image } from 'react-native';
 import { useFinance } from '../../src/context/FinanceContext';
 import { useAuth } from '../../src/context/AuthContext';
 import { useRouter } from 'expo-router';
 import packageJson from '../../package.json';
-const SettingsItem = ({ icon: Icon, label, onPress, color, value = undefined, toggle = false }: any) => {
+import { useTheme } from '../../src/context/ThemeContext';
+
+const SettingsItem = ({
+    icon: Icon,
+    label,
+    subtitle = undefined,
+    badge = undefined,
+    onPress,
+    color,
+    value = undefined,
+    toggle = false,
+    isDestructive = false
+}: any) => {
     const Colors = useThemeColors();
     const [isHovered, setIsHovered] = useState(false);
     const handlePress = () => {
         if (onPress) onPress();
     };
+
     return (
         <Pressable
             style={({ pressed }) => [
                 styles.item,
-                { borderBottomColor: Colors.border },
+                { borderBottomColor: Colors.border + '35' },
                 isHovered ? {
-                    backgroundColor: Colors.surface,
-                    shadowColor: Colors.primary,
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.1,
-                    shadowRadius: 8,
-                    elevation: 3,
-                    transform: [{ translateY: -1 }],
-                    borderBottomColor: 'transparent',
-                    zIndex: 10
+                    backgroundColor: Colors.isDark ? '#ffffff08' : '#00000004',
                 } : undefined,
-                pressed ? { backgroundColor: Colors.primary + '15', transform: [{ scale: 0.99 }] } : undefined,
-                Platform.OS === 'web' ? { transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)' } : undefined
+                pressed ? { backgroundColor: Colors.primary + '12', transform: [{ scale: 0.995 }] } : undefined,
+                Platform.OS === 'web' ? { cursor: 'pointer', transition: 'all 0.15s ease' } : undefined
             ] as any}
             onPress={handlePress}
             onHoverIn={() => setIsHovered(true)}
             onHoverOut={() => setIsHovered(false)}
         >
             <View style={styles.itemLeft}>
-                <View style={[styles.iconBox, { backgroundColor: color + '20' }]}>
-                    <Icon size={20} color={color} />
+                <View style={[styles.iconBox, { backgroundColor: (color || Colors.primary) + '18' }]}>
+                    <Icon size={18} color={color || Colors.primary} />
                 </View>
-                <Text style={[styles.itemLabel, { color: Colors.text }]}>{label}</Text>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={[styles.itemLabel, { color: isDestructive ? Colors.expense : Colors.text }]} numberOfLines={1}>
+                        {label}
+                    </Text>
+                    {subtitle && (
+                        <Text style={[styles.itemSubtitle, { color: Colors.textMuted }]} numberOfLines={1}>
+                            {subtitle}
+                        </Text>
+                    )}
+                </View>
             </View>
-            {toggle ? (
-                <Switch
-                    value={value}
-                    onValueChange={handlePress}
-                    trackColor={{ false: Colors.border, true: Colors.primary }}
-                    thumbColor={Colors.white}
-                />
-            ) : (
-                <ChevronRight size={20} color={Colors.textMuted} />
-            )}
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                {badge && (
+                    <View style={[styles.itemBadge, { backgroundColor: Colors.border + '50' }]}>
+                        <Text style={[styles.itemBadgeText, { color: Colors.textMuted }]}>{badge}</Text>
+                    </View>
+                )}
+                {toggle ? (
+                    <Switch
+                        value={value}
+                        onValueChange={handlePress}
+                        trackColor={{ false: Colors.border, true: Colors.primary }}
+                        thumbColor="#fff"
+                    />
+                ) : (
+                    <ChevronRight size={17} color={Colors.textMuted} />
+                )}
+            </View>
         </Pressable>
     );
 };
-
-import { useTheme } from '../../src/context/ThemeContext';
-
 
 export default function Settings() {
     const Colors = useThemeColors();
     const router = useRouter();
     const insets = useSafeAreaInsets();
+    const { width: windowWidth } = useWindowDimensions();
+    const isDesktop = windowWidth >= 860;
+
     const topScrollPadding = Math.max(insets.top + 12, Platform.OS === 'ios' ? 56 : 16);
     const bottomScrollPadding = Math.max(insets.bottom + 85, 105);
     const { theme, setTheme } = useTheme();
@@ -500,315 +527,384 @@ export default function Settings() {
         }
     };
 
+    const renderProfileSection = () => (
+        <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: Colors.textMuted }]}>Profile</Text>
+            <View style={[styles.card, { backgroundColor: Colors.surface, borderColor: Colors.border, borderWidth: 1, padding: 18 }]}>
+                <View style={styles.profileHeader}>
+                    <TouchableOpacity onPress={handlePickImage} disabled={imageLoading} style={{ position: 'relative' }}>
+                        <View style={[styles.profileIcon, { backgroundColor: Colors.primary + '18' }]}>
+                            {imageLoading ? (
+                                <ActivityIndicator color={Colors.primary} size="small" />
+                            ) : (profilePhoto || user?.photoURL) ? (
+                                Platform.OS === 'web' ? (
+                                    <img
+                                        src={(profilePhoto || user?.photoURL) ?? undefined}
+                                        style={{ width: 60, height: 60, borderRadius: 30, objectFit: 'cover' }}
+                                        referrerPolicy="no-referrer"
+                                        alt="Profile"
+                                    />
+                                ) : (
+                                    <Image
+                                        source={{ uri: (profilePhoto || user?.photoURL) ?? undefined }}
+                                        style={{ width: 60, height: 60, borderRadius: 30 }}
+                                    />
+                                )
+                            ) : (
+                                <User color={Colors.primary} size={30} />
+                            )}
+                            <View style={[styles.avatarEditBadge, { backgroundColor: Colors.primary, borderColor: Colors.surface }]}>
+                                <Edit3 size={10} color="#fff" />
+                            </View>
+                        </View>
+                    </TouchableOpacity>
+
+                    <View style={styles.profileInfo}>
+                        {isEditing ? (
+                            <View style={{ gap: 8 }}>
+                                <TextInput
+                                    style={[styles.nameInput, {
+                                        color: Colors.text,
+                                        backgroundColor: Colors.background,
+                                        borderColor: Colors.border,
+                                        outlineStyle: 'none'
+                                    } as any]}
+                                    value={name}
+                                    onChangeText={setName}
+                                    autoFocus
+                                    placeholder="Your Name"
+                                    placeholderTextColor={Colors.textMuted}
+                                />
+                                <View style={{ flexDirection: 'row', gap: 8 }}>
+                                    <TouchableOpacity
+                                        onPress={handleUpdateProfile}
+                                        style={[styles.profileSaveBtn, { backgroundColor: Colors.primary }]}
+                                    >
+                                        {updateLoading ? (
+                                            <ActivityIndicator size="small" color="#fff" />
+                                        ) : (
+                                            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12 }}>Save</Text>
+                                        )}
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        onPress={() => setIsEditing(false)}
+                                        style={[styles.profileCancelBtn, { backgroundColor: Colors.background, borderColor: Colors.border }]}
+                                    >
+                                        <Text style={{ color: Colors.text, fontWeight: '600', fontSize: 12 }}>Cancel</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        ) : (
+                            <View>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                    <Text style={[styles.profileName, { color: Colors.text }]} numberOfLines={1}>
+                                        {user?.displayName || 'Zen User'}
+                                    </Text>
+                                    <View style={[styles.verifiedBadge, { backgroundColor: Colors.income + '18' }]}>
+                                        <Text style={[styles.verifiedBadgeText, { color: Colors.income }]}>Active</Text>
+                                    </View>
+                                </View>
+                                <Text style={[styles.profileEmail, { color: Colors.textMuted }]} numberOfLines={1}>
+                                    {user?.email}
+                                </Text>
+                            </View>
+                        )}
+                    </View>
+
+                    {!isEditing && (
+                        <TouchableOpacity
+                            onPress={() => setIsEditing(true)}
+                            style={[styles.editBtn, { backgroundColor: Colors.background, borderColor: Colors.border }]}
+                            accessibilityLabel="Edit display name"
+                        >
+                            <Edit3 size={15} color={Colors.primary} />
+                        </TouchableOpacity>
+                    )}
+                </View>
+            </View>
+        </View>
+    );
+
+    const renderGeneralSection = () => (
+        <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: Colors.textMuted }]}>General & Appearance</Text>
+            <View style={[styles.card, { backgroundColor: Colors.surface, borderColor: Colors.border, borderWidth: 1 }]}>
+                <SettingsItem
+                    icon={theme === 'dark' ? Moon : Sun}
+                    label="Dark Mode"
+                    subtitle={theme === 'dark' ? "Obsidian dark theme active" : "Crisp daytime theme active"}
+                    color="#F59E0B"
+                    toggle={false}
+                    badge={theme === 'dark' ? "Dark" : "Light"}
+                    onPress={toggleTheme}
+                />
+                <SettingsItem
+                    icon={Share2}
+                    label="Share SpendZen App"
+                    subtitle="Invite friends to track their financial zen"
+                    color={Colors.primary}
+                    onPress={handleShare}
+                />
+            </View>
+        </View>
+    );
+
+    const renderAccountSection = () => (
+        <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: Colors.textMuted }]}>Financial Accounts & Strategy</Text>
+            <View style={[styles.card, { backgroundColor: Colors.surface, borderColor: Colors.border, borderWidth: 1 }]}>
+                <SettingsItem
+                    icon={Landmark}
+                    label="Manage Accounts & Cards"
+                    subtitle="Configure bank balances, credit limits & cash"
+                    color={Colors.primary}
+                    onPress={() => router.push('/manage-accounts')}
+                />
+                <SettingsItem
+                    icon={TrendingUp}
+                    label="Next Month Planning"
+                    subtitle={`Total planned: ₹${Math.round(totalProjectedAmount).toLocaleString('en-IN')}`}
+                    color="#8B5CF6"
+                    onPress={() => setShowProjectedModal(true)}
+                />
+                <SettingsItem
+                    icon={CreditCard}
+                    label="Card Usage Strategy"
+                    subtitle="40% Safe Limit & statement cycle optimizer"
+                    color="#3B82F6"
+                    onPress={() => setShowStrategyModal(true)}
+                />
+                <SettingsItem
+                    icon={LogOut}
+                    label="Logout"
+                    subtitle="Sign out from this device"
+                    color={Colors.expense}
+                    isDestructive={true}
+                    onPress={handleLogout}
+                />
+            </View>
+        </View>
+    );
+
+    const renderPerformanceSection = () => (
+        <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: Colors.textMuted }]}>Performance & Cloud Backup</Text>
+            <View style={[styles.card, { backgroundColor: Colors.surface, borderColor: Colors.border, borderWidth: 1 }]}>
+                <View style={[styles.actionRowItem, { borderBottomColor: Colors.border + '40' }]}>
+                    <View style={styles.itemLeft}>
+                        <View style={[styles.iconBox, { backgroundColor: Colors.primary + '18' }]}>
+                            <Zap size={18} color={Colors.primary} />
+                        </View>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text style={[styles.itemLabel, { color: Colors.text }]} numberOfLines={1}>App Speed Optimizer</Text>
+                            <Text style={[styles.itemSubtitle, { color: Colors.textMuted }]} numberOfLines={1}>Compacts local storage & purges cache</Text>
+                        </View>
+                    </View>
+                    <TouchableOpacity
+                        onPress={handleOptimizePerformance}
+                        disabled={isOptimizing}
+                        style={[styles.smallActionBtn, { backgroundColor: Colors.primary }]}
+                    >
+                        {isOptimizing ? (
+                            <ActivityIndicator size="small" color="#fff" />
+                        ) : (
+                            <Text style={styles.smallActionBtnText}>Optimize</Text>
+                        )}
+                    </TouchableOpacity>
+                </View>
+
+                <View style={[styles.actionRowItem, { borderBottomColor: Colors.border + '40' }]}>
+                    <View style={styles.itemLeft}>
+                        <View style={[styles.iconBox, { backgroundColor: Colors.income + '18' }]}>
+                            <Download size={18} color={Colors.income} />
+                        </View>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text style={[styles.itemLabel, { color: Colors.text }]} numberOfLines={1}>Export Backup (.JSON)</Text>
+                            <Text style={[styles.itemSubtitle, { color: Colors.textMuted }]} numberOfLines={1}>Save all records offline to a file</Text>
+                        </View>
+                    </View>
+                    <TouchableOpacity
+                        onPress={handleExportJSONBackup}
+                        style={[styles.smallActionBtn, { backgroundColor: Colors.income }]}
+                    >
+                        <Text style={styles.smallActionBtnText}>Export</Text>
+                    </TouchableOpacity>
+                </View>
+
+                <View style={[styles.actionRowItem, { borderBottomWidth: 0 }]}>
+                    <View style={styles.itemLeft}>
+                        <View style={[styles.iconBox, { backgroundColor: '#F59E0B18' }]}>
+                            <Upload size={18} color="#F59E0B" />
+                        </View>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text style={[styles.itemLabel, { color: Colors.text }]} numberOfLines={1}>Restore Backup (.JSON)</Text>
+                            <Text style={[styles.itemSubtitle, { color: Colors.textMuted }]} numberOfLines={1}>Restore transactions from file</Text>
+                        </View>
+                    </View>
+                    <TouchableOpacity
+                        onPress={handleImportJSONBackup}
+                        style={[styles.smallActionBtn, { backgroundColor: '#F59E0B' }]}
+                    >
+                        <Text style={styles.smallActionBtnText}>Restore</Text>
+                    </TouchableOpacity>
+                </View>
+            </View>
+        </View>
+    );
+
+    const renderPrivacySection = () => (
+        <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: Colors.textMuted }]}>Privacy & History Automation</Text>
+            <View style={[styles.card, { backgroundColor: Colors.surface, borderColor: Colors.border, borderWidth: 1 }]}>
+                <View style={[styles.actionRowItem, { borderBottomColor: Colors.border + '40' }]}>
+                    <View style={styles.itemLeft}>
+                        <View style={[styles.iconBox, { backgroundColor: Colors.primary + '18' }]}>
+                            <Shield size={18} color={Colors.primary} />
+                        </View>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text style={[styles.itemLabel, { color: Colors.text }]}>Auto-Clear History</Text>
+                            <Text style={[styles.itemSubtitle, { color: Colors.textMuted }]}>
+                                {historyRetention === 'all' ? 'Never auto-delete' : `Auto-purge older than ${historyRetention === '3months' ? '3' : '6'} months`}
+                            </Text>
+                        </View>
+                    </View>
+                    <TouchableOpacity
+                        onPress={handleUpdateRetention}
+                        style={[styles.smallOutlineBtn, { borderColor: Colors.primary }]}
+                    >
+                        <Text style={[styles.smallOutlineBtnText, { color: Colors.primary }]}>Change</Text>
+                    </TouchableOpacity>
+                </View>
+
+                <View style={[styles.actionRowItem, { borderBottomWidth: 0 }]}>
+                    <View style={styles.itemLeft}>
+                        <View style={[styles.iconBox, { backgroundColor: Colors.expense + '18' }]}>
+                            <Trash2 size={18} color={Colors.expense} />
+                        </View>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text style={[styles.itemLabel, { color: Colors.text }]}>Manual Cleanup</Text>
+                            <Text style={[styles.itemSubtitle, { color: Colors.textMuted }]}>One-time purge before selected date</Text>
+                        </View>
+                    </View>
+                    <TouchableOpacity
+                        onPress={() => setShowCleanupModal(true)}
+                        style={[styles.smallOutlineBtn, { borderColor: Colors.expense }]}
+                    >
+                        <Text style={[styles.smallOutlineBtnText, { color: Colors.expense }]}>Select Date</Text>
+                    </TouchableOpacity>
+                </View>
+            </View>
+        </View>
+    );
+
+    const renderDataManagementSection = () => (
+        <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: Colors.expense }]}>Data Management (Danger Zone)</Text>
+            <View style={[styles.card, { backgroundColor: Colors.surface, borderColor: Colors.expense + '30', borderWidth: 1 }]}>
+                <SettingsItem
+                    icon={Trash2}
+                    label="Clear This Month's Data"
+                    subtitle="Deletes records created in current month"
+                    color={Colors.expense}
+                    isDestructive={true}
+                    onPress={() => handleClearData('month')}
+                />
+                <SettingsItem
+                    icon={Trash2}
+                    label="Clear This Year's Data"
+                    subtitle="Deletes records created in current year"
+                    color={Colors.expense}
+                    isDestructive={true}
+                    onPress={() => handleClearData('year')}
+                />
+                <SettingsItem
+                    icon={Shield}
+                    label="Reset All Transactions"
+                    subtitle="Permanently clears all historical transactions"
+                    color={Colors.expense}
+                    isDestructive={true}
+                    onPress={() => handleClearData('all')}
+                />
+            </View>
+        </View>
+    );
+
+    const renderLegalAndAboutSection = () => (
+        <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: Colors.textMuted }]}>Legal, Help & About</Text>
+            <View style={[styles.card, { backgroundColor: Colors.surface, borderColor: Colors.border, borderWidth: 1 }]}>
+                <SettingsItem
+                    icon={HelpCircle}
+                    label="Frequently Asked Questions (FAQ)"
+                    subtitle="Guides, calculations & account management"
+                    color={Colors.primary}
+                    onPress={() => setShowFaqModal(true)}
+                />
+                <SettingsItem
+                    icon={FileText}
+                    label="Terms & Conditions"
+                    subtitle="Privacy, local encryption & usage terms"
+                    color={Colors.primary}
+                    onPress={() => setShowTermsModal(true)}
+                />
+                <SettingsItem
+                    icon={Info}
+                    label={`SpendZen Version ${packageJson.version}`}
+                    subtitle="Zen Build • Production Ready"
+                    color={Colors.textMuted}
+                    badge="v1.0.0"
+                    onPress={() => {}}
+                />
+            </View>
+        </View>
+    );
+
     return (
         <ScrollView
             style={[styles.container, { backgroundColor: Colors.background }]}
-            contentContainerStyle={{ paddingTop: topScrollPadding, paddingBottom: bottomScrollPadding }}
+            contentContainerStyle={{
+                paddingTop: topScrollPadding,
+                paddingBottom: bottomScrollPadding,
+                maxWidth: isDesktop ? 1040 : 640,
+                width: '100%',
+                alignSelf: 'center',
+                paddingHorizontal: 16
+            }}
             showsVerticalScrollIndicator={false}
         >
             <View style={styles.logoSection}>
-                <Logo size={60} horizontal={false} />
+                <Logo size={58} horizontal={false} />
             </View>
 
-            <View style={styles.section}>
-                <Text style={[styles.sectionTitle, { color: Colors.textMuted }]}>Profile</Text>
-                <View style={[styles.card, { backgroundColor: Colors.surface, padding: 20 }]}>
-                    <View style={styles.profileHeader}>
-                        <TouchableOpacity onPress={handlePickImage} disabled={imageLoading}>
-                            <View style={[styles.profileIcon, { backgroundColor: Colors.primary + '20' }]}>
-                                {imageLoading ? (
-                                    <ActivityIndicator color={Colors.primary} size="small" />
-                                ) : (profilePhoto || user?.photoURL) ? (
-                                    Platform.OS === 'web' ? (
-                                        <img
-                                            src={(profilePhoto || user?.photoURL) ?? undefined}
-                                            style={{ width: 64, height: 64, borderRadius: 32, objectFit: 'cover' }}
-                                            referrerPolicy="no-referrer"
-                                            alt="Profile"
-                                        />
-                                    ) : (
-                                        <Image
-                                            source={{ uri: (profilePhoto || user?.photoURL) ?? undefined }}
-                                            style={{ width: 64, height: 64, borderRadius: 32 }}
-                                        />
-                                    )
-                                ) : (
-                                    <User color={Colors.primary} size={32} />
-                                )}
-                                <View style={{ position: 'absolute', bottom: -4, right: -4, backgroundColor: Colors.primary, borderRadius: 12, padding: 4, borderWidth: 2, borderColor: Colors.surface }}>
-                                    <Edit3 size={10} color="#fff" />
-                                </View>
-                            </View>
-                        </TouchableOpacity>
-                        <View style={styles.profileInfo}>
-                            {isEditing ? (
-                                <View style={{ gap: 10 }}>
-                                    <TextInput
-                                        style={[styles.nameInput, {
-                                            color: Colors.text,
-                                            backgroundColor: Colors.background,
-                                            borderColor: Colors.border,
-                                            outlineStyle: 'none'
-                                        } as any]}
-                                        value={name}
-                                        onChangeText={setName}
-                                        autoFocus
-                                        placeholder="Your Name"
-                                        placeholderTextColor={Colors.textMuted}
-                                    />
-                                    <View style={{ flexDirection: 'row', gap: 8 }}>
-                                        <TouchableOpacity
-                                            onPress={handleUpdateProfile}
-                                            style={{ backgroundColor: Colors.primary, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8, flex: 1, alignItems: 'center' }}
-                                        >
-                                            {updateLoading ? (
-                                                <ActivityIndicator size="small" color="#fff" />
-                                            ) : (
-                                                <Text style={{ color: '#fff', fontWeight: '600', fontSize: 13 }}>Save Changes</Text>
-                                            )}
-                                        </TouchableOpacity>
-                                        <TouchableOpacity
-                                            onPress={() => setIsEditing(false)}
-                                            style={{ backgroundColor: Colors.background, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8, flex: 1, alignItems: 'center', borderWidth: 1, borderColor: Colors.border }}
-                                        >
-                                            <Text style={{ color: Colors.text, fontWeight: '600', fontSize: 13 }}>Cancel</Text>
-                                        </TouchableOpacity>
-                                    </View>
-                                </View>
-                            ) : (
-                                <>
-                                    <Text style={[styles.profileName, { color: Colors.text }]}>
-                                        {user?.displayName || 'Zen User'}
-                                    </Text>
-                                    <Text style={[styles.profileEmail, { color: Colors.textMuted }]}>
-                                        {user?.email}
-                                    </Text>
-                                </>
-                            )}
-                        </View>
-                        {!isEditing && (
-                            <TouchableOpacity
-                                onPress={() => setIsEditing(true)}
-                                style={[styles.editBtn, { backgroundColor: Colors.background }]}
-                            >
-                                <Edit3 size={18} color={Colors.primary} />
-                            </TouchableOpacity>
-                        )}
+            {isDesktop ? (
+                <View style={styles.desktopGrid}>
+                    <View style={styles.gridCol}>
+                        {renderProfileSection()}
+                        {renderGeneralSection()}
+                        {renderAccountSection()}
+                    </View>
+                    <View style={styles.gridCol}>
+                        {renderPerformanceSection()}
+                        {renderPrivacySection()}
+                        {renderDataManagementSection()}
+                        {renderLegalAndAboutSection()}
                     </View>
                 </View>
-            </View>
-
-            <View style={styles.section}>
-                <Text style={[styles.sectionTitle, { color: Colors.textMuted }]}>General</Text>
-                <View style={[styles.card, { backgroundColor: Colors.surface }]}>
-                    <SettingsItem
-                        icon={Share2}
-                        label="Share App"
-                        color={Colors.primary}
-                        onPress={handleShare}
-                    />
-                    <SettingsItem
-                        icon={theme === 'dark' ? Moon : Sun}
-                        label="Dark Mode"
-                        color="#fbbf24"
-                        toggle={false}
-                        value={theme === 'light'}
-                        onPress={toggleTheme}
-                    />
+            ) : (
+                <View style={styles.mobileFlow}>
+                    {renderProfileSection()}
+                    {renderGeneralSection()}
+                    {renderAccountSection()}
+                    {renderPerformanceSection()}
+                    {renderPrivacySection()}
+                    {renderDataManagementSection()}
+                    {renderLegalAndAboutSection()}
                 </View>
-            </View>
+            )}
 
-            <View style={styles.section}>
-                <Text style={[styles.sectionTitle, { color: Colors.textMuted }]}>Account</Text>
-                <View style={[styles.card, { backgroundColor: Colors.surface }]}>
-                    <SettingsItem
-                        icon={Landmark}
-                        label="Manage Accounts & Cards"
-                        color={Colors.primary}
-                        onPress={() => router.push('/manage-accounts')}
-                    />
-                    <SettingsItem
-                        icon={TrendingUp}
-                        label={`Next Month Planning: ₹${Math.round(totalProjectedAmount).toLocaleString()}`}
-                        color={Colors.primary}
-                        onPress={() => setShowProjectedModal(true)}
-                    />
-                    <SettingsItem
-                        icon={CreditCard}
-                        label="Card Usage Strategy"
-                        color={Colors.primary}
-                        onPress={() => setShowStrategyModal(true)}
-                    />
-                    <SettingsItem
-                        icon={LogOut}
-                        label="Logout"
-                        color={Colors.expense}
-                        onPress={handleLogout}
-                    />
-                </View>
-            </View>
-
-            <View style={styles.section}>
-                <Text style={[styles.sectionTitle, { color: Colors.textMuted }]}>Data Management</Text>
-                <View style={[styles.card, { backgroundColor: Colors.surface }]}>
-                    <SettingsItem
-                        icon={Trash2}
-                        label="Clear This Month"
-                        color={Colors.expense}
-                        onPress={() => handleClearData('month')}
-                    />
-                    <SettingsItem
-                        icon={Trash2}
-                        label="Clear This Year"
-                        color={Colors.expense}
-                        onPress={() => handleClearData('year')}
-                    />
-                    <SettingsItem
-                        icon={Shield}
-                        label="Clear All Data"
-                        color={Colors.expense}
-                        onPress={() => handleClearData('all')}
-                    />
-                </View>
-            </View>
-
-            <View style={styles.section}>
-                <Text style={[styles.sectionTitle, { color: Colors.textMuted }]}>Privacy & History</Text>
-                <View style={[styles.card, { backgroundColor: Colors.surface }]}>
-                    <View style={[styles.item, { borderBottomColor: Colors.border, paddingVertical: 12 }]}>
-                        <View style={styles.itemLeft}>
-                            <View style={[styles.iconBox, { backgroundColor: Colors.primary + '20' }]}>
-                                <Shield size={20} color={Colors.primary} />
-                            </View>
-                            <View>
-                                <Text style={[styles.itemLabel, { color: Colors.text }]}>Auto-Clear History</Text>
-                                <Text style={{ fontSize: 12, color: Colors.textMuted }}>Currently: {historyRetention === 'all' ? 'Never delete' : `Delete after ${historyRetention === '3months' ? '3' : '6'} months`}</Text>
-                            </View>
-                        </View>
-                        <TouchableOpacity
-                            onPress={handleUpdateRetention}
-                            style={{ backgroundColor: Colors.primary, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 }}
-                        >
-                            <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>Change</Text>
-                        </TouchableOpacity>
-                    </View>
-                    <View style={[styles.item, { borderBottomColor: Colors.border, paddingVertical: 12 }]}>
-                        <View style={styles.itemLeft}>
-                            <View style={[styles.iconBox, { backgroundColor: Colors.expense + '20' }]}>
-                                <Trash2 size={20} color={Colors.expense} />
-                            </View>
-                            <View>
-                                <Text style={[styles.itemLabel, { color: Colors.text }]}>Manual Cleanup</Text>
-                                <Text style={{ fontSize: 12, color: Colors.textMuted }}>One-time removal of old data</Text>
-                            </View>
-                        </View>
-                        <TouchableOpacity
-                            onPress={() => setShowCleanupModal(true)}
-                            style={{ backgroundColor: Colors.expense, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 }}
-                        >
-                            <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>Select Date</Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            </View>
-
-            {/* Performance & Data Optimization Section */}
-            <View style={styles.section}>
-                <Text style={[styles.sectionTitle, { color: Colors.textMuted }]}>Performance & Data Optimization</Text>
-                <View style={[styles.card, { backgroundColor: Colors.surface }]}>
-                    <View style={[styles.item, { borderBottomColor: Colors.border, paddingVertical: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 10, gap: 12 }}>
-                            <View style={[styles.iconBox, { backgroundColor: Colors.primary + '20' }]}>
-                                <Zap size={20} color={Colors.primary} />
-                            </View>
-                            <View style={{ flex: 1 }}>
-                                <Text style={[styles.itemLabel, { color: Colors.text }]} numberOfLines={1}>App Speed Optimizer</Text>
-                                <Text style={{ fontSize: 11, color: Colors.textMuted }} numberOfLines={1}>Compacts local storage & purges cache</Text>
-                            </View>
-                        </View>
-                        <TouchableOpacity
-                            onPress={handleOptimizePerformance}
-                            disabled={isOptimizing}
-                            style={{ backgroundColor: Colors.primary, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, minWidth: 75, alignItems: 'center' }}
-                        >
-                            {isOptimizing ? (
-                                <ActivityIndicator size="small" color="#fff" />
-                            ) : (
-                                <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>Optimize</Text>
-                            )}
-                        </TouchableOpacity>
-                    </View>
-
-                    <View style={[styles.item, { borderBottomColor: Colors.border, paddingVertical: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 10, gap: 12 }}>
-                            <View style={[styles.iconBox, { backgroundColor: Colors.income + '20' }]}>
-                                <Download size={20} color={Colors.income} />
-                            </View>
-                            <View style={{ flex: 1 }}>
-                                <Text style={[styles.itemLabel, { color: Colors.text }]} numberOfLines={1}>Export Backup (.JSON)</Text>
-                                <Text style={{ fontSize: 11, color: Colors.textMuted }} numberOfLines={1}>Save all transactions offline</Text>
-                            </View>
-                        </View>
-                        <TouchableOpacity
-                            onPress={handleExportJSONBackup}
-                            style={{ backgroundColor: Colors.income, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, minWidth: 75, alignItems: 'center' }}
-                        >
-                            <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>Export</Text>
-                        </TouchableOpacity>
-                    </View>
-
-                    <View style={[styles.item, { borderBottomColor: Colors.border, paddingVertical: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 10, gap: 12 }}>
-                            <View style={[styles.iconBox, { backgroundColor: '#F59E0B20' }]}>
-                                <Upload size={20} color="#F59E0B" />
-                            </View>
-                            <View style={{ flex: 1 }}>
-                                <Text style={[styles.itemLabel, { color: Colors.text }]} numberOfLines={1}>Restore Backup (.JSON)</Text>
-                                <Text style={{ fontSize: 11, color: Colors.textMuted }} numberOfLines={1}>Restore transactions from file</Text>
-                            </View>
-                        </View>
-                        <TouchableOpacity
-                            onPress={handleImportJSONBackup}
-                            style={{ backgroundColor: '#F59E0B', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, minWidth: 75, alignItems: 'center' }}
-                        >
-                            <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>Restore</Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            </View>
-
-            <View style={styles.section}>
-                <Text style={[styles.sectionTitle, { color: Colors.textMuted }]}>Legal & Help</Text>
-                <View style={[styles.card, { backgroundColor: Colors.surface }]}>
-                    <SettingsItem
-                        icon={HelpCircle}
-                        label="Frequently Asked Questions (FAQ)"
-                        color={Colors.primary}
-                        onPress={() => setShowFaqModal(true)}
-                    />
-                    <SettingsItem
-                        icon={FileText}
-                        label="Terms & Conditions"
-                        color={Colors.primary}
-                        onPress={() => setShowTermsModal(true)}
-                    />
-                </View>
-            </View>
-
-            <View style={styles.section}>
-                <Text style={[styles.sectionTitle, { color: Colors.textMuted }]}>About</Text>
-                <View style={[styles.card, { backgroundColor: Colors.surface }]}>
-                    <SettingsItem
-                        icon={Info}
-                        label={`Version ${packageJson.version} (Spend Zen)`}
-                        color={Colors.textMuted}
-                        onPress={() => { }}
-                    />
-                </View>
-            </View>
-
-            <View style={{ alignItems: 'center', marginTop: 20 }}>
-                <Text style={{ color: Colors.textMuted, fontSize: 12 }}>Made with ❤️ by Arun</Text>
+            <View style={styles.footerSection}>
+                <Text style={{ color: Colors.textMuted, fontSize: 12 }}>SpendZen • Financial Mindfulness</Text>
+                <Text style={{ color: Colors.textMuted, fontSize: 11, marginTop: 3 }}>Made with ❤️ by Arun</Text>
             </View>
 
             {/* Projected Expenses Modal */}
@@ -1380,38 +1476,61 @@ export default function Settings() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        padding: 16,
+    },
+    desktopGrid: {
+        flexDirection: 'row',
+        gap: 20,
+        alignItems: 'flex-start',
+    },
+    gridCol: {
+        flex: 1,
+        minWidth: 0,
+    },
+    mobileFlow: {
+        width: '100%',
+    },
+    footerSection: {
+        alignItems: 'center',
+        marginTop: 24,
+        marginBottom: 12,
     },
     section: {
-        marginBottom: 24,
+        marginBottom: 20,
     },
     logoSection: {
         alignItems: 'center',
-        marginTop: 20,
+        marginTop: 12,
         marginBottom: 24,
     },
     sectionTitle: {
-        ...Typography.caption,
+        fontSize: 11,
         textTransform: 'uppercase',
-        letterSpacing: 1,
+        letterSpacing: 0.8,
         marginBottom: 8,
         marginLeft: 4,
-        fontWeight: '600',
+        fontWeight: '700',
     },
     card: {
         borderRadius: 16,
         overflow: 'hidden',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.03,
+        shadowRadius: 8,
+        elevation: 2,
     },
     item: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: 16,
+        padding: 14,
         borderBottomWidth: 1,
     },
     itemLeft: {
         flexDirection: 'row',
         alignItems: 'center',
+        flex: 1,
+        marginRight: 10,
     },
     iconBox: {
         width: 36,
@@ -1422,8 +1541,59 @@ const styles = StyleSheet.create({
         marginRight: 12,
     },
     itemLabel: {
-        fontSize: 16,
-        fontWeight: '500',
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    itemSubtitle: {
+        fontSize: 11,
+        marginTop: 2,
+    },
+    itemBadge: {
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 6,
+    },
+    itemBadgeText: {
+        fontSize: 10.5,
+        fontWeight: '700',
+    },
+    actionRowItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: 14,
+        borderBottomWidth: 1,
+    },
+    smallActionBtn: {
+        paddingHorizontal: 14,
+        paddingVertical: 7,
+        borderRadius: 8,
+        minWidth: 72,
+        alignItems: 'center',
+        ...Platform.select({
+            web: { cursor: 'pointer' },
+            default: {}
+        })
+    } as any,
+    smallActionBtnText: {
+        color: '#fff',
+        fontSize: 11.5,
+        fontWeight: '700',
+    },
+    smallOutlineBtn: {
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 8,
+        borderWidth: 1,
+        alignItems: 'center',
+        ...Platform.select({
+            web: { cursor: 'pointer' },
+            default: {}
+        })
+    } as any,
+    smallOutlineBtnText: {
+        fontSize: 11.5,
+        fontWeight: '700',
     },
     // Profile Styles
     profileHeader: {
@@ -1431,35 +1601,71 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     profileIcon: {
-        width: 64,
-        height: 64,
-        borderRadius: 32,
+        width: 60,
+        height: 60,
+        borderRadius: 30,
         justifyContent: 'center',
         alignItems: 'center',
-        marginRight: 16,
+        marginRight: 14,
+    },
+    avatarEditBadge: {
+        position: 'absolute',
+        bottom: -2,
+        right: -2,
+        borderRadius: 12,
+        padding: 4,
+        borderWidth: 2,
     },
     profileInfo: {
         flex: 1,
+        minWidth: 0,
     },
     profileName: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        marginBottom: 2,
+        fontSize: 17,
+        fontWeight: '700',
     },
     profileEmail: {
-        fontSize: 14,
+        fontSize: 12.5,
+        marginTop: 2,
+    },
+    verifiedBadge: {
+        paddingHorizontal: 7,
+        paddingVertical: 2,
+        borderRadius: 6,
+    },
+    verifiedBadgeText: {
+        fontSize: 9.5,
+        fontWeight: '700',
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
     },
     editBtn: {
         padding: 8,
         borderRadius: 10,
+        borderWidth: 1,
     },
     nameInput: {
-        fontSize: 16,
+        fontSize: 14,
         fontWeight: '600',
-        paddingVertical: 10,
-        paddingHorizontal: 14,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
         borderWidth: 1,
-        borderRadius: 10,
+        borderRadius: 8,
+    },
+    profileSaveBtn: {
+        paddingHorizontal: 14,
+        paddingVertical: 7,
+        borderRadius: 8,
+        flex: 1,
+        alignItems: 'center',
+    },
+    profileCancelBtn: {
+        paddingHorizontal: 14,
+        paddingVertical: 7,
+        borderRadius: 8,
+        flex: 1,
+        alignItems: 'center',
+        borderWidth: 1,
     },
     // Modal Styles
     modalOverlay: {

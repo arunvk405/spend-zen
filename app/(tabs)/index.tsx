@@ -654,7 +654,7 @@ export default function HomeDashboard() {
             </Text>
 
             <View style={s.dualAccountsRow}>
-                <View style={[s.dualAccountCard, { backgroundColor: Colors.background, borderColor: Colors.border }]}>
+                <View style={[s.dualAccountCard, { backgroundColor: Colors.surfaceElevated, borderColor: Colors.border }]}>
                     <View style={[s.accountBadgeIcon, { backgroundColor: Colors.income + '18' }]}>
                         <Landmark color={Colors.income} size={15} />
                     </View>
@@ -668,7 +668,7 @@ export default function HomeDashboard() {
                     </View>
                 </View>
 
-                <View style={[s.dualAccountCard, { backgroundColor: Colors.background, borderColor: Colors.border }]}>
+                <View style={[s.dualAccountCard, { backgroundColor: Colors.surfaceElevated, borderColor: Colors.border }]}>
                     <View style={[s.accountBadgeIcon, { backgroundColor: Colors.primary + '18' }]}>
                         <Wallet color={Colors.primary} size={15} />
                     </View>
@@ -683,7 +683,7 @@ export default function HomeDashboard() {
                 </View>
             </View>
 
-            <View style={[s.monthlyFlowStrip, { backgroundColor: Colors.background, borderColor: Colors.border }]}>
+            <View style={[s.monthlyFlowStrip, { backgroundColor: Colors.surfaceElevated, borderColor: Colors.border }]}>
                 <View style={s.monthlyFlowItem}>
                     <Text style={[s.monthlyFlowLabel, { color: Colors.textMuted }]}>
                         {format(new Date(), 'MMM')} INFLOW
@@ -717,7 +717,7 @@ export default function HomeDashboard() {
             </View>
 
             {totalMasterBudget > 0 && (
-                <View style={[s.budgetProgressBarContainer, { backgroundColor: Colors.background, borderColor: Colors.border }]}>
+                <View style={[s.budgetProgressBarContainer, { backgroundColor: Colors.surfaceElevated, borderColor: Colors.border }]}>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                         <Text style={[s.budgetBarHeaderLabel, { color: Colors.text }]}>Monthly Budget Used</Text>
                         <Text style={[
@@ -777,7 +777,7 @@ export default function HomeDashboard() {
 
                 <View style={{ gap: 8 }}>
                     {upcomingBillsDue.map(bill => (
-                        <View key={`alert-${bill.id}`} style={[s.billAlertItem, { backgroundColor: Colors.background, borderColor: Colors.border }]}>
+                        <View key={`alert-${bill.id}`} style={[s.billAlertItem, { backgroundColor: Colors.surfaceElevated, borderColor: Colors.border }]}>
                             <View style={{ flex: 1, marginRight: 8 }}>
                                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                                     <Text style={[s.billAlertName, { color: Colors.text }]}>{bill.name}</Text>

@@ -6,17 +6,19 @@ const Palette = {
     light: {
         background: '#f8fafc', // Slate 50
         surface: '#ffffff', // White
-        text: '#0f172a', // Slate 900
+        surfaceElevated: '#f1f5f9', // Slate 100
+        text: '#000000ff', // Slate 900
         textMuted: '#64748b', // Slate 500
         border: '#e2e8f0', // Slate 200
     },
-    // Dark Defaults
+    // Dark Defaults - Pure Neutral Monochrome (100% Zero Blue Tint)
     dark: {
-        background: '#0f172a', // Slate 900
-        surface: '#1e293b', // Slate 800
-        text: '#f8fafc', // Slate 50
-        textMuted: '#94a3b8', // Slate 400
-        border: '#334155', // Slate 700
+        background: '#000000', // Pure Pitch Black Canvas
+        surface: '#131313', // Neutral Dark Surface
+        surfaceElevated: '#1a1a1a', // Neutral Elevated Sub-surface
+        text: '#ffffff', // 100% Pure Crisp White
+        textMuted: '#a3a3a3', // Neutral High-Legibility Gray
+        border: '#242424', // Neutral Crisp Border
     }
 };
 

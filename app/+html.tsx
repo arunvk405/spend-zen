@@ -34,7 +34,7 @@ export default function Root({ children }: PropsWithChildren) {
         <meta name="apple-mobile-web-app-title" content="Spend Zen" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-        <meta name="theme-color" content="#1e293b" media="(prefers-color-scheme: dark)" />
+        <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
 
         <ScrollViewStyleReset />
 
@@ -78,8 +78,8 @@ export default function Root({ children }: PropsWithChildren) {
           }
 
           @media (prefers-color-scheme: dark) {
-            html, body { background-color: #1e293b; }
-            #root { background-color: #0f172a; }
+            html, body { background-color: #000000; }
+            #root { background-color: #000000; }
           }
         ` }} />
 
