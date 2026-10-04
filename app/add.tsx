@@ -36,8 +36,10 @@ import {
     Pencil,
     Trash2,
     Calendar as CalendarIcon,
-    RotateCcw
+    RotateCcw,
+    Calculator as CalcIcon
 } from 'lucide-react-native';
+import { useCalculator } from '../src/context/CalculatorContext';
 
 const IconRenderer = ({ name, color, size = 24 }: { name: string, color: string, size?: number }) => {
     switch (name) {
@@ -83,6 +85,7 @@ export default function AddTransaction() {
         creditCards,
         cashAccountName
     } = useFinance();
+    const { openCalculator } = useCalculator();
     const router = useRouter();
     const params = useLocalSearchParams();
     const editId = params.id as string;
@@ -401,7 +404,19 @@ export default function AddTransaction() {
 
                 {/* Amount Input */}
                 <View style={styles.card}>
-                    <Text style={[styles.label, { color: Colors.textMuted }]}>Amount</Text>
+                    <View style={styles.amountLabelRow}>
+                        <Text style={[styles.label, { color: Colors.textMuted, marginBottom: 0 }]}>Amount</Text>
+                        <TouchableOpacity
+                            activeOpacity={0.7}
+                            style={[styles.quickCalcTrigger, { backgroundColor: Colors.primary + '14', borderColor: Colors.primary + '30' }]}
+                            onPress={() => openCalculator((resultVal) => {
+                                setAmount(String(resultVal));
+                            })}
+                        >
+                            <CalcIcon size={14} color={Colors.primary} strokeWidth={2.4} />
+                            <Text style={[styles.quickCalcText, { color: Colors.primary }]}>Calculate</Text>
+                        </TouchableOpacity>
+                    </View>
                     <View style={[styles.amountInputContainer, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
                         <Text style={[styles.currency, { color: Colors.textMuted }]}>₹</Text>
                         <TextInput
@@ -817,5 +832,24 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
         borderRadius: 16,
         borderWidth: 1,
+    },
+    amountLabelRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    quickCalcTrigger: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 5,
+        paddingVertical: 4,
+        paddingHorizontal: 9,
+        borderRadius: 8,
+        borderWidth: 1,
+    },
+    quickCalcText: {
+        fontSize: 12,
+        fontWeight: '700',
     }
 });

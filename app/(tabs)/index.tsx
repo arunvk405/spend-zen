@@ -10,8 +10,9 @@ import {
     Wallet, Landmark, CreditCard, TrendingUp, TrendingDown,
     ArrowRight, Briefcase, RotateCcw, Plus, AlertCircle, Pencil, X,
     PiggyBank, Gift, Laptop, Package, Utensils, Activity, Home, Car, User, PawPrint, FileText, Film,
-    Trash2, CheckCircle, ChevronDown, Bell, Sparkles, ChevronRight, ChevronLeft
+    Trash2, CheckCircle, ChevronDown, Bell, Sparkles, ChevronRight, ChevronLeft, Calculator as CalculatorIcon
 } from 'lucide-react-native';
+import { useCalculator } from '../../src/context/CalculatorContext';
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, TRANSFER_CATEGORIES } from '../../src/models';
 import { format, isSameMonth, isSameYear, parseISO, subWeeks, isSameWeek } from 'date-fns';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -88,6 +89,7 @@ export default function HomeDashboard() {
     const insets = useSafeAreaInsets();
     const { width: windowWidth } = useWindowDimensions();
     const isDesktop = windowWidth >= 860;
+    const { openCalculator } = useCalculator();
 
     const topPadding = Math.max(insets.top + 6, Platform.OS === 'ios' ? 52 : 14);
     const bottomPadding = Math.max(insets.bottom + 85, 105);
@@ -1589,6 +1591,16 @@ export default function HomeDashboard() {
                             <Sparkles size={15} color="#8B5CF6" />
                         </View>
                         <Text style={[s.quickActionLabel, { color: '#8B5CF6' }]}>AI Planner</Text>
+                    </HoverCard>
+
+                    <HoverCard
+                        style={[s.quickActionCard, { backgroundColor: Colors.primary + '12', borderColor: Colors.primary + '25' }]}
+                        onPress={() => openCalculator()}
+                    >
+                        <View style={[s.quickActionIconCircle, { backgroundColor: Colors.primary + '20' }]}>
+                            <CalculatorIcon size={15} color={Colors.primary} />
+                        </View>
+                        <Text style={[s.quickActionLabel, { color: Colors.primary }]}>Calc</Text>
                     </HoverCard>
                 </View>
 

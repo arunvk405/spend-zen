@@ -9,8 +9,9 @@ import {
     Briefcase, PiggyBank, Gift, TrendingUp, Laptop, Package,
     Utensils, Activity, Home, Car, User, PawPrint, Film, CreditCard, Wallet, Landmark,
     SlidersHorizontal, X, Download, Copy, FileText, RotateCcw,
-    LayoutList, List, Zap, Award
+    LayoutList, List, Zap, Award, Calculator as CalculatorIcon
 } from 'lucide-react-native';
+import { useCalculator } from '../../src/context/CalculatorContext';
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, TRANSFER_CATEGORIES } from '../../src/models';
 import { format, parseISO, isSameMonth, isSameYear, isToday, isYesterday, isSameWeek } from 'date-fns';
 import ReportsView from './reports';
@@ -65,6 +66,7 @@ export default function TransactionsHistory() {
     const bottomPadding = Math.max(insets.bottom + 85, 105);
 
     const { transactions, deleteTransaction, bankAccounts, creditCards, cashAccountName } = useFinance();
+    const { openCalculator } = useCalculator();
     const params = useLocalSearchParams<{ category?: string; accountId?: string; account?: string; date?: string; type?: string; mode?: string }>();
     const [activeSubTab, setActiveSubTab] = useState<'HISTORY' | 'REPORTS'>('HISTORY');
     const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
@@ -812,6 +814,15 @@ export default function TransactionsHistory() {
                         accessibilityLabel="Export CSV"
                     >
                         <Download color={Colors.primary} size={16} />
+                    </TouchableOpacity>
+
+                    {/* Calculator Quick Action Button */}
+                    <TouchableOpacity
+                        style={[styles.iconActionBtn, { backgroundColor: Colors.surface, borderColor: Colors.border }]}
+                        onPress={() => openCalculator()}
+                        accessibilityLabel="Open Calculator"
+                    >
+                        <CalculatorIcon color={Colors.primary} size={16} />
                     </TouchableOpacity>
                 </View>
 
