@@ -64,9 +64,10 @@ export const FloatingCalculator: React.FC = () => {
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const scaleAnim = useRef(new Animated.Value(0.92)).current;
 
-    // Draggable position state
+    // Draggable position state for Badge and Card separately
     const isDraggingRef = useRef(false);
-    const hasUserMovedRef = useRef(false);
+    const badgePosRef = useRef<{ x: number; y: number } | null>(null);
+    const cardPosRef = useRef<{ x: number; y: number } | null>(null);
     const posRef = useRef({ x: 0, y: 0 });
     const pan = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
 
@@ -98,59 +99,74 @@ export const FloatingCalculator: React.FC = () => {
         };
     }, [windowWidth, windowHeight, isDesktop]);
 
-    // Default Starting Position Helper
-    const getDefaultPosition = useCallback((elementWidth: number, elementHeight: number) => {
+    // Default Badge Position Helper (Bottom Right)
+    const getDefaultBadgePosition = useCallback((badgeWidth: number, badgeHeight: number) => {
         const defaultRight = isDesktop ? 32 : 18;
         const defaultBottom = isDesktop ? 32 : 88;
         return {
-            x: Math.max(12, windowWidth - elementWidth - defaultRight),
-            y: Math.max(12, windowHeight - elementHeight - defaultBottom),
+            x: Math.max(12, windowWidth - badgeWidth - defaultRight),
+            y: Math.max(12, windowHeight - badgeHeight - defaultBottom),
         };
     }, [windowWidth, windowHeight, isDesktop]);
 
-    // Update position on mount and window resize
+    // Handle Open/Close state transitions smoothly
+    const prevIsOpenRef = useRef(isOpen);
     useEffect(() => {
         const badgeWidth = isDesktop ? 92 : 50;
         const badgeHeight = 48;
         const cardWidth = isDesktop ? 336 : Math.min(350, windowWidth - 24);
         const cardHeight = 490;
 
-        const currentW = isOpen ? cardWidth : badgeWidth;
-        const currentH = isOpen ? cardHeight : badgeHeight;
+        if (isOpen) {
+            // Calculator opened: Anchor card so its bottom-right matches the badge location
+            const currentBadgePos = badgePosRef.current || getDefaultBadgePosition(badgeWidth, badgeHeight);
+            const targetCardX = currentBadgePos.x + badgeWidth - cardWidth;
+            const targetCardY = currentBadgePos.y + badgeHeight - cardHeight;
 
-        if (!hasUserMovedRef.current) {
-            const defPos = getDefaultPosition(currentW, currentH);
-            pan.setValue(defPos);
-            posRef.current = defPos;
+            const clampedCard = getClamped({ x: targetCardX, y: targetCardY }, cardWidth, cardHeight);
+            cardPosRef.current = clampedCard;
+            pan.setValue(clampedCard);
+            posRef.current = clampedCard;
         } else {
-            const clamped = getClamped(posRef.current, currentW, currentH);
-            pan.setValue(clamped);
-            posRef.current = clamped;
+            // Calculator closed: Restore badge position at the bottom (or where user left it)
+            const targetBadgePos = badgePosRef.current || getDefaultBadgePosition(badgeWidth, badgeHeight);
+            const clampedBadge = getClamped(targetBadgePos, badgeWidth, badgeHeight);
+            badgePosRef.current = clampedBadge;
+            cardPosRef.current = null;
+            pan.setValue(clampedBadge);
+            posRef.current = clampedBadge;
         }
-    }, [windowWidth, windowHeight, isDesktop, getDefaultPosition, getClamped, isOpen]);
+        prevIsOpenRef.current = isOpen;
+    }, [isOpen, isDesktop, windowWidth, windowHeight, getDefaultBadgePosition, getClamped, pan]);
 
-    // Re-adjust boundary on state switch between FAB badge and Card
-    const prevIsOpenRef = useRef(isOpen);
+    // Window resize handler
     useEffect(() => {
-        if (prevIsOpenRef.current !== isOpen) {
-            prevIsOpenRef.current = isOpen;
-            const cardWidth = isDesktop ? 336 : Math.min(350, windowWidth - 24);
-            const cardHeight = 490;
-            const badgeWidth = isDesktop ? 92 : 50;
-            const badgeHeight = 48;
+        const badgeWidth = isDesktop ? 92 : 50;
+        const badgeHeight = 48;
+        const cardWidth = isDesktop ? 336 : Math.min(350, windowWidth - 24);
+        const cardHeight = 490;
 
-            const w = isOpen ? cardWidth : badgeWidth;
-            const h = isOpen ? cardHeight : badgeHeight;
-
-            const clamped = getClamped(posRef.current, w, h);
-            Animated.spring(pan, {
-                toValue: clamped,
-                friction: 8,
-                tension: 80,
-                useNativeDriver: false,
-            }).start();
+        if (isOpen) {
+            if (cardPosRef.current) {
+                const clamped = getClamped(cardPosRef.current, cardWidth, cardHeight);
+                cardPosRef.current = clamped;
+                pan.setValue(clamped);
+                posRef.current = clamped;
+            }
+        } else {
+            if (badgePosRef.current) {
+                const clamped = getClamped(badgePosRef.current, badgeWidth, badgeHeight);
+                badgePosRef.current = clamped;
+                pan.setValue(clamped);
+                posRef.current = clamped;
+            } else {
+                const def = getDefaultBadgePosition(badgeWidth, badgeHeight);
+                badgePosRef.current = def;
+                pan.setValue(def);
+                posRef.current = def;
+            }
         }
-    }, [isOpen, isDesktop, windowWidth, getClamped, pan]);
+    }, [windowWidth, windowHeight, isDesktop, isOpen, getClamped, getDefaultBadgePosition, pan]);
 
     // Auto-adjust when tax or history drawer expands
     useEffect(() => {
@@ -160,6 +176,7 @@ export const FloatingCalculator: React.FC = () => {
             const cardHeight = 490 + extraHeight;
             const clamped = getClamped(posRef.current, cardWidth, cardHeight);
             if (clamped.y !== posRef.current.y) {
+                cardPosRef.current = clamped;
                 Animated.spring(pan, {
                     toValue: clamped,
                     friction: 8,
@@ -202,10 +219,10 @@ export const FloatingCalculator: React.FC = () => {
             ),
             onPanResponderRelease: () => {
                 pan.flattenOffset();
-                hasUserMovedRef.current = true;
                 const badgeWidth = isDesktop ? 92 : 50;
                 const badgeHeight = 48;
                 const clamped = getClamped(posRef.current, badgeWidth, badgeHeight);
+                badgePosRef.current = clamped;
 
                 Animated.spring(pan, {
                     toValue: clamped,
@@ -259,11 +276,19 @@ export const FloatingCalculator: React.FC = () => {
             ),
             onPanResponderRelease: () => {
                 pan.flattenOffset();
-                hasUserMovedRef.current = true;
                 const cardWidth = isDesktop ? 336 : Math.min(350, windowWidth - 24);
                 const extraHeight = (showHistory ? 120 : 0) + (showTaxTools ? 80 : 0);
                 const cardHeight = 490 + extraHeight;
                 const clamped = getClamped(posRef.current, cardWidth, cardHeight);
+                cardPosRef.current = clamped;
+
+                // Sync badge anchor to the bottom of the card's position
+                const badgeWidth = isDesktop ? 92 : 50;
+                const badgeHeight = 48;
+                badgePosRef.current = getClamped({
+                    x: clamped.x + cardWidth - badgeWidth,
+                    y: clamped.y + cardHeight - badgeHeight,
+                }, badgeWidth, badgeHeight);
 
                 Animated.spring(pan, {
                     toValue: clamped,
