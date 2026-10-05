@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
     View,
     Text,
@@ -6,6 +6,7 @@ import {
     TouchableOpacity,
     Platform,
     Animated,
+    PanResponder,
     useWindowDimensions,
     ScrollView,
 } from 'react-native';
@@ -14,16 +15,13 @@ import {
     Calculator as CalcIcon,
     X,
     Minus,
-    Maximize2,
     Copy,
     Check,
     ArrowDownToLine,
     Delete,
     Clock,
     Percent,
-    Sparkles,
-    ChevronDown,
-    ChevronUp
+    GripVertical,
 } from 'lucide-react-native';
 import { useThemeColors } from '../theme/colors';
 import { useCalculator } from '../context/CalculatorContext';
@@ -37,7 +35,7 @@ interface CalcHistoryItem {
 
 export const FloatingCalculator: React.FC = () => {
     const Colors = useThemeColors();
-    const { width: windowWidth } = useWindowDimensions();
+    const { width: windowWidth, height: windowHeight } = useWindowDimensions();
     const isDesktop = windowWidth >= 768;
 
     const {
@@ -45,7 +43,6 @@ export const FloatingCalculator: React.FC = () => {
         isMinimized,
         openCalculator,
         closeCalculator,
-        toggleCalculator,
         toggleMinimize,
         applyCallback,
         setLastResult,
@@ -63,10 +60,232 @@ export const FloatingCalculator: React.FC = () => {
     const [showTaxTools, setShowTaxTools] = useState(false);
     const [history, setHistory] = useState<CalcHistoryItem[]>([]);
 
-    // Animation values
+    // Animation values for modal open/close transitions
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const scaleAnim = useRef(new Animated.Value(0.92)).current;
 
+    // Draggable position state
+    const isDraggingRef = useRef(false);
+    const hasUserMovedRef = useRef(false);
+    const posRef = useRef({ x: 0, y: 0 });
+    const pan = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
+
+    // Listen to pan coordinate changes to keep posRef up-to-date
+    useEffect(() => {
+        const id = pan.addListener((value) => {
+            posRef.current = value;
+        });
+        return () => {
+            pan.removeListener(id);
+        };
+    }, [pan]);
+
+    // Viewport Boundary Clamping Helper
+    const getClamped = useCallback((
+        pos: { x: number; y: number },
+        elementWidth: number,
+        elementHeight: number
+    ) => {
+        const minX = 12;
+        const maxX = Math.max(minX, windowWidth - elementWidth - 12);
+        const minY = 12;
+        const bottomSafety = isDesktop ? 24 : 88;
+        const maxY = Math.max(minY, windowHeight - elementHeight - bottomSafety);
+
+        return {
+            x: Math.min(Math.max(pos.x, minX), maxX),
+            y: Math.min(Math.max(pos.y, minY), maxY),
+        };
+    }, [windowWidth, windowHeight, isDesktop]);
+
+    // Default Starting Position Helper
+    const getDefaultPosition = useCallback((elementWidth: number, elementHeight: number) => {
+        const defaultRight = isDesktop ? 32 : 18;
+        const defaultBottom = isDesktop ? 32 : 88;
+        return {
+            x: Math.max(12, windowWidth - elementWidth - defaultRight),
+            y: Math.max(12, windowHeight - elementHeight - defaultBottom),
+        };
+    }, [windowWidth, windowHeight, isDesktop]);
+
+    // Update position on mount and window resize
+    useEffect(() => {
+        const badgeWidth = isDesktop ? 92 : 50;
+        const badgeHeight = 48;
+        const cardWidth = isDesktop ? 336 : Math.min(350, windowWidth - 24);
+        const cardHeight = 490;
+
+        const currentW = isOpen ? cardWidth : badgeWidth;
+        const currentH = isOpen ? cardHeight : badgeHeight;
+
+        if (!hasUserMovedRef.current) {
+            const defPos = getDefaultPosition(currentW, currentH);
+            pan.setValue(defPos);
+            posRef.current = defPos;
+        } else {
+            const clamped = getClamped(posRef.current, currentW, currentH);
+            pan.setValue(clamped);
+            posRef.current = clamped;
+        }
+    }, [windowWidth, windowHeight, isDesktop, getDefaultPosition, getClamped, isOpen]);
+
+    // Re-adjust boundary on state switch between FAB badge and Card
+    const prevIsOpenRef = useRef(isOpen);
+    useEffect(() => {
+        if (prevIsOpenRef.current !== isOpen) {
+            prevIsOpenRef.current = isOpen;
+            const cardWidth = isDesktop ? 336 : Math.min(350, windowWidth - 24);
+            const cardHeight = 490;
+            const badgeWidth = isDesktop ? 92 : 50;
+            const badgeHeight = 48;
+
+            const w = isOpen ? cardWidth : badgeWidth;
+            const h = isOpen ? cardHeight : badgeHeight;
+
+            const clamped = getClamped(posRef.current, w, h);
+            Animated.spring(pan, {
+                toValue: clamped,
+                friction: 8,
+                tension: 80,
+                useNativeDriver: false,
+            }).start();
+        }
+    }, [isOpen, isDesktop, windowWidth, getClamped, pan]);
+
+    // Auto-adjust when tax or history drawer expands
+    useEffect(() => {
+        if (isOpen) {
+            const cardWidth = isDesktop ? 336 : Math.min(350, windowWidth - 24);
+            const extraHeight = (showHistory ? 120 : 0) + (showTaxTools ? 80 : 0);
+            const cardHeight = 490 + extraHeight;
+            const clamped = getClamped(posRef.current, cardWidth, cardHeight);
+            if (clamped.y !== posRef.current.y) {
+                Animated.spring(pan, {
+                    toValue: clamped,
+                    friction: 8,
+                    tension: 80,
+                    useNativeDriver: false,
+                }).start();
+            }
+        }
+    }, [showHistory, showTaxTools, isOpen, isDesktop, windowWidth, getClamped, pan]);
+
+    // Pan responder for Closed FAB & Minimized Pill
+    const badgePanResponder = useMemo(() => {
+        return PanResponder.create({
+            onStartShouldSetPanResponder: () => false,
+            onStartShouldSetPanResponderCapture: () => false,
+            onMoveShouldSetPanResponder: (_, gestureState) => {
+                return Math.abs(gestureState.dx) > 4 || Math.abs(gestureState.dy) > 4;
+            },
+            onMoveShouldSetPanResponderCapture: (_, gestureState) => {
+                return Math.abs(gestureState.dx) > 4 || Math.abs(gestureState.dy) > 4;
+            },
+            onPanResponderGrant: () => {
+                isDraggingRef.current = true;
+                pan.setOffset({
+                    x: posRef.current.x,
+                    y: posRef.current.y,
+                });
+                pan.setValue({ x: 0, y: 0 });
+                if (Platform.OS !== 'web') {
+                    try {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    } catch {
+                        // ignore
+                    }
+                }
+            },
+            onPanResponderMove: Animated.event(
+                [null, { dx: pan.x, dy: pan.y }],
+                { useNativeDriver: false }
+            ),
+            onPanResponderRelease: () => {
+                pan.flattenOffset();
+                hasUserMovedRef.current = true;
+                const badgeWidth = isDesktop ? 92 : 50;
+                const badgeHeight = 48;
+                const clamped = getClamped(posRef.current, badgeWidth, badgeHeight);
+
+                Animated.spring(pan, {
+                    toValue: clamped,
+                    friction: 7,
+                    tension: 70,
+                    useNativeDriver: false,
+                }).start();
+
+                setTimeout(() => {
+                    isDraggingRef.current = false;
+                }, 80);
+            },
+            onPanResponderTerminate: () => {
+                pan.flattenOffset();
+                setTimeout(() => {
+                    isDraggingRef.current = false;
+                }, 80);
+            },
+        });
+    }, [isDesktop, getClamped, pan]);
+
+    // Pan responder for Open Card Header
+    const cardPanResponder = useMemo(() => {
+        return PanResponder.create({
+            onStartShouldSetPanResponder: () => false,
+            onStartShouldSetPanResponderCapture: () => false,
+            onMoveShouldSetPanResponder: (_, gestureState) => {
+                return Math.abs(gestureState.dx) > 4 || Math.abs(gestureState.dy) > 4;
+            },
+            onMoveShouldSetPanResponderCapture: (_, gestureState) => {
+                return Math.abs(gestureState.dx) > 4 || Math.abs(gestureState.dy) > 4;
+            },
+            onPanResponderGrant: () => {
+                isDraggingRef.current = true;
+                pan.setOffset({
+                    x: posRef.current.x,
+                    y: posRef.current.y,
+                });
+                pan.setValue({ x: 0, y: 0 });
+                if (Platform.OS !== 'web') {
+                    try {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    } catch {
+                        // ignore
+                    }
+                }
+            },
+            onPanResponderMove: Animated.event(
+                [null, { dx: pan.x, dy: pan.y }],
+                { useNativeDriver: false }
+            ),
+            onPanResponderRelease: () => {
+                pan.flattenOffset();
+                hasUserMovedRef.current = true;
+                const cardWidth = isDesktop ? 336 : Math.min(350, windowWidth - 24);
+                const extraHeight = (showHistory ? 120 : 0) + (showTaxTools ? 80 : 0);
+                const cardHeight = 490 + extraHeight;
+                const clamped = getClamped(posRef.current, cardWidth, cardHeight);
+
+                Animated.spring(pan, {
+                    toValue: clamped,
+                    friction: 7,
+                    tension: 70,
+                    useNativeDriver: false,
+                }).start();
+
+                setTimeout(() => {
+                    isDraggingRef.current = false;
+                }, 80);
+            },
+            onPanResponderTerminate: () => {
+                pan.flattenOffset();
+                setTimeout(() => {
+                    isDraggingRef.current = false;
+                }, 80);
+            },
+        });
+    }, [isDesktop, windowWidth, showHistory, showTaxTools, getClamped, pan]);
+
+    // Modal Fade/Scale Animation
     useEffect(() => {
         if (isOpen) {
             Animated.parallel([
@@ -119,13 +338,11 @@ export const FloatingCalculator: React.FC = () => {
         const parts = numStr.split('.');
         const integerPart = parts[0];
         const decimalPart = parts.length > 1 ? '.' + parts[1] : '';
-
-        // Add commas for thousands
         const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
         return formattedInteger + decimalPart;
     };
 
-    // Safe rounding helper to prevent IEEE 754 float glitches (e.g. 0.1 + 0.2 = 0.3)
+    // Clean float rounding
     const cleanFloat = (num: number): number => {
         return Math.round((num + Number.EPSILON) * 1e8) / 1e8;
     };
@@ -183,11 +400,6 @@ export const FloatingCalculator: React.FC = () => {
         setExpression('');
     };
 
-    const clearEntry = () => {
-        triggerHaptic();
-        setDisplay('0');
-    };
-
     // Backspace
     const backspace = () => {
         triggerHaptic();
@@ -215,19 +427,17 @@ export const FloatingCalculator: React.FC = () => {
         if (isNaN(currentValue)) return;
 
         if (prevValue !== null && operator) {
-            // Contextual percentage: e.g. 1000 + 18% = 1000 + (1000 * 0.18) = 1180
             const percentVal = cleanFloat((prevValue * currentValue) / 100);
             setDisplay(String(percentVal));
             setExpression(`${prevValue} ${operator} ${currentValue}%`);
         } else {
-            // Standalone percent: e.g. 50% = 0.5
             const percentVal = cleanFloat(currentValue / 100);
             setDisplay(String(percentVal));
             setExpression(`${currentValue}%`);
         }
     };
 
-    // Quick GST / Tax Adders (+5%, +12%, +18%, +28%)
+    // Quick GST Adders
     const addTaxPercent = (rate: number) => {
         triggerHaptic();
         const current = parseFloat(display);
@@ -244,11 +454,10 @@ export const FloatingCalculator: React.FC = () => {
         setWaitingForOperand(true);
         setLastResult(total);
 
-        // Add to history
         addHistoryItem(expr, String(total));
     };
 
-    // Quick Split (÷2, ÷3, ÷4)
+    // Quick Split
     const splitBill = (persons: number) => {
         triggerHaptic();
         const current = parseFloat(display);
@@ -277,7 +486,6 @@ export const FloatingCalculator: React.FC = () => {
             setExpression(`${display} ${nextOperator}`);
         } else if (operator) {
             if (waitingForOperand) {
-                // Change operator
                 setOperator(nextOperator);
                 setExpression(`${prevValue} ${nextOperator}`);
                 return;
@@ -340,7 +548,7 @@ export const FloatingCalculator: React.FC = () => {
         }
     };
 
-    // Apply result to form if callback is provided
+    // Apply result to form
     const handleApplyResult = () => {
         const numVal = parseFloat(display);
         if (!isNaN(numVal) && applyCallback) {
@@ -358,10 +566,8 @@ export const FloatingCalculator: React.FC = () => {
     const handleKeyDown = useCallback((e: any) => {
         if (!isOpen || isMinimized) return;
 
-        // Check if an input or textarea has focus outside the calculator
         const activeTag = document?.activeElement?.tagName?.toLowerCase();
         if (activeTag === 'input' || activeTag === 'textarea') {
-            // Don't intercept when user is intentionally typing into a text field unless calculator has focus
             return;
         }
 
@@ -409,121 +615,131 @@ export const FloatingCalculator: React.FC = () => {
         }
     }, [handleKeyDown]);
 
-    // RENDER: Floating Trigger FAB when closed
+    // RENDER: Floating Trigger FAB when closed (Fully Draggable)
     if (!isOpen) {
         return (
-            <View
-                pointerEvents="box-none"
-                style={[
-                    styles.globalContainer,
-                    {
-                        zIndex: 99999,
-                    }
-                ]}
-            >
-                <TouchableOpacity
-                    activeOpacity={0.85}
-                    onPress={() => openCalculator()}
+            <View pointerEvents="box-none" style={[styles.globalContainer, { zIndex: 99999 }]}>
+                <Animated.View
+                    {...badgePanResponder.panHandlers}
                     style={[
-                        styles.floatingFab,
+                        styles.draggableItem,
                         {
-                            backgroundColor: Colors.primary,
-                            bottom: isDesktop ? 32 : 88,
-                            right: isDesktop ? 32 : 18,
-                            shadowColor: Colors.primary,
+                            transform: pan.getTranslateTransform(),
                         }
                     ]}
-                    accessibilityLabel="Open Quick Calculator"
                 >
-                    <CalcIcon size={22} color="#ffffff" strokeWidth={2.4} />
-                    {isDesktop && (
-                        <Text style={styles.fabText}>Calc</Text>
-                    )}
-                </TouchableOpacity>
+                    <TouchableOpacity
+                        activeOpacity={0.85}
+                        onPress={() => {
+                            if (!isDraggingRef.current) {
+                                openCalculator();
+                            }
+                        }}
+                        style={[
+                            styles.floatingFab,
+                            {
+                                backgroundColor: Colors.primary,
+                                shadowColor: Colors.primary,
+                            }
+                        ]}
+                        accessibilityLabel="Open Quick Calculator (Draggable)"
+                    >
+                        <GripVertical size={14} color="rgba(255,255,255,0.7)" style={styles.dragGripIcon} />
+                        <CalcIcon size={20} color="#ffffff" strokeWidth={2.4} />
+                        {isDesktop && (
+                            <Text style={styles.fabText}>Calc</Text>
+                        )}
+                    </TouchableOpacity>
+                </Animated.View>
             </View>
         );
     }
 
-    // RENDER: Minimized Floating Pill
+    // RENDER: Minimized Floating Pill (Fully Draggable)
     if (isMinimized) {
         return (
-            <View
-                pointerEvents="box-none"
-                style={[
-                    styles.globalContainer,
-                    {
-                        zIndex: 99999,
-                    }
-                ]}
-            >
-                <TouchableOpacity
-                    activeOpacity={0.9}
-                    onPress={toggleMinimize}
+            <View pointerEvents="box-none" style={[styles.globalContainer, { zIndex: 99999 }]}>
+                <Animated.View
+                    {...badgePanResponder.panHandlers}
                     style={[
-                        styles.minimizedPill,
+                        styles.draggableItem,
                         {
-                            backgroundColor: Colors.surface,
-                            borderColor: Colors.border,
-                            bottom: isDesktop ? 32 : 88,
-                            right: isDesktop ? 32 : 18,
-                            shadowColor: '#000',
+                            transform: pan.getTranslateTransform(),
                         }
                     ]}
                 >
-                    <View style={[styles.pillIconBadge, { backgroundColor: Colors.primary + '20' }]}>
-                        <CalcIcon size={16} color={Colors.primary} strokeWidth={2.4} />
-                    </View>
-                    <View style={styles.pillTextCol}>
-                        <Text style={[styles.pillTitle, { color: Colors.textMuted }]}>Calculator</Text>
-                        <Text style={[styles.pillValue, { color: Colors.text }]} numberOfLines={1}>
-                            ₹{formatNumber(display)}
-                        </Text>
-                    </View>
                     <TouchableOpacity
-                        onPress={closeCalculator}
-                        style={styles.pillCloseBtn}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        activeOpacity={0.9}
+                        onPress={() => {
+                            if (!isDraggingRef.current) {
+                                toggleMinimize();
+                            }
+                        }}
+                        style={[
+                            styles.minimizedPill,
+                            {
+                                backgroundColor: Colors.surface,
+                                borderColor: Colors.border,
+                                shadowColor: '#000',
+                            }
+                        ]}
                     >
-                        <X size={14} color={Colors.textMuted} />
+                        <GripVertical size={14} color={Colors.textMuted} />
+                        <View style={[styles.pillIconBadge, { backgroundColor: Colors.primary + '20' }]}>
+                            <CalcIcon size={15} color={Colors.primary} strokeWidth={2.4} />
+                        </View>
+                        <View style={styles.pillTextCol}>
+                            <Text style={[styles.pillTitle, { color: Colors.textMuted }]}>Calculator</Text>
+                            <Text style={[styles.pillValue, { color: Colors.text }]} numberOfLines={1}>
+                                ₹{formatNumber(display)}
+                            </Text>
+                        </View>
+                        <TouchableOpacity
+                            onPress={closeCalculator}
+                            style={styles.pillCloseBtn}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                            <X size={14} color={Colors.textMuted} />
+                        </TouchableOpacity>
                     </TouchableOpacity>
-                </TouchableOpacity>
+                </Animated.View>
             </View>
         );
     }
 
-    // RENDER: Full Floating Non-Blocking Calculator Card
+    // RENDER: Full Floating Non-Blocking Calculator Card (Draggable by Header)
     return (
-        <View
-            pointerEvents="box-none"
-            style={[
-                styles.globalContainer,
-                {
-                    zIndex: 99999,
-                }
-            ]}
-        >
+        <View pointerEvents="box-none" style={[styles.globalContainer, { zIndex: 99999 }]}>
             <Animated.View
                 style={[
                     styles.calculatorCard,
                     {
                         backgroundColor: Colors.surface,
                         borderColor: Colors.border,
-                        bottom: isDesktop ? 32 : 84,
-                        right: isDesktop ? 32 : (windowWidth > 380 ? 16 : 10),
                         width: isDesktop ? 336 : Math.min(350, windowWidth - 24),
                         opacity: fadeAnim,
-                        transform: [{ scale: scaleAnim }],
+                        transform: [
+                            { translateX: pan.x },
+                            { translateY: pan.y },
+                            { scale: scaleAnim },
+                        ],
                         shadowColor: '#000',
                     }
                 ]}
             >
-                {/* ── Calculator Header Bar ──────────────────────────────── */}
-                <View style={[styles.cardHeader, { borderBottomColor: Colors.border + '40' }]}>
+                {/* ── Calculator Header Bar (Draggable Handler) ───────────── */}
+                <View
+                    {...cardPanResponder.panHandlers}
+                    style={[styles.cardHeader, { borderBottomColor: Colors.border + '40' }]}
+                >
                     <View style={styles.headerTitleRow}>
+                        <GripVertical size={15} color={Colors.textMuted} style={styles.headerGrip} />
                         <View style={[styles.headerIconBg, { backgroundColor: Colors.primary + '18' }]}>
                             <CalcIcon size={16} color={Colors.primary} strokeWidth={2.4} />
                         </View>
-                        <Text style={[styles.headerTitle, { color: Colors.text }]}>Smart Calculator</Text>
+                        <View>
+                            <Text style={[styles.headerTitle, { color: Colors.text }]}>Smart Calculator</Text>
+                        </View>
                     </View>
 
                     <View style={styles.headerControls}>
@@ -645,12 +861,10 @@ export const FloatingCalculator: React.FC = () => {
 
                 {/* ── Display Section ───────────────────────────────────── */}
                 <View style={[styles.displayContainer, { backgroundColor: Colors.isDark ? '#00000040' : '#f8fafc' }]}>
-                    {/* Expression / Formula Line */}
                     <Text style={[styles.expressionText, { color: Colors.textMuted }]} numberOfLines={1}>
                         {expression || ' '}
                     </Text>
 
-                    {/* Main Amount Display */}
                     <View style={styles.displayRow}>
                         <Text style={[styles.currencyPrefix, { color: Colors.textMuted }]}>₹</Text>
                         <Text
@@ -666,7 +880,6 @@ export const FloatingCalculator: React.FC = () => {
                         </Text>
                     </View>
 
-                    {/* Action Bar inside Display (Copy & Apply) */}
                     <View style={styles.displayActionsRow}>
                         {applyCallback && (
                             <TouchableOpacity
@@ -833,19 +1046,23 @@ const styles = StyleSheet.create({
         right: 0,
         bottom: 0,
     },
+    draggableItem: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+    },
 
     // Floating FAB Trigger Button
     floatingFab: {
-        position: 'absolute',
         height: 48,
         minWidth: 48,
-        paddingHorizontal: 14,
+        paddingHorizontal: 12,
         borderRadius: 24,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
         gap: 6,
-        elevation: 6,
+        elevation: 8,
         ...Platform.select({
             ios: {
                 shadowOffset: { width: 0, height: 4 },
@@ -853,14 +1070,18 @@ const styles = StyleSheet.create({
                 shadowRadius: 8,
             },
             android: {
-                elevation: 6,
+                elevation: 8,
             },
             web: {
-                boxShadow: '0px 6px 18px rgba(99, 102, 241, 0.35)',
-                cursor: 'pointer',
-                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                boxShadow: '0px 8px 24px rgba(99, 102, 241, 0.4), 0px 2px 6px rgba(0,0,0,0.1)',
+                cursor: 'grab',
+                userSelect: 'none',
+                transition: 'transform 0.15s ease, box-shadow 0.15s ease',
             } as any,
         }),
+    },
+    dragGripIcon: {
+        marginRight: -2,
     },
     fabText: {
         color: '#ffffff',
@@ -870,15 +1091,14 @@ const styles = StyleSheet.create({
 
     // Minimized Pill
     minimizedPill: {
-        position: 'absolute',
         height: 44,
         paddingHorizontal: 12,
         borderRadius: 22,
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 10,
+        gap: 8,
         borderWidth: 1,
-        elevation: 6,
+        elevation: 8,
         ...Platform.select({
             ios: {
                 shadowOffset: { width: 0, height: 3 },
@@ -886,8 +1106,9 @@ const styles = StyleSheet.create({
                 shadowRadius: 8,
             },
             web: {
-                boxShadow: '0px 6px 20px rgba(0,0,0,0.15)',
-                cursor: 'pointer',
+                boxShadow: '0px 8px 24px rgba(0,0,0,0.18)',
+                cursor: 'grab',
+                userSelect: 'none',
             } as any,
         }),
     },
@@ -919,10 +1140,12 @@ const styles = StyleSheet.create({
     // Full Floating Calculator Card
     calculatorCard: {
         position: 'absolute',
+        top: 0,
+        left: 0,
         borderRadius: 20,
         borderWidth: 1,
         overflow: 'hidden',
-        elevation: 12,
+        elevation: 14,
         ...Platform.select({
             ios: {
                 shadowOffset: { width: 0, height: 8 },
@@ -930,28 +1153,38 @@ const styles = StyleSheet.create({
                 shadowRadius: 18,
             },
             android: {
-                elevation: 12,
+                elevation: 14,
             },
             web: {
-                boxShadow: '0px 12px 36px rgba(0, 0, 0, 0.22), 0 0 0 1px rgba(255, 255, 255, 0.05)',
+                boxShadow: '0px 16px 40px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(255, 255, 255, 0.08)',
                 userSelect: 'none',
             } as any,
         }),
     },
 
-    // Card Header Bar
+    // Card Header Bar (Grab Handler)
     cardHeader: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        paddingHorizontal: 14,
+        paddingHorizontal: 12,
         paddingVertical: 10,
         borderBottomWidth: 1,
+        ...Platform.select({
+            web: {
+                cursor: 'grab',
+                userSelect: 'none',
+            } as any,
+        }),
+    },
+    headerGrip: {
+        marginRight: 2,
     },
     headerTitleRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 8,
+        gap: 6,
+        flex: 1,
     },
     headerIconBg: {
         width: 26,
