@@ -10,6 +10,7 @@ import {
     useWindowDimensions,
     ScrollView,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import {
     Calculator as CalcIcon,
@@ -36,6 +37,7 @@ interface CalcHistoryItem {
 export const FloatingCalculator: React.FC = () => {
     const Colors = useThemeColors();
     const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+    const insets = useSafeAreaInsets();
     const isDesktop = windowWidth >= 768;
 
     const {
@@ -81,33 +83,33 @@ export const FloatingCalculator: React.FC = () => {
         };
     }, [pan]);
 
-    // Viewport Boundary Clamping Helper
+    // Viewport Boundary Clamping Helper (Guaranteed safe area on iOS/Android notches)
     const getClamped = useCallback((
         pos: { x: number; y: number },
         elementWidth: number,
         elementHeight: number
     ) => {
-        const minX = 12;
-        const maxX = Math.max(minX, windowWidth - elementWidth - 12);
-        const minY = 12;
-        const bottomSafety = isDesktop ? 24 : 88;
+        const minX = Math.max(12, insets.left + 12);
+        const maxX = Math.max(minX, windowWidth - elementWidth - Math.max(12, insets.right + 12));
+        const minY = Math.max(insets.top + 16, 24);
+        const bottomSafety = isDesktop ? Math.max(insets.bottom + 24, 24) : Math.max(insets.bottom + 88, 88);
         const maxY = Math.max(minY, windowHeight - elementHeight - bottomSafety);
 
         return {
             x: Math.min(Math.max(pos.x, minX), maxX),
             y: Math.min(Math.max(pos.y, minY), maxY),
         };
-    }, [windowWidth, windowHeight, isDesktop]);
+    }, [windowWidth, windowHeight, isDesktop, insets]);
 
     // Default Badge Position Helper (Bottom Right)
     const getDefaultBadgePosition = useCallback((badgeWidth: number, badgeHeight: number) => {
-        const defaultRight = isDesktop ? 32 : 18;
-        const defaultBottom = isDesktop ? 32 : 88;
+        const defaultRight = isDesktop ? 32 : Math.max(18, insets.right + 18);
+        const defaultBottom = isDesktop ? 32 : Math.max(88, insets.bottom + 88);
         return {
             x: Math.max(12, windowWidth - badgeWidth - defaultRight),
             y: Math.max(12, windowHeight - badgeHeight - defaultBottom),
         };
-    }, [windowWidth, windowHeight, isDesktop]);
+    }, [windowWidth, windowHeight, isDesktop, insets]);
 
     // Handle Open/Close state transitions smoothly
     const prevIsOpenRef = useRef(isOpen);
@@ -118,17 +120,29 @@ export const FloatingCalculator: React.FC = () => {
         const cardHeight = 490;
 
         if (isOpen) {
-            // Calculator opened: Anchor card so its bottom-right matches the badge location
-            const currentBadgePos = badgePosRef.current || getDefaultBadgePosition(badgeWidth, badgeHeight);
-            const targetCardX = currentBadgePos.x + badgeWidth - cardWidth;
-            const targetCardY = currentBadgePos.y + badgeHeight - cardHeight;
+            let targetCardX: number;
+            let targetCardY: number;
+
+            if (isDesktop) {
+                // Calculator opened on desktop: Anchor card near the badge location
+                const currentBadgePos = badgePosRef.current || getDefaultBadgePosition(badgeWidth, badgeHeight);
+                targetCardX = currentBadgePos.x + badgeWidth - cardWidth;
+                targetCardY = currentBadgePos.y + badgeHeight - cardHeight;
+            } else {
+                // Calculator opened on mobile: Center within visible safe viewport
+                targetCardX = Math.max(12, (windowWidth - cardWidth) / 2);
+                const safeTop = Math.max(insets.top + 16, 24);
+                const safeBottom = Math.max(insets.bottom + 88, 88);
+                const availableHeight = windowHeight - safeTop - safeBottom;
+                targetCardY = safeTop + Math.max(0, (availableHeight - cardHeight) / 2);
+            }
 
             const clampedCard = getClamped({ x: targetCardX, y: targetCardY }, cardWidth, cardHeight);
             cardPosRef.current = clampedCard;
             pan.setValue(clampedCard);
             posRef.current = clampedCard;
         } else {
-            // Calculator closed: Restore badge position at the bottom (or where user left it)
+            // Calculator closed: Restore badge position safely
             const targetBadgePos = badgePosRef.current || getDefaultBadgePosition(badgeWidth, badgeHeight);
             const clampedBadge = getClamped(targetBadgePos, badgeWidth, badgeHeight);
             badgePosRef.current = clampedBadge;
@@ -137,9 +151,9 @@ export const FloatingCalculator: React.FC = () => {
             posRef.current = clampedBadge;
         }
         prevIsOpenRef.current = isOpen;
-    }, [isOpen, isDesktop, windowWidth, windowHeight, getDefaultBadgePosition, getClamped, pan]);
+    }, [isOpen, isDesktop, windowWidth, windowHeight, insets, getDefaultBadgePosition, getClamped, pan]);
 
-    // Window resize handler
+    // Window resize / orientation change handler
     useEffect(() => {
         const badgeWidth = isDesktop ? 92 : 50;
         const badgeHeight = 48;
@@ -244,7 +258,7 @@ export const FloatingCalculator: React.FC = () => {
         });
     }, [isDesktop, getClamped, pan]);
 
-    // Pan responder for Open Card Header
+    // Pan responder for Open Card Header (Only on drag handle, so controls are never blocked)
     const cardPanResponder = useMemo(() => {
         return PanResponder.create({
             onStartShouldSetPanResponder: () => false,
@@ -693,13 +707,7 @@ export const FloatingCalculator: React.FC = () => {
                         }
                     ]}
                 >
-                    <TouchableOpacity
-                        activeOpacity={0.9}
-                        onPress={() => {
-                            if (!isDraggingRef.current) {
-                                toggleMinimize();
-                            }
-                        }}
+                    <View
                         style={[
                             styles.minimizedPill,
                             {
@@ -709,24 +717,35 @@ export const FloatingCalculator: React.FC = () => {
                             }
                         ]}
                     >
-                        <GripVertical size={14} color={Colors.textMuted} />
-                        <View style={[styles.pillIconBadge, { backgroundColor: Colors.primary + '20' }]}>
-                            <CalcIcon size={15} color={Colors.primary} strokeWidth={2.4} />
-                        </View>
-                        <View style={styles.pillTextCol}>
-                            <Text style={[styles.pillTitle, { color: Colors.textMuted }]}>Calculator</Text>
-                            <Text style={[styles.pillValue, { color: Colors.text }]} numberOfLines={1}>
-                                ₹{formatNumber(display)}
-                            </Text>
-                        </View>
+                        <TouchableOpacity
+                            activeOpacity={0.8}
+                            onPress={() => {
+                                if (!isDraggingRef.current) {
+                                    toggleMinimize();
+                                }
+                            }}
+                            style={styles.pillContentBtn}
+                        >
+                            <GripVertical size={14} color={Colors.textMuted} />
+                            <View style={[styles.pillIconBadge, { backgroundColor: Colors.primary + '20' }]}>
+                                <CalcIcon size={15} color={Colors.primary} strokeWidth={2.4} />
+                            </View>
+                            <View style={styles.pillTextCol}>
+                                <Text style={[styles.pillTitle, { color: Colors.textMuted }]}>Calculator</Text>
+                                <Text style={[styles.pillValue, { color: Colors.text }]} numberOfLines={1}>
+                                    ₹{formatNumber(display)}
+                                </Text>
+                            </View>
+                        </TouchableOpacity>
                         <TouchableOpacity
                             onPress={closeCalculator}
                             style={styles.pillCloseBtn}
-                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                            accessibilityLabel="Close Calculator"
                         >
                             <X size={14} color={Colors.textMuted} />
                         </TouchableOpacity>
-                    </TouchableOpacity>
+                    </View>
                 </Animated.View>
             </View>
         );
@@ -735,6 +754,29 @@ export const FloatingCalculator: React.FC = () => {
     // RENDER: Full Floating Non-Blocking Calculator Card (Draggable by Header)
     return (
         <View pointerEvents="box-none" style={[styles.globalContainer, { zIndex: 99999 }]}>
+            {/* Mobile Backdrop: Tap outside card to dismiss */}
+            {!isDesktop && (
+                <Animated.View
+                    style={[
+                        StyleSheet.absoluteFill,
+                        {
+                            backgroundColor: '#000000',
+                            opacity: fadeAnim.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: [0, 0.4],
+                            }),
+                        }
+                    ]}
+                >
+                    <TouchableOpacity
+                        activeOpacity={1}
+                        onPress={closeCalculator}
+                        style={StyleSheet.absoluteFill}
+                        accessibilityLabel="Tap backdrop to close calculator"
+                    />
+                </Animated.View>
+            )}
+
             <Animated.View
                 style={[
                     styles.calculatorCard,
@@ -752,13 +794,14 @@ export const FloatingCalculator: React.FC = () => {
                     }
                 ]}
             >
-                {/* ── Calculator Header Bar (Draggable Handler) ───────────── */}
-                <View
-                    {...cardPanResponder.panHandlers}
-                    style={[styles.cardHeader, { borderBottomColor: Colors.border + '40' }]}
-                >
-                    <View style={styles.headerTitleRow}>
-                        <GripVertical size={15} color={Colors.textMuted} style={styles.headerGrip} />
+                {/* ── Calculator Header Bar ───────────── */}
+                <View style={[styles.cardHeader, { borderBottomColor: Colors.border + '40' }]}>
+                    {/* Draggable Title & Grip Handle */}
+                    <View
+                        {...cardPanResponder.panHandlers}
+                        style={styles.headerTitleRow}
+                    >
+                        <GripVertical size={16} color={Colors.textMuted} style={styles.headerGrip} />
                         <View style={[styles.headerIconBg, { backgroundColor: Colors.primary + '18' }]}>
                             <CalcIcon size={16} color={Colors.primary} strokeWidth={2.4} />
                         </View>
@@ -767,6 +810,7 @@ export const FloatingCalculator: React.FC = () => {
                         </View>
                     </View>
 
+                    {/* Header Controls (Isolated from PanResponder for instant, reliable tap response) */}
                     <View style={styles.headerControls}>
                         {/* History Toggle */}
                         <TouchableOpacity
@@ -775,10 +819,10 @@ export const FloatingCalculator: React.FC = () => {
                                 styles.headerBtn,
                                 showHistory && { backgroundColor: Colors.primary + '20' }
                             ]}
-                            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                             accessibilityLabel="Calculation History"
                         >
-                            <Clock size={15} color={showHistory ? Colors.primary : Colors.textMuted} />
+                            <Clock size={16} color={showHistory ? Colors.primary : Colors.textMuted} />
                         </TouchableOpacity>
 
                         {/* Tax / GST presets toggle */}
@@ -788,30 +832,34 @@ export const FloatingCalculator: React.FC = () => {
                                 styles.headerBtn,
                                 showTaxTools && { backgroundColor: Colors.primary + '20' }
                             ]}
-                            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                             accessibilityLabel="Quick Tax Tools"
                         >
-                            <Percent size={15} color={showTaxTools ? Colors.primary : Colors.textMuted} />
+                            <Percent size={16} color={showTaxTools ? Colors.primary : Colors.textMuted} />
                         </TouchableOpacity>
 
                         {/* Minimize */}
                         <TouchableOpacity
                             onPress={toggleMinimize}
                             style={styles.headerBtn}
-                            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                             accessibilityLabel="Minimize Calculator"
                         >
-                            <Minus size={15} color={Colors.textMuted} />
+                            <Minus size={16} color={Colors.textMuted} />
                         </TouchableOpacity>
 
                         {/* Close */}
                         <TouchableOpacity
                             onPress={closeCalculator}
-                            style={styles.headerBtn}
-                            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                            style={[
+                                styles.headerBtn,
+                                styles.headerCloseBtn,
+                                { backgroundColor: Colors.isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.07)' }
+                            ]}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                             accessibilityLabel="Close Calculator"
                         >
-                            <X size={15} color={Colors.textMuted} />
+                            <X size={16} color={Colors.text} strokeWidth={2.4} />
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -1117,11 +1165,11 @@ const styles = StyleSheet.create({
     // Minimized Pill
     minimizedPill: {
         height: 44,
-        paddingHorizontal: 12,
+        paddingHorizontal: 8,
         borderRadius: 22,
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 8,
+        gap: 4,
         borderWidth: 1,
         elevation: 8,
         ...Platform.select({
@@ -1136,6 +1184,14 @@ const styles = StyleSheet.create({
                 userSelect: 'none',
             } as any,
         }),
+    },
+    pillContentBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        paddingVertical: 4,
+        paddingLeft: 4,
+        paddingRight: 6,
     },
     pillIconBadge: {
         width: 28,
@@ -1158,7 +1214,11 @@ const styles = StyleSheet.create({
         fontWeight: '700',
     },
     pillCloseBtn: {
-        padding: 4,
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        alignItems: 'center',
+        justifyContent: 'center',
         marginLeft: 2,
     },
 
@@ -1195,12 +1255,6 @@ const styles = StyleSheet.create({
         paddingHorizontal: 12,
         paddingVertical: 10,
         borderBottomWidth: 1,
-        ...Platform.select({
-            web: {
-                cursor: 'grab',
-                userSelect: 'none',
-            } as any,
-        }),
     },
     headerGrip: {
         marginRight: 2,
@@ -1210,6 +1264,13 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: 6,
         flex: 1,
+        paddingVertical: 2,
+        ...Platform.select({
+            web: {
+                cursor: 'grab',
+                userSelect: 'none',
+            } as any,
+        }),
     },
     headerIconBg: {
         width: 26,
@@ -1226,12 +1287,19 @@ const styles = StyleSheet.create({
     headerControls: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 4,
+        gap: 6,
     },
     headerBtn: {
-        width: 28,
-        height: 28,
-        borderRadius: 6,
+        width: 32,
+        height: 32,
+        borderRadius: 8,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    headerCloseBtn: {
+        width: 32,
+        height: 32,
+        borderRadius: 8,
         alignItems: 'center',
         justifyContent: 'center',
     },
